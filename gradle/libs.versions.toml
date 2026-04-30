@@ -1,0 +1,15 @@
+[versions]
+# Pinned to match sobuu-feed for composite-build compatibility
+kotlin = "2.1.21"
+agp = "8.7.3"
+kotlinx-datetime = "0.6.1"
+android-compileSdk = "34"
+android-minSdk = "24"
+
+[libraries]
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+
+[plugins]
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
