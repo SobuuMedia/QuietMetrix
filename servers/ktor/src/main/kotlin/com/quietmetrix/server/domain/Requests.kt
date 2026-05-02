@@ -31,6 +31,11 @@ data class EventContext(
     val language: String? = null,
     val ua: String? = null,
     val viewport: String? = null,
+    val anonymousId: String? = null,
+    val country: String? = null,
+    val sessionNumber: Int? = null,
+    val isSessionStart: Boolean? = null,
+    val isSessionEnd: Boolean? = null,
 )
 
 @Serializable
@@ -54,7 +59,13 @@ data class LoginRequest(
 @Serializable
 data class LoginResponse(
     val token: String,
+    @SerialName("refresh_token") val refreshToken: String,
     val user: UserResponse,
+)
+
+@Serializable
+data class RefreshRequest(
+    @SerialName("refresh_token") val refreshToken: String,
 )
 
 @Serializable
@@ -73,8 +84,7 @@ data class CreateProjectRequest(
 data class ProjectResponse(
     val id: String,
     val name: String,
-    val writeKey: String,
-    val readKey: String,
+    val apiKey: String,
     val planId: String? = null,
     val createdAt: String,
 )
@@ -83,4 +93,46 @@ data class ProjectResponse(
 data class ProjectListResponse(
     val projects: List<ProjectResponse>,
     val total: Int,
+)
+
+@Serializable
+data class TransitionsResponse(
+    val transitions: List<TransitionItem>,
+)
+
+@Serializable
+data class TransitionItem(
+    @SerialName("from_screen") val fromScreen: String,
+    @SerialName("to_screen") val toScreen: String,
+    val count: Int,
+)
+
+@Serializable
+data class SessionsResponse(
+    @SerialName("total_sessions") val totalSessions: Int,
+    @SerialName("avg_events") val avgEvents: Double,
+    @SerialName("avg_duration_sec") val avgDurationSec: Int,
+    @SerialName("daily_sessions") val dailySessions: List<DailySessionItem>,
+)
+
+@Serializable
+data class DailySessionItem(
+    val day: String,
+    val total: Int,
+)
+
+@Serializable
+data class RetentionResponse(
+    val cohorts: List<RetentionCohort>,
+)
+
+@Serializable
+data class RetentionCohort(
+    @SerialName("cohort_date") val cohortDate: String,
+    val size: Int,
+    val day1: Double? = null,
+    val day3: Double? = null,
+    val day7: Double? = null,
+    val day14: Double? = null,
+    val day30: Double? = null,
 )

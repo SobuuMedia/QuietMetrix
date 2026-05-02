@@ -1,0 +1,49 @@
+services:
+  ktor:
+    build:
+      context: ..
+      dockerfile: servers/ktor/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      QM_PROFILE: selfhost
+      QM_DB_URL: jdbc:postgresql://postgres:5432/quietmetrix
+      QM_DB_USER: quietmetrix
+      QM_DB_PASSWORD: quietmetrix
+      QM_JWT_SECRET: change-me-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: quietmetrix
+      POSTGRES_USER: quietmetrix
+      POSTGRES_PASSWORD: quietmetrix
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quietmetrix"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - ktor
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  caddy_data:
+  caddy_config:

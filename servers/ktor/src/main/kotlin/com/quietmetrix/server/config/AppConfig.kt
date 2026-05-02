@@ -1,6 +1,6 @@
 package com.quietmetrix.server.config
 
-import io.ktor.server.config.*
+import io.ktor.server.config.ApplicationConfig
 
 data class AppConfig(
     val profile: Profile,
@@ -8,6 +8,7 @@ data class AppConfig(
     val auth: AuthConfig,
     val rateLimit: RateLimitConfig,
     val billing: BillingConfig?,
+    val cors: CorsConfig = CorsConfig(),
 ) {
     enum class Profile { SELFHOST, CLOUD }
 
@@ -31,7 +32,7 @@ data class AppConfig(
                 )
             } else null
 
-            return AppConfig(
+            val appConfig = AppConfig(
                 profile = profile,
                 db = DbConfig(
                     url = config.property("quietmetrix.db.url").getString(),
@@ -52,10 +53,32 @@ data class AppConfig(
                     burstPerMinute = config.propertyOrNull("quietmetrix.rateLimit.burstPerMinute")?.getString()?.toInt() ?: 60,
                 ),
                 billing = billingConfig,
+                cors = CorsConfig(
+                    allowedOrigins = config.propertyOrNull("quietmetrix.cors.allowedOrigins")?.getList() ?: emptyList(),
+                ),
             )
+            require(appConfig.auth.jwtSecret.isNotBlank() && !appConfig.auth.jwtSecret.startsWith("change-me")) {
+                "QM_JWT_SECRET must be set to a strong random value in production"
+            }
+            require(appConfig.db.password.isNotBlank()) {
+                "QM_DB_PASSWORD must be set"
+            }
+            require(appConfig.cors.allowedOrigins.isNotEmpty()) {
+                "QM_CORS_ALLOWED_ORIGINS must be set. Provide a comma-separated list of allowed origins."
+            }
+            if (appConfig.isCloud) {
+                require(!appConfig.billing?.stripeWebhookSecret.isNullOrBlank() || !appConfig.billing?.adyenHmacKey.isNullOrBlank()) {
+                    "CLOUD profile requires QM_STRIPE_WEBHOOK_SECRET or QM_ADYEN_HMAC_KEY"
+                }
+            }
+            return appConfig
         }
     }
 }
+
+data class CorsConfig(
+    val allowedOrigins: List<String> = emptyList(),
+)
 
 data class DbConfig(
     val url: String,

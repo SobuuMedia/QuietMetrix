@@ -1,83 +1,146 @@
 package com.quietmetrix.server.persistence
 
 import at.favre.lib.crypto.bcrypt.BCrypt
-import org.jetbrains.exposed.sql.*
+import com.quietmetrix.server.persistence.tables.ProjectMembers
+import com.quietmetrix.server.persistence.tables.Projects
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.or
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
+import java.security.MessageDigest
+import java.time.LocalDateTime
 import java.util.UUID
 
 class ProjectRepository(private val database: Database) {
 
+    private fun sha256(input: String): String {
+        return MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
     fun create(name: String, ownerUserId: Long): Pair<String, String> {
-        val writeKey = "qm_wk_${UUID.randomUUID().toString().replace("-", "")}"
-        val readKey = "qm_rk_${UUID.randomUUID().toString().replace("-", "")}"
-        val writeKeyHash = BCrypt.withDefaults().hashToString(12, writeKey.toCharArray())
-        val readKeyHash = BCrypt.withDefaults().hashToString(12, readKey.toCharArray())
+        val apiKey = "qm_ak_${UUID.randomUUID().toString().replace("-", "")}"
+        val apiKeyHash = BCrypt.withDefaults().hashToString(12, apiKey.toCharArray())
+        val apiKeySha256 = sha256(apiKey)
 
         transaction(database) {
-            com.quietmetrix.server.persistence.tables.Projects.insert {
+            Projects.insert {
                 it[this.name] = name
                 it[this.ownerUserId] = ownerUserId
-                it[this.writeKeyHash] = writeKeyHash
-                it[this.readKeyHash] = readKeyHash
+                it[this.apiKeyHash] = apiKeyHash
+                it[this.apiKeySha256] = apiKeySha256
             }
         }
-        return Pair(writeKey, readKey)
+        return Pair(apiKey, apiKey)
     }
 
     fun findById(id: Long): Map<String, Any?>? {
         return transaction(database) {
-            com.quietmetrix.server.persistence.tables.Projects
-                .select { com.quietmetrix.server.persistence.tables.Projects.id eq id }
+            Projects
+                .selectAll()
+                .where { (Projects.id eq id) and (Projects.deletedAt.isNull()) }
                 .map { rowToMap(it) }
                 .singleOrNull()
         }
     }
 
-    fun findByWriteKeyHash(writeKey: String): Map<String, Any?>? {
+    fun findByApiKeyHash(apiKey: String): Map<String, Any?>? {
         return transaction(database) {
-            com.quietmetrix.server.persistence.tables.Projects.selectAll()
+            Projects.selectAll()
+                .where { Projects.deletedAt.isNull() }
                 .map { rowToMap(it) }
                 .firstOrNull {
-                    BCrypt.withDefaults().verify(writeKey.toCharArray(), it["writeKeyHash"] as String).verified
+                    BCrypt.verifyer().verify(apiKey.toCharArray(), it["apiKeyHash"] as String).verified
                 }
         }
     }
 
     fun findByOwnerId(ownerUserId: Long, limit: Int = 50, offset: Int = 0): List<Map<String, Any?>> {
         return transaction(database) {
-            com.quietmetrix.server.persistence.tables.Projects
-                .select { com.quietmetrix.server.persistence.tables.Projects.ownerUserId eq ownerUserId }
-                .limit(limit, offset.toLong())
+            Projects
+                .selectAll()
+                .where { (Projects.ownerUserId eq ownerUserId) and (Projects.deletedAt.isNull()) }
+                .limit(limit).offset(offset.toLong())
                 .map { rowToMap(it) }
         }
     }
 
     fun countByOwnerId(ownerUserId: Long): Long {
         return transaction(database) {
-            com.quietmetrix.server.persistence.tables.Projects
-                .select { com.quietmetrix.server.persistence.tables.Projects.ownerUserId eq ownerUserId }
+            Projects
+                .selectAll()
+                .where { (Projects.ownerUserId eq ownerUserId) and (Projects.deletedAt.isNull()) }
                 .count()
         }
     }
 
-    fun validateWriteKey(writeKey: String): Long? {
+    fun findAccessibleByUserId(userId: Long, limit: Int = 50, offset: Int = 0): List<Map<String, Any?>> {
         return transaction(database) {
-            com.quietmetrix.server.persistence.tables.Projects.selectAll()
-                .map { Pair(it[com.quietmetrix.server.persistence.tables.Projects.id], it[com.quietmetrix.server.persistence.tables.Projects.writeKeyHash]) }
-                .firstOrNull { (_, hash) ->
-                    BCrypt.withDefaults().verify(writeKey.toCharArray(), hash).verified
+            (Projects leftJoin ProjectMembers)
+                .selectAll()
+                .where {
+                    (Projects.deletedAt.isNull()) and
+                    ((Projects.ownerUserId eq userId) or (ProjectMembers.userId eq userId))
                 }
-                ?.first
+                .withDistinct()
+                .limit(limit).offset(offset.toLong())
+                .map { rowToMap(it) }
+        }
+    }
+
+    fun countAccessibleByUserId(userId: Long): Long {
+        return transaction(database) {
+            (Projects leftJoin ProjectMembers)
+                .selectAll()
+                .where {
+                    (Projects.deletedAt.isNull()) and
+                    ((Projects.ownerUserId eq userId) or (ProjectMembers.userId eq userId))
+                }
+                .withDistinct()
+                .count()
+        }
+    }
+
+    fun updateName(id: Long, name: String): Boolean {
+        return transaction(database) {
+            Projects.update(
+                where = { (Projects.id eq id) and (Projects.deletedAt.isNull()) },
+                body = { it[this.name] = name }
+            ) > 0
+        }
+    }
+
+    fun softDelete(id: Long): Boolean {
+        return transaction(database) {
+            Projects.update(
+                where = { (Projects.id eq id) and (Projects.deletedAt.isNull()) },
+                body = { it[deletedAt] = LocalDateTime.now() }
+            ) > 0
+        }
+    }
+
+    fun validateApiKey(apiKey: String): Long? {
+        val sha256Hash = sha256(apiKey)
+        return transaction(database) {
+            Projects.selectAll()
+                .where { (Projects.apiKeySha256 eq sha256Hash) and (Projects.deletedAt.isNull()) }
+                .limit(1)
+                .map { it[Projects.id] }
+                .singleOrNull()
         }
     }
 
     private fun rowToMap(row: ResultRow) = mapOf(
-        "id" to row[com.quietmetrix.server.persistence.tables.Projects.id],
-        "name" to row[com.quietmetrix.server.persistence.tables.Projects.name],
-        "ownerUserId" to row[com.quietmetrix.server.persistence.tables.Projects.ownerUserId],
-        "writeKeyHash" to row[com.quietmetrix.server.persistence.tables.Projects.writeKeyHash],
-        "readKeyHash" to row[com.quietmetrix.server.persistence.tables.Projects.readKeyHash],
-        "planId" to row[com.quietmetrix.server.persistence.tables.Projects.planId],
-        "createdAt" to row[com.quietmetrix.server.persistence.tables.Projects.createdAt],
+        "id" to row[Projects.id],
+        "name" to row[Projects.name],
+        "ownerUserId" to row[Projects.ownerUserId],
+        "apiKeyHash" to row[Projects.apiKeyHash],
+        "planId" to row[Projects.planId],
+        "createdAt" to row[Projects.createdAt],
     )
 }

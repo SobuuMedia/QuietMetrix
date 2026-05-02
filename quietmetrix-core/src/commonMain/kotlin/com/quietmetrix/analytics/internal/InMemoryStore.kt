@@ -12,6 +12,7 @@ internal object InMemoryStore {
     fun get(key: String): String? = map[key]
     fun set(key: String, value: String) { map[key] = value }
     fun has(key: String): Boolean = map.containsKey(key)
+    fun remove(key: String) { map.remove(key) }
 
     internal fun clear() { map.clear() }
 }

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuietMetrix — Web Sample</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: #f4f4f5; color: #18181b; }
+        .container { max-width: 640px; margin: 60px auto; padding: 24px; }
+        h1 { font-size: 1.5rem; margin-bottom: 8px; }
+        .card {
+            background: #fff; border: 1px solid #e4e4e7; border-radius: 8px;
+            padding: 20px; margin-top: 16px;
+        }
+        .card h2 { font-size: 1rem; color: #52525b; margin-bottom: 12px; }
+        .metric { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f4f4f5; }
+        .metric:last-child { border-bottom: none; }
+        .metric span:first-child { color: #71717a; }
+        .metric span:last-child { font-weight: 600; }
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: #18181b; color: #fff; padding: 12px 20px;
+            border-radius: 8px; font-size: 0.875rem;
+            opacity: 0; transform: translateY(10px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .toast.visible { opacity: 1; transform: translateY(0); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>QuietMetrix Analytics</h1>
+        <p style="color: #71717a;">Lightweight privacy-respecting analytics</p>
+
+        <div class="card">
+            <h2>Dashboard</h2>
+            <div class="metric"><span>Page views</span><span id="pageViews">0</span></div>
+            <div class="metric"><span>Clicks</span><span id="clicks">0</span></div>
+            <div class="metric"><span>Banner shown</span><span id="bannerShown">—</span></div>
+        </div>
+
+        <div class="card">
+            <h2>Actions</h2>
+            <button id="trackBtn" style="padding: 10px 20px; cursor: pointer; border: none; border-radius: 6px; background: #2563eb; color: #fff; font-size: 0.875rem;">
+                Track Custom Event
+            </button>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module">
+        // Import the wasmJs bundle built by ./gradlew :quietmetrix-core:wasmJsBrowserDevelopmentWebpack
+        // Adjust the path below to match your local build output.
+        import { QuietMetrix, QuietMetrixConfig, trackEvent } from '../../quietmetrix-core/build/js/packages/quietmetrix-core/kotlin/quietmetrix-core.mjs';
+
+        const config = new QuietMetrixConfig(
+            "qmweb_",       // storageKeyPrefix
+            "http://localhost:8080/api/track",  // trackingEndpoint
+            null,           // apiKey
+            30_000,         // flushIntervalMs
+            1000,           // maxQueueSize
+            false,          // autoTrackInitialPageView
+            true,           // trackingAllowedByDefault
+            "QuietMetrix Web Sample"  // userAgent
+        );
+
+        QuietMetrix.init(config);
+        trackEvent("page_view", "home");
+
+        // Simple dashboard counters (in-memory only — for demo purposes)
+        let pageViews = 1;
+        let clicks = 0;
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('visible');
+            setTimeout(() => el.classList.remove('visible'), 2000);
+        }
+
+        document.getElementById('pageViews').textContent = pageViews;
+
+        document.getElementById('trackBtn').addEventListener('click', () => {
+            clicks++;
+            document.getElementById('clicks').textContent = clicks;
+            trackEvent("button_click", "home", { button_id: "trackBtn", count: clicks });
+            showToast(`Tracked "button_click" (#${clicks})`);
+        });
+
+        showToast('QuietMetrix initialised');
+    </script>
+</body>
+</html>

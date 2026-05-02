@@ -17,6 +17,12 @@ package com.quietmetrix.analytics
 data class QuietMetrixConfig(
     val storageKeyPrefix: String,
     val trackingEndpoint: String? = null,
+    val apiKey: String? = null,
+    val flushIntervalMs: Long = 30_000L,
+    val maxQueueSize: Int = 1000,
     val autoTrackInitialPageView: Boolean = true,
-    val trackingAllowedByDefault: Boolean = true,
+    val trackingAllowedByDefault: Boolean = false,
+    val userAgent: String? = null,
+    val applicationContext: Any? = null,
+    val debug: Boolean = false,
 )

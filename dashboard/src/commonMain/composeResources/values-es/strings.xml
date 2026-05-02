@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="brand">QuietMetrix</string>
+
+    <string name="login_title">Iniciar sesión</string>
+    <string name="login_email_label">Correo electrónico</string>
+    <string name="login_password_label">Contraseña</string>
+    <string name="login_button">Iniciar sesión</string>
+    <string name="login_helper">¿Primera vez? Usa el correo y la contraseña de administrador configurados en tu archivo de configuración.</string>
+
+    <string name="login_error_invalid_credentials">Correo o contraseña incorrectos.</string>
+    <string name="login_error_network">No se pudo conectar con el servidor. Comprueba tu conexión.</string>
+    <string name="login_error_server">El servidor devolvió un error. Inténtalo de nuevo en un momento.</string>
+    <string name="login_error_misconfigured">El servidor no está configurado correctamente. Contacta con el administrador.</string>
+    <string name="login_error_unknown">Algo salió mal. Inténtalo de nuevo.</string>
+</resources>

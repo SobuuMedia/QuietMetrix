@@ -1,0 +1,38 @@
+site_name: QuietMetrix
+site_description: Privacy-respecting analytics platform
+theme:
+  name: material
+  palette:
+    primary: indigo
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - API Reference: api-reference.md
+  - SDK:
+      - Android: sdk/android.md
+      - iOS: sdk/ios.md
+      - Desktop (macOS/Windows/Linux): sdk/desktop.md
+      - Web (Wasm): sdk/web.md
+      - JVM: sdk/jvm.md
+  - Self-hosting:
+      - Shared hosting (PHP): self-hosting/shared-hosting-php.md
+      - Docker: self-hosting/docker.md
+      - Upgrade: self-hosting/upgrade.md
+      - Backup: self-hosting/backup.md
+  - Operations:
+      - Rate limits: operations/rate-limits.md
+      - GDPR: operations/gdpr.md
+      - Security: operations/security.md
+      - Payments: operations/payments.md
+  - Commercial strategy: commercial-strategy.md
+
+markdown_extensions:
+  - admonition
+  - code Hilite
+  - toc:
+      permalink: true

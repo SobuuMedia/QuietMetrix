@@ -9,14 +9,13 @@ CREATE TABLE IF NOT EXISTS projects (
     id              BIGSERIAL PRIMARY KEY,
     name            VARCHAR(255) NOT NULL,
     owner_user_id   BIGINT NOT NULL REFERENCES users(id),
-    write_key_hash  VARCHAR(255) NOT NULL,
-    read_key_hash   VARCHAR(255) NOT NULL,
+    api_key_hash  VARCHAR(255) NOT NULL,
     plan_id         VARCHAR(50),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
-CREATE INDEX idx_projects_write_key ON projects(write_key_hash);
+CREATE INDEX idx_projects_api_key ON projects(api_key_hash);
 
 CREATE TABLE IF NOT EXISTS events_inbox (
     id          BIGSERIAL PRIMARY KEY,

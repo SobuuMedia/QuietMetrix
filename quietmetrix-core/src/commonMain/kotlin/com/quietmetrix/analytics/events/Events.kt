@@ -1,4 +1,3 @@
 package com.quietmetrix.analytics
 
-/** Fire-and-forget analytics event. Silently ignored if the tracker is unavailable or consent is declined. */
-expect fun trackEvent(event: String, screen: String? = null)
+expect suspend fun trackEvent(event: String, screen: String? = null, props: Map<String, Any?> = emptyMap())

@@ -15,4 +15,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "QuietMetrix"
 include(":quietmetrix-core")
+include(":dashboard")
 include(":servers:ktor")
+include(":samples:android")
+include(":samples:desktop-jvm")

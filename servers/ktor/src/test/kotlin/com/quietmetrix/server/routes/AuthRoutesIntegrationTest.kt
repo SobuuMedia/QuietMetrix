@@ -1,0 +1,71 @@
+package com.quietmetrix.server.routes
+
+import com.quietmetrix.server.config.AppConfig
+import com.quietmetrix.server.config.AuthConfig
+import com.quietmetrix.server.config.DbConfig
+import com.quietmetrix.server.config.RateLimitConfig
+import com.quietmetrix.server.domain.LoginRequest
+import com.quietmetrix.server.plugins.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.testing.*
+import kotlinx.serialization.json.Json
+import org.junit.Test
+import kotlin.test.assertEquals
+
+class AuthRoutesIntegrationTest {
+    @Test
+    fun `POST login with missing fields returns 400`() = testApplication {
+        val config = testConfig()
+        application { testModule(config) }
+        val client = createClient { install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json() } }
+        val response = client.post("/api/v1/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `POST login with invalid email returns 401`() = testApplication {
+        val config = testConfig()
+        application { testModule(config) }
+        val client = createClient { install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json() } }
+        val response = client.post("/api/v1/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(Json.encodeToString(LoginRequest.serializer(), LoginRequest("fake@example.com", "wrongpassword")))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `protected route without token returns 401`() = testApplication {
+        val config = testConfig()
+        application { testModule(config) }
+        val client = createClient { }
+        val response = client.get("/api/v1/projects") { }
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    private fun testConfig() = AppConfig(
+        profile = AppConfig.Profile.SELFHOST,
+        db = DbConfig("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "sa", "", "org.h2.Driver", 5),
+        auth = AuthConfig("integration-test-secret-key-do-not-use", "quietmetrix", "quietmetrix-api", 24),
+        rateLimit = RateLimitConfig(enabled = false, 10, 60),
+    )
+
+    private fun Application.testModule(config: AppConfig) {
+        install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
+        configureCors(config)
+        configureStatusPages()
+        configureSecurity(config)
+        routing {
+            configureAuthRoutes(config)
+            configureProjectRoutes()
+        }
+    }
+}

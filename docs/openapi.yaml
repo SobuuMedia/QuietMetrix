@@ -1,0 +1,1585 @@
+openapi: 3.1.0
+info:
+  title: QuietMetrix Analytics API
+  description: |
+    Privacy-respecting analytics platform API. Both the PHP+MySQL and Kotlin+Ktor+PostgreSQL
+    servers implement this contract identically. Any SDK or HTTP client works against either backend.
+
+    ## Authentication
+    - **Tracking endpoints** use an API key via the `X-QM-Api-Key` header. API keys are
+      per-project and are safe to embed in client-side code (they only allow writes, not reads).
+    - **Admin/Dashboard endpoints** use session authentication obtained via `POST /api/v1/auth/login`.
+
+    ## Profiles
+    - **Self-hosted** (`QM_PROFILE=selfhost` or unset): all tracking and admin endpoints available.
+      Rate limiting is optional/configurable. No billing endpoints.
+    - **Cloud** (`QM_PROFILE=cloud`): adds `/api/v1/billing/*` endpoints with Stripe or Adyen
+      integration and per-plan rate limits.
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://cloud.quietmetrix.com
+    description: QuietMetrix Cloud (Ktor + cloud profile)
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Tracking
+    description: Public event-ingestion endpoints (API key auth)
+  - name: Auth
+    description: Admin authentication
+  - name: Projects
+    description: Project management (session auth)
+  - name: Dashboard
+    description: Aggregated analytics data
+  - name: Billing
+    description: Cloud-only billing and quota endpoints
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [Tracking]
+      operationId: healthCheck
+      summary: Health check
+      description: Returns server status and version. No authentication required.
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                healthy:
+                  value:
+                    ok: true
+                    version: "0.1.0"
+
+  /api/v1/track:
+    post:
+      tags: [Tracking]
+      operationId: trackEvent
+      summary: Track a single event
+      description: |
+        Ingest a single analytics event. Events are queued asynchronously; the server
+        returns 202 as soon as the event is accepted into the inbox. The server may
+        adjust the `ts` timestamp if it is more than 7 days from the server's clock.
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackEventRequest"
+            examples:
+              pageView:
+                summary: A page view event
+                value:
+                  event: page_view
+                  screen: home
+                  props:
+                    referrer: "https://google.com"
+                    language: en
+                  sid: abc123def456
+                  ts: "2026-04-30T12:34:56Z"
+                  sdk:
+                    platform: android
+                    version: "0.2.0"
+                  ctx:
+                    language: en
+                    ua: "Mozilla/5.0 (Linux; Android 14)"
+                    viewport: "412x914"
+              customEvent:
+                summary: A custom event with properties
+                value:
+                  event: button_click
+                  screen: settings
+                  props:
+                    button_id: save
+                    section: profile
+                  sid: abc123def456
+                  ts: "2026-04-30T12:34:56Z"
+                  was_offline: false
+                  sdk:
+                    platform: wasmJs
+                    version: "0.2.0"
+                  ctx:
+                    language: en
+                    ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+                    viewport: "1920x1080"
+      responses:
+        "202":
+          description: Event accepted into the ingest queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedResponse"
+        "400":
+          description: Invalid request body or schema violation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                badJson:
+                  value:
+                    error: invalid_json
+                    message: "Request body is not valid JSON"
+                schemaViolation:
+                  value:
+                    error: schema_violation
+                    message: "Field 'event' is required and must be a non-empty string"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: unauthorized
+                message: "Invalid or missing API key"
+        "429":
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: The maximum number of requests allowed in the current window
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in the current window
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Seconds until the rate limit window resets
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until the client should retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: rate_limit_exceeded
+                message: "Rate limit exceeded. Retry after 60 seconds."
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: payload_too_large
+                message: "Request body exceeds the maximum allowed size"
+        "503":
+          description: Server is under backpressure, retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: service_unavailable
+                message: "Server is temporarily unavailable. Please retry."
+
+  /api/v1/track/batch:
+    post:
+      tags: [Tracking]
+      operationId: trackBatch
+      summary: Track a batch of events
+      description: |
+        Ingest up to 100 events in a single request. Each event in the batch is validated
+        individually; the entire batch is rejected if any single event fails schema validation.
+        Events are queued asynchronously.
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackBatchRequest"
+            example:
+              events:
+                - event: page_view
+                  screen: home
+                  props:
+                    language: en
+                  sid: abc123def456
+                  ts: "2026-04-30T12:34:56Z"
+                  sdk:
+                    platform: android
+                    version: "0.2.0"
+                - event: button_click
+                  screen: home
+                  props:
+                    button_id: hero_cta
+                  sid: abc123def456
+                  ts: "2026-04-30T12:34:57Z"
+                  was_offline: true
+                  sdk:
+                    platform: android
+                    version: "0.2.0"
+      responses:
+        "202":
+          description: All events accepted into the ingest queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedResponse"
+              example:
+                ok: true
+                queued: 2
+        "400":
+          description: Invalid request body or schema violation in one or more events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Batch exceeds 100 events or payload too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: batch_too_large
+                message: "Batch exceeds maximum of 100 events"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Server is under backpressure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Authenticate as admin
+      description: |
+        Exchange email + password for a session token. The token must be sent as a
+        `Bearer` token in the `Authorization` header on subsequent admin requests.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: admin@example.com
+              password: securepassword123
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+              example:
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                user:
+                  id: "usr_abc123"
+                  email: admin@example.com
+                  created_at: "2026-01-15T10:30:00Z"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: unauthorized
+                message: "Invalid email or password"
+
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List all projects
+      description: Returns all projects owned by the authenticated user.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+          description: Maximum number of projects to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Number of projects to skip
+        - name: owner_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: When true, only return projects where the authenticated user is the owner
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a new project
+      description: |
+        Creates a project and returns the API key. The API key is safe to
+        embed in client code.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+            example:
+              name: "My App"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+              example:
+                id: "proj_xyz789"
+                name: "My App"
+                api_key: "qm_ak_abc123def456ghi789"
+                created_at: "2026-04-30T12:00:00Z"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Project limit reached for the current plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: project_limit_reached
+                message: "You have reached the maximum number of projects for your plan"
+
+  /api/v1/projects/{projectId}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      summary: Get project details
+      description: Returns details for a single project.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated user is not a member of this project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: forbidden
+                message: "You are not a member of this project"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      summary: Update project name
+      description: Updates the project name. Requires owner or admin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+            example:
+              name: "Renamed App"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not owner or admin of the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: forbidden
+                message: "Only owners and admins can update this project"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      summary: Delete a project
+      description: Permanently deletes the project and all associated data. Only the owner can delete.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deleted
+                  - project_id
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+                  project_id:
+                    type: string
+                    example: "proj_xyz789"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the project owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: forbidden
+                message: "Only the project owner can delete this project"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/members:
+    get:
+      tags: [Projects]
+      operationId: listProjectMembers
+      summary: List project members
+      description: Returns all members of the project.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: List of project members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMemberListResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not a member of the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags: [Projects]
+      operationId: addProjectMember
+      summary: Add a member to the project
+      description: Adds a user to the project with the specified role. Requires owner or admin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+            example:
+              email: "collaborator@example.com"
+              role: viewer
+      responses:
+        "201":
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMemberResponse"
+        "400":
+          description: Invalid request body or user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not owner or admin of the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/members/{userId}:
+    delete:
+      tags: [Projects]
+      operationId: removeProjectMember
+      summary: Remove a member from the project
+      description: Removes a user from the project. Requires owner or admin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^usr_[a-zA-Z0-9]+$"
+          description: The user ID to remove
+      responses:
+        "200":
+          description: Member removed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - removed
+                properties:
+                  removed:
+                    type: boolean
+                    example: true
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not owner or admin of the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or member not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/events:
+    get:
+      tags: [Dashboard]
+      operationId: getProjectEvents
+      summary: Get raw events for a project
+      description: Returns paginated raw events, ordered by received time descending.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+          description: Maximum number of events to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Number of events to skip
+        - name: event
+          in: query
+          schema:
+            type: string
+          description: Filter to a specific event name
+        - name: screen
+          in: query
+          schema:
+            type: string
+          description: Filter to a specific screen name
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start of time range (inclusive)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End of time range (inclusive)
+      responses:
+        "200":
+          description: Paginated events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/aggregates:
+    get:
+      tags: [Dashboard]
+      operationId: getProjectAggregates
+      summary: Get aggregated analytics for a project
+      description: |
+        Returns pre-computed aggregate metrics including top events, top screens,
+        daily active users, and event counts over a time range.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Start of time range (inclusive)
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: End of time range (inclusive)
+        - name: granularity
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, week, month]
+            default: day
+          description: Time granularity for aggregations
+      responses:
+        "200":
+          description: Aggregated analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AggregatesResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/billing/checkout:
+    post:
+      tags: [Billing]
+      operationId: createCheckoutSession
+      summary: Create a checkout session (cloud only)
+      description: |
+        Creates a hosted checkout session for upgrading the project's plan.
+        Only available when `QM_PROFILE=cloud`.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutRequest"
+            examples:
+              stripe:
+                summary: Stripe checkout
+                value:
+                  plan_id: startup
+                  provider: stripe
+                  success_url: "https://app.example.com/billing/success"
+                  cancel_url: "https://app.example.com/billing/cancel"
+              adyen:
+                summary: Adyen checkout
+                value:
+                  plan_id: startup
+                  provider: adyen
+                  return_url: "https://app.example.com/billing/return"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+              examples:
+                stripe:
+                  value:
+                    provider: stripe
+                    checkout_url: "https://checkout.stripe.com/c/pay/cs_live_..."
+                adyen:
+                  value:
+                    provider: adyen
+                    checkout_url: "https://checkout-test.adyen.com/checkout/pay..."
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or plan not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/billing/webhook/stripe:
+    post:
+      tags: [Billing]
+      operationId: stripeWebhook
+      summary: Receive Stripe webhook events (cloud only)
+      description: |
+        Endpoint for Stripe webhook events. Validates the Stripe signature header
+        before processing. Only available when `QM_PROFILE=cloud`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Stripe webhook event payload
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Stripe webhook signature for verification
+      responses:
+        "200":
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+              example:
+                received: true
+        "400":
+          description: Invalid payload or signature verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/billing/webhook/adyen:
+    post:
+      tags: [Billing]
+      operationId: adyenWebhook
+      summary: Receive Adyen webhook events (cloud only)
+      description: |
+        Endpoint for Adyen webhook events. Validates the HMAC signature
+        before processing. Only available when `QM_PROFILE=cloud`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Adyen webhook notification payload
+      responses:
+        "200":
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+              example:
+                received: true
+        "400":
+          description: Invalid payload or HMAC verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/billing/usage:
+    get:
+      tags: [Billing]
+      operationId: getBillingUsage
+      summary: Get current billing period usage (cloud only)
+      description: |
+        Returns the current billing period's event count against the project's
+        plan limit. Only available when `QM_PROFILE=cloud`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Project ID to check usage for
+      responses:
+        "200":
+          description: Current billing usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingUsageResponse"
+              example:
+                project_id: "proj_xyz789"
+                plan_id: "startup"
+                period:
+                  start: "2026-04-01T00:00:00Z"
+                  end: "2026-04-30T23:59:59Z"
+                events:
+                  used: 45230
+                  limit: 1000000
+                requests:
+                  used: 5420
+                  limit:
+                    per_second: 200
+                    per_minute: 12000
+                projects:
+                  used: 3
+                  limit: 10
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-QM-Api-Key
+      description: |
+        Per-project API key. Safe for client-side use — allows only event ingestion,
+        not reading data. Sent as the `X-QM-Api-Key` header.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Session token obtained from `POST /api/v1/auth/login`. Sent as
+        `Authorization: Bearer <token>`.
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^proj_[a-zA-Z0-9]+$"
+      description: Unique project identifier
+
+  schemas:
+    SdkInfo:
+      type: object
+      required:
+        - platform
+        - version
+      properties:
+        platform:
+          type: string
+          enum: [android, ios, jvm, macos, linux, windows, wasmJs]
+          description: SDK platform identifier
+        version:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+"
+          description: SDK version (semver)
+
+    EventContext:
+      type: object
+      description: |
+        Automatically collected device/browser context. Sent by the SDK; the server
+        enriches it (IP → country) and strips PII before persisting.
+      properties:
+        referrer:
+          type: string
+          format: uri
+          nullable: true
+          description: Referring URL (null if direct)
+        language:
+          type: string
+          nullable: true
+          maxLength: 10
+          description: Browser/device language code (e.g. "en")
+        ua:
+          type: string
+          nullable: true
+          maxLength: 512
+          description: User-Agent string (stored for device classification, not analytics)
+        viewport:
+          type: string
+          nullable: true
+          pattern: "^[0-9]+x[0-9]+$"
+          description: Screen or viewport dimensions (e.g. "412x914")
+
+    TrackEventRequest:
+      type: object
+      required:
+        - event
+      properties:
+        event:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Event name (e.g. "page_view", "button_click")
+        screen:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: Screen or page name (e.g. "home", "settings")
+        props:
+          type: object
+          description: Arbitrary key-value properties. Values can be strings, numbers, booleans, or null.
+          additionalProperties: true
+          maxProperties: 50
+        sid:
+          type: string
+          maxLength: 128
+          description: |
+            Session ID generated by the SDK. Used to group events from the same session.
+            If omitted, the server generates one.
+        ts:
+          type: string
+          format: date-time
+          description: |
+            Client-side timestamp (ISO 8601). The server validates this is within ±7 days
+            of receive time; if not, the server replaces it with receive time and sets
+            `clock_skew = true` in props.
+        was_offline:
+          type: boolean
+          default: false
+          description: |
+            True if the event was captured while the device had no network connectivity
+            (set by the SDK when the device was offline or the most recent flush failed
+            with a network error).
+        sdk:
+          $ref: "#/components/schemas/SdkInfo"
+        ctx:
+          $ref: "#/components/schemas/EventContext"
+
+    TrackBatchRequest:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/TrackEventRequest"
+          description: Array of events to track (maximum 100)
+
+    HealthResponse:
+      type: object
+      required:
+        - ok
+        - version
+      properties:
+        ok:
+          type: boolean
+          example: true
+        version:
+          type: string
+          example: "0.1.0"
+
+    AcceptedResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        queued:
+          type: integer
+          description: Number of events queued for processing
+          example: 1
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: "unauthorized"
+        message:
+          type: string
+          description: Human-readable error description
+          example: "Invalid or missing API key"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          description: Bearer token for subsequent authenticated requests
+        user:
+          $ref: "#/components/schemas/UserResponse"
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - email
+        - created_at
+      properties:
+        id:
+          type: string
+          example: "usr_abc123"
+        email:
+          type: string
+          format: email
+          example: "admin@example.com"
+        created_at:
+          type: string
+          format: date-time
+
+    CreateProjectRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Human-readable project name
+          example: "My App"
+
+    ProjectResponse:
+      type: object
+      required:
+        - id
+        - name
+        - api_key
+        - created_at
+      properties:
+        id:
+          type: string
+          example: "proj_xyz789"
+        name:
+          type: string
+          example: "My App"
+        api_key:
+          type: string
+          description: |
+            Key for the `X-QM-Api-Key` header. Safe to embed in client apps.
+          example: "qm_ak_abc123def456ghi789"
+        plan_id:
+          type: string
+          nullable: true
+          description: Cloud-only. Plan identifier (null for self-hosted).
+          enum: [free, hobby, startup, business]
+          example: "startup"
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectListResponse:
+      type: object
+      required:
+        - projects
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectResponse"
+        total:
+          type: integer
+          description: Total number of projects owned by the user
+
+    Plan:
+      type: string
+      enum: [free, hobby, startup, business]
+      description: |
+        - `free` — 10K events/month, 10 rps, 30-day retention, 1 project
+        - `hobby` — 100K events/month, 50 rps, 90-day retention, 3 projects
+        - `startup` — 1M events/month, 200 rps, 365-day retention, 10 projects
+        - `business` — 10M events/month, 1000 rps, 730-day retention, 50 projects
+
+    UpdateProjectRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: New project name
+
+    AddMemberRequest:
+      type: object
+      required:
+        - email
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email address of the user to add
+        role:
+          type: string
+          enum: [viewer, admin]
+          description: Member role
+
+    ProjectMemberResponse:
+      type: object
+      required:
+        - id
+        - project_id
+        - user_id
+        - email
+        - role
+        - created_at
+      properties:
+        id:
+          type: string
+          example: "mem_abc123"
+        project_id:
+          type: string
+          example: "proj_xyz789"
+        user_id:
+          type: string
+          example: "usr_def456"
+        email:
+          type: string
+          format: email
+          example: "collaborator@example.com"
+        role:
+          type: string
+          enum: [viewer, admin]
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectMemberListResponse:
+      type: object
+      required:
+        - members
+        - total
+      properties:
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectMemberResponse"
+        total:
+          type: integer
+          description: Total number of members in the project
+
+    ProjectLimits:
+      type: object
+      required:
+        - projects_used
+        - projects_limit
+        - events_used
+        - events_limit
+      properties:
+        projects_used:
+          type: integer
+          description: Number of projects currently in use
+        projects_limit:
+          type: integer
+          description: Maximum projects allowed on the current plan
+        events_used:
+          type: integer
+          description: Number of events consumed in the current billing period
+        events_limit:
+          type: integer
+          description: Maximum events allowed per billing period
+
+    StoredEvent:
+      type: object
+      description: A persisted event as returned by the admin API
+      properties:
+        id:
+          type: string
+          example: "evt_qwerty123"
+        project_id:
+          type: string
+          example: "proj_xyz789"
+        event:
+          type: string
+          example: "page_view"
+        screen:
+          type: string
+          nullable: true
+          example: "home"
+        props:
+          type: object
+          additionalProperties: true
+          example:
+            referrer: "https://google.com"
+            language: en
+        sid:
+          type: string
+          example: "abc123def456"
+        ts:
+          type: string
+          format: date-time
+          description: The event timestamp (preserved from client if within ±7 days, otherwise server-replaced)
+          example: "2026-04-30T12:34:56Z"
+        was_offline:
+          type: boolean
+          description: True if the event was captured while offline
+          example: false
+        country:
+          type: string
+          nullable: true
+          maxLength: 2
+          description: ISO 3166-1 alpha-2 country code derived from IP (PII: IP is not stored)
+          example: "DE"
+        device_class:
+          type: string
+          nullable: true
+          enum: [desktop, mobile, tablet, bot, unknown]
+          description: Device class derived from User-Agent
+          example: "mobile"
+        language:
+          type: string
+          nullable: true
+          maxLength: 10
+          example: "en"
+        platform:
+          type: string
+          example: "android"
+        sdk_version:
+          type: string
+          example: "0.2.0"
+        received_at:
+          type: string
+          format: date-time
+          description: Server-side timestamp when the event was received
+          example: "2026-04-30T12:34:57Z"
+
+    EventListResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoredEvent"
+        total:
+          type: integer
+          description: Total number of events matching the filter
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    AggregatesResponse:
+      type: object
+      properties:
+        project_id:
+          type: string
+          example: "proj_xyz789"
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        granularity:
+          type: string
+          enum: [hour, day, week, month]
+          example: "day"
+        top_events:
+          type: array
+          items:
+            type: object
+            properties:
+              event:
+                type: string
+              count:
+                type: integer
+          example:
+            - event: page_view
+              count: 12453
+            - event: button_click
+              count: 3871
+        top_screens:
+          type: array
+          items:
+            type: object
+            properties:
+              screen:
+                type: string
+              count:
+                type: integer
+          example:
+            - screen: home
+              count: 8932
+            - screen: settings
+              count: 2190
+        dau:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: Distinct session IDs per day
+          example:
+            - date: "2026-04-28"
+              count: 342
+            - date: "2026-04-29"
+              count: 389
+            - date: "2026-04-30"
+              count: 298
+        event_counts:
+          type: array
+          items:
+            type: object
+            properties:
+              period_start:
+                type: string
+                format: date-time
+              count:
+                type: integer
+          description: Event counts per granularity bucket
+
+    CheckoutRequest:
+      type: object
+      required:
+        - plan_id
+      properties:
+        plan_id:
+          type: string
+          enum: [hobby, startup, business]
+          description: The plan to subscribe to
+        provider:
+          type: string
+          enum: [stripe, adyen]
+          description: |
+            Payment provider to use. Overrides the server default `QM_BILLING_PROVIDER`.
+        success_url:
+          type: string
+          format: uri
+          description: URL to redirect after successful payment (Stripe only)
+        cancel_url:
+          type: string
+          format: uri
+          description: URL to redirect after cancelled payment (Stripe only)
+        return_url:
+          type: string
+          format: uri
+          description: URL to redirect after payment (Adyen only)
+
+    CheckoutResponse:
+      type: object
+      required:
+        - provider
+        - checkout_url
+      properties:
+        provider:
+          type: string
+          enum: [stripe, adyen]
+        checkout_url:
+          type: string
+          format: uri
+          description: URL to redirect the user to for payment
+
+    BillingUsageResponse:
+      type: object
+      required:
+        - project_id
+        - plan_id
+        - period
+        - events
+        - requests
+      properties:
+        project_id:
+          type: string
+        plan_id:
+          type: string
+          enum: [free, hobby, startup, business]
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        events:
+          type: object
+          properties:
+            used:
+              type: integer
+            limit:
+              type: integer
+              description: -1 for unlimited
+        requests:
+          type: object
+          properties:
+            used:
+              type: integer
+            limit:
+              type: object
+              properties:
+                per_second:
+                  type: integer
+                per_minute:
+                  type: integer
+        projects:
+          type: object
+          properties:
+            used:
+              type: integer
+              description: Number of projects currently in use
+            limit:
+              type: integer
+              description: Maximum projects allowed on the current plan

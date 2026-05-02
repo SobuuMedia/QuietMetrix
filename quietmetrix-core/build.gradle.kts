@@ -1,9 +1,9 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.kotlinSerialization)
     id("maven-publish")
 }
 
@@ -13,13 +13,6 @@ version = "0.1.0"
 kotlin {
     androidTarget {
         publishLibraryVariants("release")
-    }
-
-    jvm()
-
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
     }
 
     val xcf = XCFramework("QuietMetrix")
@@ -34,16 +27,27 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        androidMain.dependencies {
+            implementation(libs.ktor.client.android)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
     }
 }
 
 android {
     namespace = "com.quietmetrix.analytics"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk = 35
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }

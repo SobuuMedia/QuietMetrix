@@ -8,8 +8,7 @@ data class Project(
     val id: String,
     val name: String,
     val ownerUserId: String,
-    val writeKey: String,
-    val readKey: String,
+    val apiKey: String,
     val planId: Plan? = null,
     val createdAt: Instant,
 )

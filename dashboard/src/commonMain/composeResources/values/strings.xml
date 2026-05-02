@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand / generic -->
+    <string name="brand">QuietMetrix</string>
+
+    <!-- Login screen -->
+    <string name="login_title">Sign in</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_button">Sign in</string>
+    <string name="login_helper">First time? Use the admin email and password configured in your config.</string>
+
+    <!-- Login errors -->
+    <string name="login_error_invalid_credentials">Invalid email or password.</string>
+    <string name="login_error_network">Could not reach the server. Please check your connection.</string>
+    <string name="login_error_server">The server returned an error. Please try again in a moment.</string>
+    <string name="login_error_misconfigured">The server is not configured correctly. Please contact the administrator.</string>
+    <string name="login_error_unknown">Something went wrong. Please try again.</string>
+
+    <!-- Tab info dialogs -->
+    <string name="tab_info_overview">Top events and screens show what your users do most. The daily chart tracks volume trends over the selected time window. All data is aggregated — no individual user is exposed.</string>
+    <string name="tab_info_events">Raw event log in reverse chronological order. Each row represents one analytics event fired by the SDK. Use this to inspect props, screens, and metadata when debugging your integration.</string>
+    <string name="tab_info_projects">Manage your projects and API keys. Each project has a unique API key — create separate projects for different apps, environments (dev/staging/prod), or platforms.</string>
+    <string name="tab_info_settings">Toggle demo data for testing in debug mode. The demo switch only appears when the server runs in debug configuration. Production deployments hide this by default.</string>
+    <string name="tab_info_flow">Screen transitions show how users navigate your app. Each row represents one common path from one screen to the next, grouped by session. High drop-off at a step may indicate UX friction — investigate why users leave at that point.</string>
+    <string name="tab_info_live">Incoming events in real time. This feed auto-refreshes every few seconds to show the most recent events. Useful while integrating the SDK — watch events appear seconds after they fire in your app.</string>
+</resources>

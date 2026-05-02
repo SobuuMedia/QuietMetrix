@@ -1,8 +1,8 @@
 plugins {
-    kotlin("jvm") version "2.1.21"
-    kotlin("plugin.serialization") version "2.1.21"
-    id("io.ktor.plugin") version "3.1.3"
-    id("org.flywaydb.flyway") version "11.8.0"
+    alias(libs.plugins.kotlinJvm)
+    alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.ktorPlugin)
+    alias(libs.plugins.flywayPlugin)
     application
 }
 
@@ -13,56 +13,46 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.1.3"
-val exposedVersion = "0.61.0"
-val hikariVersion = "6.3.0"
-val postgresDriverVersion = "42.7.5"
-val flywayVersion = "11.8.0"
-val koinVersion = "4.1.0"
-val logbackVersion = "1.5.18"
-val kotestVersion = "5.9.1"
-val testcontainersVersion = "1.20.6"
-val bcryptVersion = "0.10.2"
-val jwtVersion = "4.5.0"
-
 dependencies {
-    implementation("io.ktor:ktor-server-core:$ktorVersion")
-    implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
-    implementation("io.ktor:ktor-server-auth:$ktorVersion")
-    implementation("io.ktor:ktor-server-auth-jwt:$ktorVersion")
-    implementation("io.ktor:ktor-server-cors:$ktorVersion")
-    implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
-    implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
-    implementation("io.ktor:ktor-server-double-receive:$ktorVersion")
-    implementation("io.ktor:ktor-server-rate-limit:$ktorVersion")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.auth.jwt)
+    implementation(libs.ktor.server.cors)
+    implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.call.logging)
+    implementation(libs.ktor.server.double.receive)
+    implementation(libs.ktor.server.rate.limit)
+    implementation(libs.ktor.server.netty)
+    implementation(libs.ktor.serialization.kotlinx.json)
 
-    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-kotlin-datetime:$exposedVersion")
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.dao)
+    implementation(libs.exposed.jdbc)
+    implementation(libs.exposed.java.time)
 
-    implementation("com.zaxxer:HikariCP:$hikariVersion")
-    implementation("org.postgresql:postgresql:$postgresDriverVersion")
-    implementation("org.flywaydb:flyway-core:$flywayVersion")
-    implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
+    implementation(libs.hikari)
+    implementation(libs.postgres.driver)
+    implementation(libs.flyway.core)
+    implementation(libs.flyway.postgres)
 
-    implementation("io.insert-koin:koin-ktor:$koinVersion")
-    implementation("io.insert-koin:koin-logger-slf4j:$koinVersion")
+    implementation(libs.koin.ktor)
 
-    implementation("ch.qos.logback:logback-classic:$logbackVersion")
-    implementation("at.favre.lib:bcrypt:$bcryptVersion")
-    implementation("com.auth0:java-jwt:$jwtVersion")
+    implementation(libs.logback)
+    implementation(libs.kotlin.logging)
+    implementation(libs.bcrypt)
+    implementation(libs.java.jwt)
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.datetime)
 
-    testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
-    testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")
-    testImplementation("io.kotest:kotest-assertions-json:$kotestVersion")
-    testImplementation("io.kotest:kotest-property:$kotestVersion")
-    testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
-    testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
+    testImplementation(libs.ktor.server.test.host)
+    testImplementation(libs.kotest.runner)
+    testImplementation(libs.kotest.assertions.json)
+    testImplementation(libs.kotest.property)
+    testImplementation(libs.testcontainers.postgres)
+    testImplementation(libs.testcontainers.junit)
+    testImplementation(libs.h2)
     testImplementation(kotlin("test"))
 }
 
@@ -87,9 +77,8 @@ tasks.test {
 
 ktor {
     docker {
-        jreVersion.set(21)
+        jreVersion.set(JavaVersion.VERSION_21)
         localImageName.set("quietmetrix-ktor")
         imageTag.set(version.toString())
-        portMappings.set(listOf(io.ktor.plugin.features.DockerPortMapping(8080, 8080)))
     }
 }

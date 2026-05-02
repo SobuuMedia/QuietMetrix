@@ -1,0 +1,33 @@
+<IfModule mod_mime.c>
+    AddType application/wasm .wasm
+    AddType text/javascript .mjs
+</IfModule>
+
+RewriteEngine On
+RewriteBase /
+
+# Apache strips the Authorization header on CGI/FastCGI on most shared hosts
+# (IONOS included). SetEnvIf preserves the full header value (including the
+# space after "Bearer"); using RewriteRule [E=...] would truncate at whitespace.
+# Wrapped in IfModule so the .htaccess does not 500 on hosts where mod_setenvif
+# overrides are disallowed.
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+# Serve the dashboard SPA's static files directly without rewriting them to
+# index.php. Anything else that does not match a real file/directory is routed
+# to index.php (the API front controller).
+RewriteCond %{REQUEST_URI} !^/dashboard/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Block direct access to backend source files. Only the front controller and
+# the dashboard static files should be reachable from the web.
+<FilesMatch "\.(sql|md)$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "^config\.php$">
+    Require all denied
+</FilesMatch>

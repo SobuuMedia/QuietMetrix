@@ -19,6 +19,7 @@ class QuietMetrixTest {
 
     @AfterTest
     fun tearDown() {
+        QuietMetrix.stop()
         ConfigHolder.reset()
         InMemoryStore.clear()
     }

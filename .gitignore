@@ -11,3 +11,12 @@ captures/
 kotlin-js-store/
 xcuserdata/
 **/build/
+
+# php-hosting: per-deployment secrets, never commit.
+php-hosting/config.php
+
+# Generated dashboard bundles — produced by `./gradlew :dashboard:installDashboard`.
+# Don't commit; let CI / the deploy step rebuild them.
+php-hosting/dashboard/*
+!php-hosting/dashboard/.gitkeep
+servers/ktor/src/main/resources/dashboard/

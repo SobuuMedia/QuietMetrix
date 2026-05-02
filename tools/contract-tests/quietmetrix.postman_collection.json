@@ -1,0 +1,198 @@
+{
+  "info": {
+    "name": "QuietMetrix API Contract",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Returns ok with version",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/api/v1/health",
+            "header": []
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Body has ok=true', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.ok).to.be.true;",
+                  "  pm.expect(json.version).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Track Single Event",
+      "item": [
+        {
+          "name": "Returns 202 with valid API key",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/track",
+            "header": [
+              { "key": "X-QM-Api-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"page_view\",\n  \"screen\": \"home\",\n  \"props\": {\"language\": \"en\"},\n  \"sid\": \"test_session_1\",\n  \"ts\": \"2026-04-30T12:34:56Z\",\n  \"sdk\": {\"platform\": \"test\", \"version\": \"0.1.0\"}\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('Body has ok=true', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.ok).to.be.true;",
+                  "  pm.expect(json.queued).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Returns 401 without API key",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/track",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"page_view\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Returns 400 with missing event field",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/track",
+            "header": [
+              { "key": "X-QM-Api-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"screen\": \"home\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body has error field', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Track Batch",
+      "item": [
+        {
+          "name": "Returns 202 for valid batch",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/track/batch",
+            "header": [
+              { "key": "X-QM-Api-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    {\"event\": \"page_view\", \"screen\": \"home\", \"ts\": \"2026-04-30T12:34:56Z\"},\n    {\"event\": \"button_click\", \"screen\": \"home\", \"ts\": \"2026-04-30T12:34:57Z\", \"was_offline\": true}\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('Queued is 2', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.queued).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth Login",
+      "item": [
+        {
+          "name": "Returns 401 for invalid credentials",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/auth/login",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nonexistent@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "base", "value": "http://localhost:8080" },
+    { "key": "apiKey", "value": "qm_ak_test_key_change_me" }
+  ]
+}

@@ -1,10 +1,35 @@
 package com.quietmetrix.analytics
 
 import com.quietmetrix.analytics.internal.ConfigHolder
-import platform.Foundation.NSLog
+import com.quietmetrix.analytics.internal.EventValidator
+import com.quietmetrix.analytics.internal.Gate
+import com.quietmetrix.analytics.internal.SDK_VERSION
+import com.quietmetrix.analytics.internal.generateSid
+import com.quietmetrix.analytics.internal.transport.ConnectivityMonitor
+import com.quietmetrix.analytics.internal.transport.EnqueuedEvent
+import com.quietmetrix.analytics.internal.transport.EventQueue
+import com.quietmetrix.analytics.internal.transport.SdkInfo
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
-actual fun trackEvent(event: String, screen: String?) {
-    if (!ConfigHolder.isInitialized) return
-    if (!isTrackingAllowed()) return
-    NSLog("[QuietMetrix] event=%@ screen=%@", event, screen ?: "-")
+@OptIn(ExperimentalTime::class)
+actual suspend fun trackEvent(event: String, screen: String?, props: Map<String, Any?>) {
+    if (!Gate.shouldTrack()) return
+    val errors = EventValidator.validate(event, screen, props)
+    if (errors.isNotEmpty()) return
+    val config = ConfigHolder.config
+    val isOffline = !ConnectivityMonitor().isOnline
+    val sid = generateSid(config.storageKeyPrefix)
+    EventQueue.enqueue(
+        EnqueuedEvent(
+            event = event,
+            screen = screen,
+            props = props,
+            sid = sid,
+            ts = Clock.System.now(),
+            wasOffline = isOffline,
+            sdk = SdkInfo("ios", SDK_VERSION),
+            ctx = null,
+        )
+    )
 }

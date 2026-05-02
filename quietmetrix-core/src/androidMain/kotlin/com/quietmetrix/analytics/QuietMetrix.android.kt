@@ -1,7 +1,14 @@
 package com.quietmetrix.analytics
 
+import android.content.Context
+
 internal actual fun platformInit(config: QuietMetrixConfig) {
-    // No-op on Android stub; consent/banner state lives in InMemoryStore.
-    // A future revision can add a SharedPreferences-backed store via an Android-specific
-    // initAndroid(context, config) overload.
+    val ctx = config.applicationContext as? Context
+    if (ctx != null) {
+        com.quietmetrix.analytics.internal.transport.ConnectivityMonitor().let {
+            try {
+                it.initialize(ctx)
+            } catch (_: Exception) { }
+        }
+    }
 }
