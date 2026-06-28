@@ -1194,6 +1194,12 @@ components:
           maxLength: 255
           description: Human-readable project name
           example: "My App"
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+          description: Optional project description
+          example: "Production mobile app tracking"
 
     ProjectResponse:
       type: object
@@ -1209,6 +1215,12 @@ components:
         name:
           type: string
           example: "My App"
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+          description: Optional project description
+          example: "Production mobile app tracking"
         api_key:
           type: string
           description: |

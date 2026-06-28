@@ -5,12 +5,14 @@ services:
       dockerfile: servers/ktor/Dockerfile
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       QM_PROFILE: selfhost
       QM_DB_URL: jdbc:postgresql://postgres:5432/quietmetrix
       QM_DB_USER: quietmetrix
-      QM_DB_PASSWORD: quietmetrix
-      QM_JWT_SECRET: change-me-in-production
+      QM_DB_PASSWORD: ${QM_DB_PASSWORD:?QM_DB_PASSWORD must be set in docker/.env}
+      QM_JWT_SECRET: ${QM_JWT_SECRET:?QM_JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -18,10 +20,12 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: quietmetrix
       POSTGRES_USER: quietmetrix
-      POSTGRES_PASSWORD: quietmetrix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in docker/.env}
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:

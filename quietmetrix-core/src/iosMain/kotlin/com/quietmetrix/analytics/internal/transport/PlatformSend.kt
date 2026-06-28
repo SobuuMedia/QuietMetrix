@@ -1,12 +1,14 @@
 package com.quietmetrix.analytics.internal.transport
 
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 
 internal actual suspend fun platformSend(endpoint: String, apiKey: String, events: List<EnqueuedEvent>): SendResult {
-    val client = HttpClient()
+    // Explicit Darwin engine for parity with the other targets (jvm/Java, linux/Curl, android/Android).
+    val client = HttpClient(Darwin)
     try {
         val payload = HttpTransport.serializeBatch(events)
         val response = client.post(endpoint) {

@@ -6,6 +6,7 @@ import android.widget.TextView
 import com.quietmetrix.analytics.QuietMetrix
 import com.quietmetrix.analytics.QuietMetrixConfig
 import com.quietmetrix.analytics.trackEvent
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : Activity() {
 
@@ -19,7 +20,9 @@ class MainActivity : Activity() {
             )
         )
 
-        trackEvent("page_view", "main_activity")
+        runBlocking {
+            trackEvent("page_view", "main_activity")
+        }
 
         val textView = TextView(this)
         textView.text = "Hello QuietMetrix"

@@ -19,6 +19,64 @@ data class LoginResponse(
 @Serializable
 data class ApiUser(val id: String, val email: String, val role: String = "admin")
 
+/** Global user roles. Drives what the dashboard shows and allows. */
+object UserRole {
+    const val ADMIN = "admin"
+    const val DEVELOPER = "developer"
+    const val REVIEWER = "reviewer"
+}
+
+/** A user as shown in the admin Users screen. */
+@Serializable
+data class ApiManagedUser(
+    val id: String,
+    val email: String,
+    val role: String = UserRole.REVIEWER,
+    val status: String = "active",
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+@Serializable
+data class UsersResponse(val users: List<ApiManagedUser> = emptyList())
+
+@Serializable
+data class InviteUserRequest(val email: String, val role: String)
+
+@Serializable
+data class InviteResponse(
+    @SerialName("invite_link") val inviteLink: String,
+    val user: ApiManagedUser? = null,
+)
+
+@Serializable
+data class InvitePreview(val email: String)
+
+@Serializable
+data class AcceptInviteRequest(val password: String)
+
+@Serializable
+data class UpdateRoleRequest(val role: String)
+
+@Serializable
+data class AddMemberRequest(val email: String)
+
+/** A user assigned to a project (project_members join). */
+@Serializable
+data class ApiMember(
+    @SerialName("user_id") val userId: String,
+    val email: String,
+    @SerialName("user_role") val userRole: String? = null,
+)
+
+@Serializable
+data class MembersResponse(val members: List<ApiMember> = emptyList())
+
+@Serializable
+data class RegenerateKeyResponse(
+    @SerialName("api_key") val apiKey: String,
+    @SerialName("api_key_last4") val apiKeyLast4: String,
+)
+
 @Serializable
 data class MetaResponse(val version: String = "0.0.0", val debug: Boolean = false)
 
@@ -29,18 +87,25 @@ data class ProjectsResponse(val projects: List<ApiProject> = emptyList())
 data class ApiProject(
     val id: String,
     val name: String,
+    val description: String? = null,
     @SerialName("plan_id") val planId: String? = null,
+    @SerialName("api_key_last4") val apiKeyLast4: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
 
 @Serializable
-data class CreateProjectRequest(val name: String)
+data class CreateProjectRequest(
+    val name: String,
+    val description: String? = null,
+)
 
 @Serializable
 data class CreateProjectResponse(
     val id: String,
     val name: String,
+    val description: String? = null,
     @SerialName("api_key") val apiKey: String,
+    @SerialName("api_key_last4") val apiKeyLast4: String? = null,
 )
 
 @Serializable
@@ -98,7 +163,7 @@ data class RetentionCohort(
 )
 
 @Serializable
-data class Totals(val events: Long = 0, val offline: Long = 0)
+data class Totals(val events: Long = 0, val offline: Long = 0, val errors: Long = 0)
 
 @Serializable
 data class TopEvent(@SerialName("event_name") val eventName: String, val count: Long)

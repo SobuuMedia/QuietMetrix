@@ -23,7 +23,7 @@ class ProjectRepository(private val database: Database) {
             .joinToString("") { "%02x".format(it) }
     }
 
-    fun create(name: String, ownerUserId: Long): Pair<String, String> {
+    fun create(name: String, description: String?, ownerUserId: Long): String {
         val apiKey = "qm_ak_${UUID.randomUUID().toString().replace("-", "")}"
         val apiKeyHash = BCrypt.withDefaults().hashToString(12, apiKey.toCharArray())
         val apiKeySha256 = sha256(apiKey)
@@ -31,12 +31,35 @@ class ProjectRepository(private val database: Database) {
         transaction(database) {
             Projects.insert {
                 it[this.name] = name
+                it[this.description] = description
                 it[this.ownerUserId] = ownerUserId
                 it[this.apiKeyHash] = apiKeyHash
                 it[this.apiKeySha256] = apiKeySha256
+                it[this.apiKeyLast4] = apiKey.takeLast(4)
             }
         }
-        return Pair(apiKey, apiKey)
+        return apiKey
+    }
+
+    /**
+     * Issues a fresh API key for the project, invalidating the old one. Returns
+     * the new plaintext key (shown once) or null if the project does not exist.
+     */
+    fun regenerateApiKey(id: Long): String? {
+        val apiKey = "qm_ak_${UUID.randomUUID().toString().replace("-", "")}"
+        val apiKeyHash = BCrypt.withDefaults().hashToString(12, apiKey.toCharArray())
+        val apiKeySha256 = sha256(apiKey)
+        val updated = transaction(database) {
+            Projects.update(
+                where = { (Projects.id eq id) and (Projects.deletedAt.isNull()) },
+                body = {
+                    it[this.apiKeyHash] = apiKeyHash
+                    it[this.apiKeySha256] = apiKeySha256
+                    it[this.apiKeyLast4] = apiKey.takeLast(4)
+                }
+            )
+        }
+        return if (updated > 0) apiKey else null
     }
 
     fun findById(id: Long): Map<String, Any?>? {
@@ -49,17 +72,6 @@ class ProjectRepository(private val database: Database) {
         }
     }
 
-    fun findByApiKeyHash(apiKey: String): Map<String, Any?>? {
-        return transaction(database) {
-            Projects.selectAll()
-                .where { Projects.deletedAt.isNull() }
-                .map { rowToMap(it) }
-                .firstOrNull {
-                    BCrypt.verifyer().verify(apiKey.toCharArray(), it["apiKeyHash"] as String).verified
-                }
-        }
-    }
-
     fun findByOwnerId(ownerUserId: Long, limit: Int = 50, offset: Int = 0): List<Map<String, Any?>> {
         return transaction(database) {
             Projects
@@ -67,6 +79,23 @@ class ProjectRepository(private val database: Database) {
                 .where { (Projects.ownerUserId eq ownerUserId) and (Projects.deletedAt.isNull()) }
                 .limit(limit).offset(offset.toLong())
                 .map { rowToMap(it) }
+        }
+    }
+
+    /** All non-deleted projects (admin view). */
+    fun findAll(limit: Int = 50, offset: Int = 0): List<Map<String, Any?>> {
+        return transaction(database) {
+            Projects
+                .selectAll()
+                .where { Projects.deletedAt.isNull() }
+                .limit(limit).offset(offset.toLong())
+                .map { rowToMap(it) }
+        }
+    }
+
+    fun countAll(): Long {
+        return transaction(database) {
+            Projects.selectAll().where { Projects.deletedAt.isNull() }.count()
         }
     }
 
@@ -138,8 +167,10 @@ class ProjectRepository(private val database: Database) {
     private fun rowToMap(row: ResultRow) = mapOf(
         "id" to row[Projects.id],
         "name" to row[Projects.name],
+        "description" to row[Projects.description],
         "ownerUserId" to row[Projects.ownerUserId],
         "apiKeyHash" to row[Projects.apiKeyHash],
+        "apiKeyLast4" to row[Projects.apiKeyLast4],
         "planId" to row[Projects.planId],
         "createdAt" to row[Projects.createdAt],
     )

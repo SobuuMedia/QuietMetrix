@@ -1,5 +1,6 @@
 package com.quietmetrix.server.domain
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -72,21 +73,71 @@ data class RefreshRequest(
 data class UserResponse(
     val id: String,
     val email: String,
+    val role: String = "admin",
     val createdAt: String,
 )
 
 @Serializable
 data class CreateProjectRequest(
     val name: String,
+    val description: String? = null,
+)
+
+@Serializable
+data class UserListItem(
+    val id: String,
+    val email: String,
+    val role: String,
+    val status: String,
+)
+
+@Serializable
+data class UserListResponse(
+    val users: List<UserListItem>,
+)
+
+@Serializable
+data class InviteUserRequest(
+    val email: String,
+    val role: String,
+)
+
+@Serializable
+data class InviteResponse(
+    @SerialName("invite_link") val inviteLink: String,
+    val user: UserListItem,
+)
+
+@Serializable
+data class InvitePreviewResponse(
+    val email: String,
+)
+
+@Serializable
+data class AcceptInviteRequest(
+    val password: String,
+)
+
+@Serializable
+data class UpdateUserRoleRequest(
+    val role: String,
 )
 
 @Serializable
 data class ProjectResponse(
     val id: String,
     val name: String,
+    val description: String? = null,
     val apiKey: String,
+    @SerialName("api_key_last4") val apiKeyLast4: String? = null,
     val planId: String? = null,
     val createdAt: String,
+)
+
+@Serializable
+data class RegenerateKeyResponse(
+    @SerialName("api_key") val apiKey: String,
+    @SerialName("api_key_last4") val apiKeyLast4: String,
 )
 
 @Serializable

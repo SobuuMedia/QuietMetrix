@@ -1,5 +1,18 @@
 <?php
 
+// Prevent absolute path disclosure if config.php is missing.
+// The global exception handler is registered further down, so we
+// catch this explicitly first.
+if (!file_exists(__DIR__ . '/config.php')) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error'   => 'misconfigured',
+        'message' => 'config.php is missing. Copy config.example.php to config.php and fill in the values.',
+    ]);
+    exit;
+}
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/helpers.php';
 require_once __DIR__ . '/src/db.php';
@@ -77,17 +90,20 @@ ensureInstalled();
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
 
+$cspConnectSrc = defined('CSP_CONNECT_SRC') ? CSP_CONNECT_SRC : "'self'";
 header("Content-Security-Policy: default-src 'self'; "
      . "script-src 'self'; "
      . "style-src 'self' 'unsafe-inline'; "
      . "img-src 'self' data:; "
-     . "connect-src 'self'; "
+     . "connect-src $cspConnectSrc; "
      . "frame-ancestors 'none'; "
      . "base-uri 'self'");
 header('Access-Control-Allow-Origin: ' . ALLOWED_ORIGIN);
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Authorization, Content-Type, X-QM-Api-Key');
 header('Access-Control-Max-Age: 86400');
 
@@ -184,6 +200,62 @@ if ($method === 'POST' && $uri === '/api/v1/projects') {
 if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/projects.php';
     handleProjectsDelete($m[1]);
+    exit;
+}
+if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/regenerate-key$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/projects.php';
+    handleProjectRegenerateKey($m[1]);
+    exit;
+}
+
+// ---- Project members (assign / unassign users) ----
+
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/members$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/projects.php';
+    handleProjectMembersList($m[1]);
+    exit;
+}
+if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/members$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/projects.php';
+    handleProjectMemberAdd($m[1]);
+    exit;
+}
+if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)/members/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/projects.php';
+    handleProjectMemberRemove($m[1], $m[2]);
+    exit;
+}
+
+// ---- Users + invitations ----
+
+if ($method === 'GET' && $uri === '/api/v1/users') {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleUsersList();
+    exit;
+}
+if ($method === 'POST' && $uri === '/api/v1/users/invite') {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleUserInvite();
+    exit;
+}
+if ($method === 'PATCH' && preg_match('#^/api/v1/users/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleUserUpdateRole($m[1]);
+    exit;
+}
+if ($method === 'DELETE' && preg_match('#^/api/v1/users/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleUserDelete($m[1]);
+    exit;
+}
+if ($method === 'GET' && preg_match('#^/api/v1/invites/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleInviteGet($m[1]);
+    exit;
+}
+if ($method === 'POST' && preg_match('#^/api/v1/invites/([^/]+)/accept$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleInviteAccept($m[1]);
     exit;
 }
 

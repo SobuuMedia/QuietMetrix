@@ -11,6 +11,14 @@ object Users : Table("users") {
     val email = varchar("email", 255).uniqueIndex()
     val passwordHash = varchar("password_hash", 255)
     val planId = varchar("plan_id", 50).nullable()
+    // Global role: admin | developer | reviewer. Defaults to admin so the
+    // bootstrap/first user keeps full access.
+    val role = varchar("role", 20).default("admin")
+    // Account lifecycle: active | invited. Invited users have no usable password
+    // until they accept the invite and set one.
+    val status = varchar("status", 20).default("active")
+    val inviteToken = varchar("invite_token", 64).nullable()
+    val inviteExpiresAt = datetime("invite_expires_at").nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
 
     override val primaryKey = PrimaryKey(id)
@@ -19,9 +27,13 @@ object Users : Table("users") {
 object Projects : Table("projects") {
     val id = long("id").autoIncrement()
     val name = varchar("name", 255)
+    val description = text("description").nullable()
     val ownerUserId = long("owner_user_id").references(Users.id)
     val apiKeyHash = varchar("api_key_hash", 255).index()
     val apiKeySha256 = varchar("api_key_sha256", 64).nullable().index()
+    // Non-sensitive last 4 chars of the plaintext key, for masked display in the
+    // dashboard. The full key is never recoverable (only hashes are stored).
+    val apiKeyLast4 = varchar("api_key_last4", 4).nullable()
     val planId = varchar("plan_id", 50).nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val deletedAt = datetime("deleted_at").nullable()

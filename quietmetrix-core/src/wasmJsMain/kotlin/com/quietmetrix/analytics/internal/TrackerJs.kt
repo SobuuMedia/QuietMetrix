@@ -12,6 +12,7 @@ package com.quietmetrix.analytics.internal
 internal const val TRACKER_JS_TEMPLATE = """
 (function () {
     var ANALYTICS_URL = '__QM_ENDPOINT__';
+    var CONSENT_KEY = '__QM_CONSENT_KEY__';
 
     // Generate or reuse a session ID (resets on tab close)
     var sid = sessionStorage.getItem('_sid');
@@ -21,7 +22,7 @@ internal const val TRACKER_JS_TEMPLATE = """
     }
 
     function isTrackingAllowed() {
-        try { return localStorage.getItem('__QM_CONSENT_KEY__') !== '0'; } catch(e) { return true; }
+        try { return localStorage.getItem(CONSENT_KEY) !== '0'; } catch(e) { return true; }
     }
 
     function send(event, screen) {

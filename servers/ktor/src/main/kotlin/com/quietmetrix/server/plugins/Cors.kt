@@ -4,7 +4,6 @@ import com.quietmetrix.server.config.AppConfig
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.server.application.Application
-import io.ktor.server.application.host
 import io.ktor.server.application.install
 import io.ktor.server.plugins.cors.routing.CORS
 
@@ -14,7 +13,7 @@ fun Application.configureCors(config: AppConfig) {
         require(origins.isNotEmpty()) {
             "QM_CORS_ALLOWED_ORIGINS must be set. Provide a comma-separated list of allowed origins."
         }
-        origins.forEach { host(it) }
+        origins.forEach { allowHost(it, schemes = listOf("http", "https")) }
         allowCredentials = true
         allowMethod(HttpMethod.Get)
         allowMethod(HttpMethod.Post)

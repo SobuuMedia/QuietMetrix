@@ -46,8 +46,8 @@ class ProjectRoutesIntegrationTest {
         application {
             routing {
                 post("/api/v1/projects") {
-                    val (wk, rk) = projectRepo.create("My App", 1L)
-                    call.respondText("""{"api_key":"$wk"}""", ContentType.Application.Json, HttpStatusCode.Created)
+                    val apiKey = projectRepo.create("My App", null, 1L)
+                    call.respondText("""{"api_key":"$apiKey"}""", ContentType.Application.Json, HttpStatusCode.Created)
                 }
             }
         }
@@ -66,7 +66,7 @@ class ProjectRoutesIntegrationTest {
         userRepo.create("freeuser@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
         val quotaEnforcer = QuotaEnforcer(projectRepo)
-        projectRepo.create("Existing Project", 1L)
+        projectRepo.create("Existing Project", null, 1L)
 
         application {
             routing {
@@ -91,7 +91,7 @@ class ProjectRoutesIntegrationTest {
         val userRepo = UserRepository(testDb)
         userRepo.create("patchuser@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
-        projectRepo.create("Old Name", 1L)
+        projectRepo.create("Old Name", null, 1L)
 
         application {
             routing {
@@ -119,7 +119,7 @@ class ProjectRoutesIntegrationTest {
         val userRepo = UserRepository(testDb)
         userRepo.create("deleteuser@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
-        projectRepo.create("Deletable", 1L)
+        projectRepo.create("Deletable", null, 1L)
 
         application {
             routing {
@@ -149,7 +149,7 @@ class ProjectRoutesIntegrationTest {
         userRepo.create("viewer@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
         val memberRepo = ProjectMemberRepository(testDb)
-        projectRepo.create("Team Project", 1L)
+        projectRepo.create("Team Project", null, 1L)
 
         application {
             routing {
@@ -186,7 +186,7 @@ class ProjectRoutesIntegrationTest {
         val viewerId = userRepo.create("viewer@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
         val memberRepo = ProjectMemberRepository(testDb)
-        projectRepo.create("Team Project", 1L)
+        projectRepo.create("Team Project", null, 1L)
         val projectId = transaction(testDb) { Projects.select(Projects.id).first()[Projects.id] }
         memberRepo.add(projectId, viewerId, "viewer")
 

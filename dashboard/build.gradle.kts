@@ -1,16 +1,21 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
-    kotlin("multiplatform") version "2.3.20"
-    id("org.jetbrains.compose") version "1.7.3"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
-    kotlin("plugin.serialization") version "2.3.20"
+    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.composeMultiplatform)
+    alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 repositories { mavenCentral(); google() }
 
 kotlin {
     jvmToolchain(21)
+
+    // JVM target exists solely to run unit tests against pure, Compose-free
+    // logic (formatters, breakpoints, chart math, sort/filter/pagination).
+    // The production dashboard still ships as wasmJs only.
+    jvm()
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
@@ -28,17 +33,25 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
 
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
 
-            implementation("io.ktor:ktor-client-core:3.0.3")
-            implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+        val jvmTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
         }
         val wasmJsMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-js:3.0.3")
-                implementation("org.jetbrains.kotlinx:kotlinx-browser:0.3")
+                implementation(libs.ktor.client.js)
+                implementation(libs.kotlinx.browser)
             }
         }
     }

@@ -55,9 +55,12 @@ function requireApiKey(): string {
 
 /**
  * Asserts the session user can read the given project. Owner or member both
- * pass. Responds 403 + exits otherwise.
+ * pass; admins pass for any project. Responds 403 + exits otherwise.
  */
 function requireProjectAccess(array $session, string $projectId): void {
+    if (($session['role'] ?? '') === 'admin') {
+        return;
+    }
     $userId = $session['sub'] ?? '';
     $stmt = getDb()->prepare(
         'SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?
@@ -70,4 +73,20 @@ function requireProjectAccess(array $session, string $projectId): void {
         errorResponse(403, 'forbidden', 'No access to this project');
         exit;
     }
+}
+
+/**
+ * Asserts the session user's global role is one of $allowed. Responds 403 +
+ * exits otherwise. Roles: admin | developer | reviewer.
+ */
+function requireRole(array $session, array $allowed): void {
+    if (!in_array($session['role'] ?? '', $allowed, true)) {
+        errorResponse(403, 'forbidden', 'Insufficient role for this action');
+        exit;
+    }
+}
+
+/** Convenience: assert the session user is an admin. */
+function requireAdmin(array $session): void {
+    requireRole($session, ['admin']);
 }

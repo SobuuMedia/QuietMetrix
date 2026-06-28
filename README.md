@@ -352,6 +352,10 @@ QuietMetrix/
 git clone https://github.com/sobuumedia/quietmetrix.git
 cd quietmetrix
 
+# Prepare environment variables
+cp docker/.env.example docker/.env
+# Edit docker/.env and set strong passwords for QM_DB_PASSWORD and QM_JWT_SECRET
+
 # Start (Postgres auto-creates DB, Flyway runs migrations on Ktor boot)
 docker compose -f docker/docker-compose.ktor.yml up -d
 
@@ -376,7 +380,7 @@ curl -X POST http://localhost:8080/api/v1/projects \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"My First Project"}'
 # Response: {"api_key":"qm_ak_abc123...",
-#             "message":"Project created. Store these keys securely — they will not be shown again."}
+#             "message":"Project created. Store it securely — it will not be shown again."}
 
 # Send a test event
 curl -X POST http://localhost:8080/api/v1/track \
@@ -395,8 +399,10 @@ curl -X POST http://localhost:8080/api/v1/track \
 | `caddy` | `caddy:2-alpine` | 80, 443 | Reverse proxy + TLS |
 
 #### Production checklist
+- [ ] Copy `docker/.env.example` to `docker/.env` and fill in strong passwords
 - [ ] Change `QM_JWT_SECRET` to a random 64-character string
 - [ ] Set a strong `QM_DB_PASSWORD`
+- [ ] Configure `QM_TRUSTED_PROXIES` if running behind a reverse proxy / CDN
 - [ ] Configure a real domain in `docker/caddy/Caddyfile` for TLS
 - [ ] Set up backups (`docker compose exec postgres pg_dump ...`)
 - [ ] Pin image tags in compose (replace `latest` with specific versions)
@@ -465,7 +471,8 @@ mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2
 | `QM_JWT_SECRET` | `change-me...` | HMAC256 signing secret |
 | `QM_JWT_ISSUER` | `quietmetrix` | JWT issuer claim |
 | `QM_JWT_AUDIENCE` | `quietmetrix-api` | JWT audience claim |
-| `QM_SESSION_TTL_HOURS` | `24` | JWT token lifetime |
+| `QM_SESSION_TTL_HOURS` | `2` | Access token lifetime |
+| `QM_TRUSTED_PROXIES` | *(empty)* | Comma-separated trusted proxy IPs for `X-Forwarded-For` |
 | `QM_RATE_LIMIT_ENABLED` | `false` (selfhost) / `true` (cloud) | Enable per-project rate limiting |
 | `QM_RATE_LIMIT_RPS` | `10` | Request per second limit |
 | `QM_RATE_LIMIT_BURST` | `60` | Burst per minute |
@@ -483,7 +490,9 @@ mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2
 | `QM_JWT_SECRET` | `change-me...` | HMAC256 signing secret |
 | `QM_JWT_ISSUER` | `quietmetrix` | JWT issuer |
 | `QM_JWT_AUDIENCE` | `quietmetrix-api` | JWT audience |
-| `QM_SESSION_TTL_HOURS` | `24` | Token lifetime |
+| `QM_SESSION_TTL_HOURS` | `2` | Access token lifetime |
+| `JWT_REFRESH_EXPIRY_DAYS` | `2` | Refresh token lifetime |
+| `CSP_CONNECT_SRC` | `'self'` | CSP `connect-src` directive |
 | `QM_RATE_LIMIT_ENABLED` | `false` | Enable rate limiting |
 | `QM_RATE_LIMIT_RPS` | `10` | Requests per second |
 | `QM_RATE_LIMIT_BURST` | `60` | Burst per minute |
@@ -1068,10 +1077,13 @@ Projects are soft-deleted — `deleted_at` is set, events are preserved. The pro
 ```bash
 # Start Postgres (or use Docker)
 docker run -d --name qm-postgres \
-  -e POSTGRES_DB=quietmetrix -e POSTGRES_USER=quietmetrix -e POSTGRES_PASSWORD=quietmetrix \
+  -e POSTGRES_DB=quietmetrix -e POSTGRES_USER=quietmetrix -e POSTGRES_PASSWORD=changeme \
   -p 5432:5432 postgres:16-alpine
 
 # Run the server
+export QM_DB_PASSWORD=changeme
+export QM_JWT_SECRET=$(openssl rand -hex 32)
+export QM_CORS_ALLOWED_ORIGINS=http://localhost:8080
 ./gradlew :servers:ktor:run
 
 # Or from IntelliJ: run ApplicationKt.main()

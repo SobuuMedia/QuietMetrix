@@ -33,6 +33,15 @@ function ensureInstalled(): void {
         }
     }
 
+    // 1b. Additive column migrations for installs created before these columns
+    // existed. MySQL has no portable `ADD COLUMN IF NOT EXISTS`, so guard each
+    // ALTER with an information_schema check. Cheap: a handful of indexed reads.
+    addColumnIfMissing($db, 'users', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
+    addColumnIfMissing($db, 'users', 'invite_token', 'CHAR(64) NULL');
+    addColumnIfMissing($db, 'users', 'invite_expires', 'VARCHAR(32) NULL');
+    addColumnIfMissing($db, 'projects', 'description', 'VARCHAR(1000) NULL');
+    addColumnIfMissing($db, 'projects', 'api_key_last4', 'CHAR(4) NULL');
+
     // 2. First admin user
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([ADMIN_EMAIL]);
@@ -47,4 +56,44 @@ function ensureInstalled(): void {
             now(),
         ]);
     }
+}
+
+/**
+ * Adds `$column $definition` to `$table` if the column is not already present.
+ * Idempotent ALTER for shared-hosting MySQL (no `ADD COLUMN IF NOT EXISTS`).
+ */
+function addColumnIfMissing(PDO $db, string $table, string $column, string $definition): void {
+    $stmt = $db->prepare(
+        'SELECT 1 FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1'
+    );
+    $stmt->execute([$table, $column]);
+    if ($stmt->fetchColumn() === false) {
+        // Identifiers are hard-coded constants from this file, not user input.
+        $db->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+    }
+}
+
+/**
+ * Resolve the analytics window in seconds from the `?range` token (1h, 1d, 7d,
+ * 30d, 90d), falling back to the legacy `?days` query param. Clamped to
+ * [1 day .. $maxDays].
+ */
+function windowSeconds(int $maxDays = 365): int {
+    static $map = ['1h' => 3600, '1d' => 86400, '7d' => 604800, '30d' => 2592000, '90d' => 7776000];
+    $range = $_GET['range'] ?? null;
+    if (is_string($range) && isset($map[$range])) {
+        return min($map[$range], $maxDays * 86400);
+    }
+    $days = max(1, min($maxDays, (int)($_GET['days'] ?? 30)));
+    return $days * 86400;
+}
+
+/**
+ * SQL grouping expression for time-series buckets. Windows of one day or less
+ * bucket by hour (ISO prefix "YYYY-MM-DDTHH"); longer windows bucket by day.
+ * The returned expression is a constant, never built from user input.
+ */
+function bucketExpr(int $seconds): string {
+    return $seconds <= 86400 ? 'SUBSTRING(ts, 1, 13)' : 'DATE(ts)';
 }

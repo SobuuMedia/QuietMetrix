@@ -12,7 +12,12 @@ internal object HttpTransport : Transport {
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     override suspend fun send(endpoint: String, apiKey: String, events: List<EnqueuedEvent>): SendResult {
-        return platformSend(endpoint, apiKey, events)
+        // serializeBatch emits a single event object for size==1 and a {"events":[…]} envelope
+        // otherwise. The server exposes a matching pair of routes — POST …/track for a single event,
+        // POST …/track/batch for the envelope — so route each body to the endpoint it belongs to.
+        // Posting a batch envelope to the single-event route returns 400 schema_violation.
+        val url = if (events.size == 1) endpoint else "$endpoint/batch"
+        return platformSend(url, apiKey, events)
     }
 
     internal fun serializeBatch(events: List<EnqueuedEvent>): String {

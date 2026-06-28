@@ -10,7 +10,7 @@ class EventValidator {
     private val maxSidLength = 128
     private val maxPropsCount = 50
     private val maxPropValueBytes = 4096
-    private val maxBatchSize = 50
+    private val maxBatchSize = 100
 
     fun validate(request: TrackEventRequest): ValidationResult {
         val errors = mutableListOf<String>()

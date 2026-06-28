@@ -8,25 +8,40 @@
 /** GET /api/v1/_demo/aggregates */
 function handleDemoAggregates(): void {
     requireSession();   // still gated to logged-in users; demo, not anonymous
-    $days = max(1, min(365, (int)($_GET['days'] ?? 30)));
+    $seconds = windowSeconds(365);
+    $hourly  = $seconds <= 86400;
+    $days    = (int)max(1, round($seconds / 86400));
 
     $daily = [];
     $total = 0;
     $offline = 0;
-    for ($i = $days - 1; $i >= 0; $i--) {
-        $day  = gmdate('Y-m-d', time() - $i * 86400);
-        // Stable pseudo-random shape: weekly seasonality + a small offline tail
-        $base = 800 + (int)(sin($i / 4.0) * 250);
-        $off  = (int)($base * 0.07);
-        $daily[] = ['day' => $day, 'total' => $base, 'offline_total' => $off];
-        $total   += $base;
-        $offline += $off;
+    if ($hourly) {
+        // Hourly buckets ("YYYY-MM-DDTHH") for sub-day windows.
+        $hours = (int)max(1, round($seconds / 3600));
+        for ($i = $hours - 1; $i >= 0; $i--) {
+            $bucket = gmdate('Y-m-d\TH', time() - $i * 3600);
+            $base   = 120 + (int)(sin($i / 3.0) * 60);
+            $off    = (int)($base * 0.07);
+            $daily[] = ['day' => $bucket, 'total' => $base, 'offline_total' => $off];
+            $total   += $base;
+            $offline += $off;
+        }
+    } else {
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $day  = gmdate('Y-m-d', time() - $i * 86400);
+            // Stable pseudo-random shape: weekly seasonality + a small offline tail
+            $base = 800 + (int)(sin($i / 4.0) * 250);
+            $off  = (int)($base * 0.07);
+            $daily[] = ['day' => $day, 'total' => $base, 'offline_total' => $off];
+            $total   += $base;
+            $offline += $off;
+        }
     }
 
     jsonResponse(200, [
         'demo'          => true,
         'window_days'   => $days,
-        'totals'        => ['events' => $total, 'offline' => $offline],
+        'totals'        => ['events' => $total, 'offline' => $offline, 'errors' => (int)($total * 0.01)],
         'top_events'    => [
             ['event_name' => 'page_view',   'count' => (int)($total * 0.45)],
             ['event_name' => 'login',       'count' => (int)($total * 0.18)],

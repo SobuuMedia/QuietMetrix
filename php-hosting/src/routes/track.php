@@ -62,6 +62,14 @@ function validateEvent($event): ?string {
     if (isset($event['sid'])    && !is_string($event['sid']))    return 'sid must be a string';
     if (isset($event['ts'])     && !is_string($event['ts']))     return 'ts must be an ISO-8601 string';
     if (isset($event['props'])  && !is_array($event['props']))   return 'props must be a JSON object';
+    if (isset($event['props'])  && count($event['props']) > 50)  return 'props exceeds maximum of 50 keys';
+    if (isset($event['props'])) {
+        foreach ($event['props'] as $k => $v) {
+            if (is_string($v) && strlen($v) > 4096) {
+                return "prop '\$k' exceeds maximum of 4096 bytes";
+            }
+        }
+    }
     if (isset($event['was_offline']) && !is_bool($event['was_offline'])) return 'was_offline must be boolean';
     return null;
 }

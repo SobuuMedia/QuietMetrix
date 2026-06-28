@@ -142,6 +142,7 @@ fun Routing.configureDashboardRoutes() {
                 val sessionStats = eventRepo.findSessionStats(id, fromInstant, toInstant)
                 val offlineStats = eventRepo.findOfflineStats(id, fromInstant, toInstant)
                 val totalEvents = eventRepo.countByProjectIdAndRange(id, fromInstant, toInstant)
+                val errorCount = eventRepo.countErrorsByProjectIdAndRange(id, fromInstant, toInstant)
 
                 call.respond(mapOf(
                     "project_id" to "proj_$id",
@@ -161,6 +162,7 @@ fun Routing.configureDashboardRoutes() {
                     "session_stats" to sessionStats,
                     "offline_stats" to offlineStats,
                     "total_events" to totalEvents,
+                    "errors" to errorCount,
                 ))
             }
             }

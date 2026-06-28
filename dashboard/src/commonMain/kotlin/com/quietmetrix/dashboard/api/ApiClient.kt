@@ -6,6 +6,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -95,11 +96,11 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun createProject(name: String): CreateProjectResponse {
+    suspend fun createProject(name: String, description: String? = null): CreateProjectResponse {
         val res = client.post(url("/projects")) {
             contentType(ContentType.Application.Json)
             token?.let { header("Authorization", "Bearer $it") }
-            setBody(CreateProjectRequest(name))
+            setBody(CreateProjectRequest(name, description))
         }
         ensureSuccess(res)
         return res.body()
@@ -112,9 +113,99 @@ class ApiClient(private val baseUrl: String) {
         ensureSuccess(res)
     }
 
-    suspend fun aggregates(projectId: String, days: Int, demo: Boolean): AggregatesResponse {
+    suspend fun regenerateApiKey(projectId: String): RegenerateKeyResponse {
+        val res = client.post(url("/projects/$projectId/regenerate-key")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    // ---- User management (admin) ----
+
+    suspend fun listUsers(): UsersResponse {
+        val res = client.get(url("/users")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun inviteUser(email: String, role: String): InviteResponse {
+        val res = client.post(url("/users/invite")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(InviteUserRequest(email, role))
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun updateUserRole(userId: String, role: String) {
+        val res = client.patch(url("/users/$userId")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(UpdateRoleRequest(role))
+        }
+        ensureSuccess(res)
+    }
+
+    suspend fun deleteUser(userId: String) {
+        val res = client.delete(url("/users/$userId")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+    }
+
+    // ---- Invitation acceptance (public) ----
+
+    suspend fun getInvite(inviteToken: String): InvitePreview {
+        val res = client.get(url("/invites/$inviteToken"))
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun acceptInvite(inviteToken: String, password: String): LoginResponse {
+        val res = client.post(url("/invites/$inviteToken/accept")) {
+            contentType(ContentType.Application.Json)
+            setBody(AcceptInviteRequest(password))
+        }
+        ensureSuccess(res)
+        val body: LoginResponse = res.body()
+        token = body.token
+        refreshToken = body.refreshToken
+        return body
+    }
+
+    // ---- Project membership (assign / unassign users) ----
+
+    suspend fun listMembers(projectId: String): MembersResponse {
+        val res = client.get(url("/projects/$projectId/members")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun addMember(projectId: String, email: String) {
+        val res = client.post(url("/projects/$projectId/members")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(AddMemberRequest(email))
+        }
+        ensureSuccess(res)
+    }
+
+    suspend fun removeMember(projectId: String, userId: String) {
+        val res = client.delete(url("/projects/$projectId/members/$userId")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+    }
+
+    suspend fun aggregates(projectId: String, range: TimeRange, demo: Boolean): AggregatesResponse {
         val path = if (demo) "/_demo/aggregates" else "/projects/$projectId/aggregates"
-        val res = client.get(url("$path?days=$days")) {
+        val res = client.get(url("$path?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
@@ -130,16 +221,16 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun transitions(projectId: String, days: Int): TransitionsResponse {
-        val res = client.get(url("/projects/$projectId/transitions?days=$days")) {
+    suspend fun transitions(projectId: String, range: TimeRange): TransitionsResponse {
+        val res = client.get(url("/projects/$projectId/transitions?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun sessions(projectId: String, days: Int): SessionsResponse {
-        val res = client.get(url("/projects/$projectId/sessions?days=$days")) {
+    suspend fun sessions(projectId: String, range: TimeRange): SessionsResponse {
+        val res = client.get(url("/projects/$projectId/sessions?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)

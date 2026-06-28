@@ -24,4 +24,176 @@
     <string name="tab_info_settings">Toggle demo data for testing in debug mode. The demo switch only appears when the server runs in debug configuration. Production deployments hide this by default.</string>
     <string name="tab_info_flow">Screen transitions show how users navigate your app. Each row represents one common path from one screen to the next, grouped by session. High drop-off at a step may indicate UX friction — investigate why users leave at that point.</string>
     <string name="tab_info_live">Incoming events in real time. This feed auto-refreshes every few seconds to show the most recent events. Useful while integrating the SDK — watch events appear seconds after they fire in your app.</string>
+
+    <!-- UI elements -->
+    <string name="tab_info_content_description">Information</string>
+    <string name="create_project_dialog_title">Create project</string>
+    <string name="create_project_name_label">Name</string>
+    <string name="create_project_description_label">Description (optional)</string>
+    <string name="create_project_button">Create</string>
+    <string name="create_project_cancel">Cancel</string>
+    <string name="create_project_action">Create project</string>
+
+    <!-- Navigation (side menu) -->
+    <string name="nav_overview">Overview</string>
+    <string name="nav_events">Events</string>
+    <string name="nav_flow">Flow</string>
+    <string name="nav_live">Live</string>
+    <string name="nav_projects">Projects</string>
+    <string name="nav_users">Users</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_menu_cd">Open navigation menu</string>
+
+    <!-- Common actions -->
+    <string name="action_signout">Sign out</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_got_it">Got it</string>
+    <string name="action_copy_api_key">Copy API key</string>
+    <string name="action_refresh">Refresh</string>
+
+    <!-- Generic states / placeholders -->
+    <string name="state_loading">Loading</string>
+    <string name="value_none">—</string>
+    <string name="badge_demo">DEMO</string>
+    <string name="snackbar_api_key_copied">API key copied to clipboard</string>
+
+    <!-- New project key dialog -->
+    <string name="project_created_title">Project created</string>
+    <string name="project_created_key_warning">Copy this key now — it will not be shown again.</string>
+    <string name="project_created_api_key_label">API key</string>
+
+    <!-- Donut chart -->
+    <string name="donut_total">Total</string>
+
+    <!-- Event meta line -->
+    <string name="event_meta_screen">Screen: %1$s</string>
+    <string name="event_meta_platform">Platform: %1$s</string>
+    <string name="event_meta_country">Country: %1$s</string>
+    <string name="event_meta_session">Session: %1$s</string>
+
+    <!-- Pickers -->
+    <string name="picker_no_projects">No projects</string>
+    <string name="picker_select_project">Select a project</string>
+    <string name="picker_window">Last %1$d days</string>
+
+    <!-- Time-range options -->
+    <string name="range_1h">Last hour</string>
+    <string name="range_1d">Last day</string>
+    <string name="range_7d">Last 7 days</string>
+    <string name="range_30d">Last 30 days</string>
+    <string name="range_90d">Last 90 days</string>
+
+    <!-- KPI labels -->
+    <string name="kpi_events">Events</string>
+    <string name="kpi_offline_captured">Offline-captured</string>
+    <string name="kpi_errors">Errors</string>
+    <string name="kpi_window">Window</string>
+    <string name="kpi_window_value">%1$d days</string>
+    <string name="kpi_sessions">Sessions</string>
+    <string name="kpi_events_per_session">Events / session</string>
+    <string name="kpi_avg_duration">Avg duration</string>
+
+    <!-- Card titles -->
+    <string name="card_daily_volume">Daily volume</string>
+    <string name="card_top_events">Top events</string>
+    <string name="card_top_screens">Top screens</string>
+    <string name="card_sessions_trend">Daily sessions</string>
+    <string name="card_countries">Countries</string>
+    <string name="card_platforms">Platforms</string>
+    <string name="card_device_classes">Device classes</string>
+
+    <!-- Empty / loading states -->
+    <string name="state_no_data">No data yet.</string>
+    <string name="state_no_events">No events yet.</string>
+    <string name="state_no_transitions">No screen transitions yet.</string>
+    <string name="state_waiting_live">Waiting for events…</string>
+    <string name="state_no_projects">No projects yet — create one below.</string>
+
+    <!-- Events / tables -->
+    <string name="search_events">Search events</string>
+    <string name="col_event">Event</string>
+    <string name="col_screen">Screen</string>
+    <string name="col_platform">Platform</string>
+    <string name="col_country">Country</string>
+    <string name="col_time">Time</string>
+    <string name="col_from">From</string>
+    <string name="col_to">To</string>
+    <string name="col_count">Count</string>
+    <string name="page_prev">Previous</string>
+    <string name="page_next">Next</string>
+    <string name="page_info">Page %1$d of %2$d</string>
+    <string name="badge_offline">offline</string>
+
+    <!-- Projects -->
+    <string name="projects_your">Your projects</string>
+    <string name="projects_delete">Delete</string>
+    <string name="projects_delete_confirm_title">Delete project</string>
+    <string name="projects_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
+    <string name="projects_created">Created %1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_server_mode">Server mode: %1$s</string>
+    <string name="server_mode_debug">debug</string>
+    <string name="server_mode_production">production</string>
+    <string name="settings_demo_title">Use demo data in this dashboard</string>
+    <string name="settings_demo_explanation">Available because the server is running with DEBUG=true. When enabled, charts and tables show synthetic data instead of querying the database. Has no effect in production deployments.</string>
+    <string name="settings_refresh">Refresh data</string>
+    <string name="settings_about_title">About</string>
+    <string name="settings_about_body">QuietMetrix — a privacy-first, self-hostable analytics dashboard.</string>
+
+    <!-- Projects: API key management -->
+    <string name="create_app_action">New app</string>
+    <string name="api_key_label">API key</string>
+    <string name="action_regenerate">Regenerate</string>
+    <string name="action_copy">Copy</string>
+    <string name="regenerate_confirm_title">Regenerate API key?</string>
+    <string name="regenerate_confirm_body">The current API key for "%1$s" stops working immediately. You'll get a new key to copy into your apps.</string>
+    <string name="regenerated_key_title">New API key</string>
+
+    <!-- Users management -->
+    <string name="tab_info_users">Manage who can access QuietMetrix. Admins manage everything; developers see assigned projects and can rotate API keys; reviewers have read-only access to their assigned projects.</string>
+    <string name="users_title">Users</string>
+    <string name="users_invite_action">Invite user</string>
+    <string name="users_email_label">Email</string>
+    <string name="users_role_label">Role</string>
+    <string name="role_admin">Admin</string>
+    <string name="role_developer">Developer</string>
+    <string name="role_reviewer">Reviewer</string>
+    <string name="status_invited">Invited</string>
+    <string name="status_active">Active</string>
+    <string name="users_invite_send">Send invite</string>
+    <string name="users_invite_cancel">Cancel</string>
+    <string name="invite_link_title">Invitation link</string>
+    <string name="invite_link_body">Share this link with the new user — they'll set their own password to sign in.</string>
+    <string name="snackbar_invite_link_copied">Invitation link copied to clipboard</string>
+    <string name="users_remove">Remove</string>
+    <string name="users_remove_confirm_title">Remove user</string>
+    <string name="users_remove_confirm_body">Remove "%1$s"? They will lose access immediately.</string>
+    <string name="users_empty">No users yet.</string>
+
+    <!-- Project access (assignment) -->
+    <string name="access_title">Project access</string>
+    <string name="access_pick_project">Project</string>
+    <string name="access_add_user">Add user</string>
+    <string name="access_remove">Remove</string>
+    <string name="access_empty">No users assigned to this project.</string>
+    <string name="access_hint">Assign developers and reviewers to the projects they should see.</string>
+
+    <!-- Invitation acceptance screen -->
+    <string name="invite_accept_title">Accept your invitation</string>
+    <string name="invite_accept_subtitle">Set a password for %1$s to finish creating your account.</string>
+    <string name="invite_set_password">Password</string>
+    <string name="invite_confirm_password">Confirm password</string>
+    <string name="invite_password_too_short">Password must be at least 8 characters.</string>
+    <string name="invite_password_mismatch">Passwords do not match.</string>
+    <string name="invite_invalid_token">This invitation is invalid or has expired.</string>
+    <string name="invite_submit">Create account &amp; sign in</string>
+    <string name="invite_back_to_login">Back to sign in</string>
+    <string name="invite_loading">Checking your invitation…</string>
 </resources>

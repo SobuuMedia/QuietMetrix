@@ -1,8 +1,8 @@
 package com.quietmetrix.server.ingest
 
-import io.mockk.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.test.*
+import io.mockk.mockk
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import kotlin.test.assertTrue
 
@@ -20,7 +20,7 @@ class IngestChannelTest {
             screen = "home",
             props = null,
             sid = null,
-            ts = kotlinx.datetime.Clock.System.now().toString(),
+            ts = java.time.Instant.now().toString(),
             wasOffline = false,
             sdk = null,
             ctx = null,

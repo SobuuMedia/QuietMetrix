@@ -6,7 +6,6 @@ import com.quietmetrix.server.ingest.IngestChannel
 import com.quietmetrix.server.plugins.configureCors
 import com.quietmetrix.server.plugins.configureDefaultHeaders
 import com.quietmetrix.server.plugins.configureMonitoring
-import com.quietmetrix.server.plugins.configureRateLimiting
 import com.quietmetrix.server.plugins.configureSecurity
 import com.quietmetrix.server.plugins.configureSerialization
 import com.quietmetrix.server.plugins.configureStatusPages
@@ -32,7 +31,6 @@ fun Application.module() {
     configureCors(config)
     configureStatusPages()
     configureSecurity(config)
-    configureRateLimiting(config)
 
     val ingestChannel: IngestChannel = get()
     ingestChannel.start(this)

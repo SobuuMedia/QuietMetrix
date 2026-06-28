@@ -9,6 +9,7 @@ import com.quietmetrix.server.ingest.EventNormalizer
 import com.quietmetrix.server.ingest.EventValidator
 import com.quietmetrix.server.ingest.IngestChannel
 import com.quietmetrix.server.ingest.ValidationResult
+import com.quietmetrix.server.util.clientIp
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.header
 import io.ktor.server.request.receive
@@ -33,6 +34,15 @@ fun Routing.configureTrackRoutes() {
         }
 
         post("/track") {
+            val contentLength = call.request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull() ?: 0
+            if (contentLength > 1_048_576) {
+                call.respond(
+                    HttpStatusCode.PayloadTooLarge,
+                    ErrorResponse("payload_too_large", "Request body exceeds 1 MB")
+                )
+                return@post
+            }
+
             val apiKey = call.request.header("X-QM-Api-Key")
             if (apiKey.isNullOrBlank()) {
                 call.respond(
@@ -86,8 +96,7 @@ fun Routing.configureTrackRoutes() {
                 return@post
             }
 
-            val clientIp = call.request.header("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
-                ?: call.request.local.remoteAddress
+            val clientIp = call.clientIp(config.trustedProxies)
 
             ingestChannel.enqueue(projectId.toString(), request, clientIp)
 
@@ -95,6 +104,15 @@ fun Routing.configureTrackRoutes() {
         }
 
         post("/track/batch") {
+            val contentLength = call.request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull() ?: 0
+            if (contentLength > 1_048_576) {
+                call.respond(
+                    HttpStatusCode.PayloadTooLarge,
+                    ErrorResponse("payload_too_large", "Request body exceeds 1 MB")
+                )
+                return@post
+            }
+
             val apiKey = call.request.header("X-QM-Api-Key")
             if (apiKey.isNullOrBlank()) {
                 call.respond(
@@ -148,8 +166,7 @@ fun Routing.configureTrackRoutes() {
                 }
             }
 
-            val clientIp = call.request.header("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
-                ?: call.request.local.remoteAddress
+            val clientIp = call.clientIp(config.trustedProxies)
 
             for (event in batchRequest.events) {
                 ingestChannel.enqueueBatch(projectId.toString(), event, clientIp)

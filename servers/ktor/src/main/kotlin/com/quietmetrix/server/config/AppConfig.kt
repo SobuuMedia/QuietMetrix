@@ -9,6 +9,7 @@ data class AppConfig(
     val rateLimit: RateLimitConfig,
     val billing: BillingConfig?,
     val cors: CorsConfig = CorsConfig(),
+    val trustedProxies: Set<String> = emptySet(),
 ) {
     enum class Profile { SELFHOST, CLOUD }
 
@@ -45,7 +46,7 @@ data class AppConfig(
                     jwtSecret = config.property("quietmetrix.auth.jwtSecret").getString(),
                     jwtIssuer = config.propertyOrNull("quietmetrix.auth.jwtIssuer")?.getString() ?: "quietmetrix",
                     jwtAudience = config.propertyOrNull("quietmetrix.auth.jwtAudience")?.getString() ?: "quietmetrix-api",
-                    sessionTtlHours = config.propertyOrNull("quietmetrix.auth.sessionTtlHours")?.getString()?.toInt() ?: 24,
+                    sessionTtlHours = config.propertyOrNull("quietmetrix.auth.sessionTtlHours")?.getString()?.toInt() ?: 2,
                 ),
                 rateLimit = RateLimitConfig(
                     enabled = config.propertyOrNull("quietmetrix.rateLimit.enabled")?.getString()?.toBoolean() ?: (profile == Profile.CLOUD),
@@ -56,6 +57,7 @@ data class AppConfig(
                 cors = CorsConfig(
                     allowedOrigins = config.propertyOrNull("quietmetrix.cors.allowedOrigins")?.getList() ?: emptyList(),
                 ),
+                trustedProxies = config.propertyOrNull("quietmetrix.security.trustedProxies")?.getList()?.toSet() ?: emptySet(),
             )
             require(appConfig.auth.jwtSecret.isNotBlank() && !appConfig.auth.jwtSecret.startsWith("change-me")) {
                 "QM_JWT_SECRET must be set to a strong random value in production"

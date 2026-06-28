@@ -4,13 +4,30 @@ import com.quietmetrix.server.domain.Event
 import com.quietmetrix.server.persistence.tables.Events
 import com.quietmetrix.server.persistence.tables.EventsInbox
 import com.quietmetrix.server.persistence.tables.Sessions
-import kotlinx.datetime.toJavaInstant
-import kotlinx.datetime.toKotlinInstant
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.alias
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.avg
+import org.jetbrains.exposed.sql.count
+import org.jetbrains.exposed.sql.countDistinct
+import org.jetbrains.exposed.sql.function
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.lowerCase
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+
+private fun kotlinx.datetime.Instant.toJavaInstant(): java.time.Instant =
+    java.time.Instant.ofEpochMilli(this.toEpochMilliseconds())
+
+private fun java.time.Instant.toKotlinInstant(): kotlinx.datetime.Instant =
+    kotlinx.datetime.Instant.fromEpochMilliseconds(this.toEpochMilli())
 
 class EventRepository(private val database: Database) {
 
@@ -121,18 +138,17 @@ class EventRepository(private val database: Database) {
     fun findDailyTotals(projectId: Long, from: java.time.Instant, to: java.time.Instant): List<Map<String, Any?>> {
         return transaction(database) {
             Events
-                .slice(
+                .select(
                     Events.ts.function("DATE").alias("day"),
                     Events.id.count()
                 )
-                .selectAll()
                 .where {
                     (Events.projectId eq projectId) and
                     (Events.ts greaterEq LocalDateTime.ofInstant(from, ZoneOffset.UTC)) and
                     (Events.ts lessEq LocalDateTime.ofInstant(to, ZoneOffset.UTC))
                 }
                 .groupBy(Events.ts.function("DATE"))
-                .orderBy(Events.ts.function("DATE"), SortOrder.ASC)
+                .orderBy(Events.ts.function("DATE") to SortOrder.ASC)
                 .map { mapOf("day" to it[Events.ts.function("DATE")]!!.toString(), "total" to it[Events.id.count()].toInt()) }
         }
     }
@@ -185,6 +201,20 @@ class EventRepository(private val database: Database) {
                     (Events.projectId eq projectId) and
                     (Events.ts greaterEq LocalDateTime.ofInstant(from, ZoneOffset.UTC)) and
                     (Events.ts lessEq LocalDateTime.ofInstant(to, ZoneOffset.UTC))
+                }
+                .count()
+        }
+    }
+
+    /** Count events the app reported as errors (CrashWatch owns the details). */
+    fun countErrorsByProjectIdAndRange(projectId: Long, from: Instant, to: Instant): Long {
+        return transaction(database) {
+            Events.selectAll()
+                .where {
+                    (Events.projectId eq projectId) and
+                    (Events.ts greaterEq LocalDateTime.ofInstant(from, ZoneOffset.UTC)) and
+                    (Events.ts lessEq LocalDateTime.ofInstant(to, ZoneOffset.UTC)) and
+                    (Events.eventName.lowerCase() inList listOf("error", "crash", "exception"))
                 }
                 .count()
         }
@@ -379,7 +409,7 @@ class EventRepository(private val database: Database) {
                     Events.screen.isNotNull() and
                     Events.sessionId.isNotNull()
                 }
-                .orderBy(Events.sessionId, Events.ts)
+                .orderBy(Events.sessionId to SortOrder.ASC, Events.ts to SortOrder.ASC)
                 .forEach { row ->
                     val sid = row[Events.sessionId]
                     val screen = row[Events.screen]!!
@@ -415,7 +445,7 @@ class EventRepository(private val database: Database) {
                     Events.sessionId.isNotNull()
                 }
                 .groupBy(Events.ts.function("DATE"))
-                .orderBy(Events.ts.function("DATE"), SortOrder.ASC)
+                .orderBy(Events.ts.function("DATE") to SortOrder.ASC)
                 .map {
                     mapOf(
                         "day" to it[Events.ts.function("DATE")]!!.toString(),
@@ -460,7 +490,7 @@ class EventRepository(private val database: Database) {
                         .select(Events.sessionId.countDistinct())
                         .where {
                             (Events.projectId eq projectId) and
-                            (Events.ts.function("DATE") eq targetDate.toString()) and
+                            (Events.ts.function("DATE") eq targetDate.atStartOfDay()) and
                             (Events.sessionId inList sessionIds)
                         }
                         .single()[Events.sessionId.countDistinct()].toInt()

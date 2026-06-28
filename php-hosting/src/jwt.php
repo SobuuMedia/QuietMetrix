@@ -37,10 +37,11 @@ function jwt_encode(string $subject, string $email, string $role, string $secret
 }
 
 /**
- * Encode a refresh JWT. Has a longer expiry (7 days) and a `type` claim set
- * to "refresh" so endpoints can distinguish it from an access token.
+ * Encode a refresh JWT. Has a longer expiry (2 days by default) and a `type`
+ * claim set to "refresh" so endpoints can distinguish it from an access token.
  */
 function jwt_encode_refresh(string $subject, string $secret): string {
+    $refreshDays = defined('JWT_REFRESH_EXPIRY_DAYS') ? JWT_REFRESH_EXPIRY_DAYS : 2;
     $header  = _b64url_encode(json_encode(['typ' => 'JWT', 'alg' => 'HS256']));
     $payload = _b64url_encode(json_encode([
         'iss'   => JWT_ISSUER,
@@ -48,7 +49,7 @@ function jwt_encode_refresh(string $subject, string $secret): string {
         'sub'   => $subject,
         'type'  => 'refresh',
         'iat'   => time(),
-        'exp'   => time() + 7 * 24 * 3600,
+        'exp'   => time() + $refreshDays * 24 * 3600,
     ]));
     $signing   = $header . '.' . $payload;
     $signature = _b64url_encode(hash_hmac('sha256', $signing, $secret, true));

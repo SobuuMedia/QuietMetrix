@@ -31,13 +31,16 @@ function handleProjectEvents(string $projectId): void {
     jsonResponse(200, ['events' => $rows]);
 }
 
-/** GET /api/v1/projects/{id}/aggregates?days=30 → top events, daily counts. */
+/** GET /api/v1/projects/{id}/aggregates?range=7d → top events, daily counts. */
 function handleProjectAggregates(string $projectId): void {
     $session = requireSession();
     requireProjectAccess($session, $projectId);
 
-    $days = max(1, min(365, (int)($_GET['days'] ?? 30)));
-    $since = gmdate('Y-m-d\TH:i:s\Z', time() - $days * 86400);
+    $seconds = windowSeconds(365);
+    $days = (int)max(1, round($seconds / 86400));
+    $since = gmdate('Y-m-d\TH:i:s\Z', time() - $seconds);
+    // Sub-day windows are bucketed by hour (ISO "YYYY-MM-DDTHH"); else by day.
+    $bucket = bucketExpr($seconds);
 
     $db = getDb();
 
@@ -65,14 +68,14 @@ function handleProjectAggregates(string $projectId): void {
     $stmt->execute([$projectId, $since]);
     $topScreens = $stmt->fetchAll();
 
-    // Daily counts — emitted as { day, total, offline_total }
+    // Daily/hourly counts — emitted as { day, total, offline_total }
     $stmt = $db->prepare(
-        "SELECT DATE(ts) AS day,
+        "SELECT $bucket AS day,
                 COUNT(*) AS total,
                 SUM(was_offline) AS offline_total
            FROM events
           WHERE project_id = ? AND ts >= ?
-          GROUP BY DATE(ts)
+          GROUP BY $bucket
           ORDER BY day"
     );
     $stmt->execute([$projectId, $since]);
@@ -85,6 +88,16 @@ function handleProjectAggregates(string $projectId): void {
     );
     $stmt->execute([$projectId, $since]);
     $totals = $stmt->fetch() ?: ['total' => 0, 'offline_total' => 0];
+
+    // Error count — events the app reported as errors (CrashWatch owns the details)
+    $stmt = $db->prepare(
+        "SELECT COUNT(*) AS total
+           FROM events
+          WHERE project_id = ? AND ts >= ?
+            AND LOWER(event_name) IN ('error', 'crash', 'exception')"
+    );
+    $stmt->execute([$projectId, $since]);
+    $errors = (int)(($stmt->fetch() ?: ['total' => 0])['total']);
 
     // Country breakdown
     $stmt = $db->prepare(
@@ -118,6 +131,7 @@ function handleProjectAggregates(string $projectId): void {
         'totals'         => [
             'events'  => (int)$totals['total'],
             'offline' => (int)($totals['offline_total'] ?? 0),
+            'errors'  => $errors,
         ],
         'top_events'     => $topEvents,
         'top_screens'    => $topScreens,
@@ -128,13 +142,12 @@ function handleProjectAggregates(string $projectId): void {
     ]);
 }
 
-/** GET /api/v1/projects/{id}/transitions?days=30 → screen-to-screen flow. */
+/** GET /api/v1/projects/{id}/transitions?range=7d → screen-to-screen flow. */
 function handleProjectTransitions(string $projectId): void {
     $session = requireSession();
     requireProjectAccess($session, $projectId);
 
-    $days = max(1, min(90, (int)($_GET['days'] ?? 30)));
-    $since = gmdate('Y-m-d\TH:i:s\Z', time() - $days * 86400);
+    $since = gmdate('Y-m-d\TH:i:s\Z', time() - windowSeconds(90));
 
     $stmt = getDb()->prepare(
         'SELECT session_id, screen, ts
@@ -170,13 +183,14 @@ function handleProjectTransitions(string $projectId): void {
     jsonResponse(200, ['transitions' => $result]);
 }
 
-/** GET /api/v1/projects/{id}/sessions?days=30 → session analytics. */
+/** GET /api/v1/projects/{id}/sessions?range=7d → session analytics. */
 function handleProjectSessions(string $projectId): void {
     $session = requireSession();
     requireProjectAccess($session, $projectId);
 
-    $days = max(1, min(90, (int)($_GET['days'] ?? 30)));
-    $since = gmdate('Y-m-d\TH:i:s\Z', time() - $days * 86400);
+    $seconds = windowSeconds(90);
+    $since = gmdate('Y-m-d\TH:i:s\Z', time() - $seconds);
+    $bucket = bucketExpr($seconds);
 
     $db = getDb();
 
@@ -197,13 +211,13 @@ function handleProjectSessions(string $projectId): void {
     $stmt->execute([$projectId, $since]);
     $stats = $stmt->fetch() ?: ['total_sessions' => 0, 'avg_events' => 0, 'avg_duration_sec' => 0];
 
-    // Daily sessions
+    // Daily/hourly sessions
     $stmt = $db->prepare(
-        'SELECT DATE(ts) AS day, COUNT(DISTINCT session_id) AS total
+        "SELECT $bucket AS day, COUNT(DISTINCT session_id) AS total
            FROM events
           WHERE project_id = ? AND ts >= ? AND session_id IS NOT NULL
-          GROUP BY DATE(ts)
-          ORDER BY day'
+          GROUP BY $bucket
+          ORDER BY day"
     );
     $stmt->execute([$projectId, $since]);
     $dailySessions = $stmt->fetchAll();

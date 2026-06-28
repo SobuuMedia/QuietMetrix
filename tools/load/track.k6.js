@@ -14,7 +14,7 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const API_KEY = __ENV.API_KEY || 'qm_ak_test_key_change_me';
+const API_KEY = __ENV.API_KEY || 'qm_ak_test_key_replace_me';
 
 export default function () {
   const payload = JSON.stringify({

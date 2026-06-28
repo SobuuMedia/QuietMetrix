@@ -2,17 +2,22 @@ package com.quietmetrix.analytics
 
 import com.quietmetrix.analytics.internal.TRACKER_JS_TEMPLATE
 import com.quietmetrix.analytics.internal.StorageKeys
+import kotlinx.serialization.json.Json
 
 internal actual fun platformInit(config: QuietMetrixConfig) {
-    val endpoint = config.trackingEndpoint ?: return  // no endpoint → consent/banner still work, but no network tracker
+    val endpoint = config.trackingEndpoint ?: return
     val consentKey = StorageKeys.cookieConsent(config.storageKeyPrefix)
 
+    // Safely escape values before injecting into the JS template to prevent
+    // script injection if endpoint or consentKey contain quotes/newlines.
+    val safeEndpoint = Json.encodeToString(endpoint)
+    val safeConsentKey = Json.encodeToString(consentKey)
+
     var script = TRACKER_JS_TEMPLATE
-        .replace("__QM_ENDPOINT__", endpoint)
-        .replace("__QM_CONSENT_KEY__", consentKey)
+        .replace("'__QM_ENDPOINT__'", safeEndpoint)
+        .replace("'__QM_CONSENT_KEY__'", safeConsentKey)
 
     if (!config.autoTrackInitialPageView) {
-        // Strip the auto page-view line so init does not emit one.
         script = script.replace("send('page_view', null);", "")
     }
 

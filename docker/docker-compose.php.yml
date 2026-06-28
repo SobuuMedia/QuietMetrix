@@ -5,13 +5,15 @@ services:
       dockerfile: servers/php/Dockerfile
     ports:
       - "8080:80"
+    env_file:
+      - .env
     environment:
       QM_PROFILE: selfhost
       QM_DB_HOST: mysql
       QM_DB_NAME: quietmetrix
       QM_DB_USER: quietmetrix
-      QM_DB_PASSWORD: quietmetrix
-      QM_JWT_SECRET: change-me-in-production
+      QM_DB_PASSWORD: ${QM_DB_PASSWORD:?QM_DB_PASSWORD must be set in docker/.env}
+      QM_JWT_SECRET: ${QM_JWT_SECRET:?QM_JWT_SECRET must be set in docker/.env}
     depends_on:
       mysql:
         condition: service_healthy
@@ -19,11 +21,13 @@ services:
 
   mysql:
     image: mysql:8
+    env_file:
+      - .env
     environment:
       MYSQL_DATABASE: quietmetrix
       MYSQL_USER: quietmetrix
-      MYSQL_PASSWORD: quietmetrix
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_PASSWORD: ${QM_DB_PASSWORD:?QM_DB_PASSWORD must be set in docker/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in docker/.env}
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:

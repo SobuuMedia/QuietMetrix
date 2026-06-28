@@ -20,13 +20,34 @@ define('ADMIN_PASSWORD', 'change_me');
 // JWT — secret used to sign dashboard session tokens.
 // Generate with: openssl rand -hex 32
 define('JWT_SECRET',       'change_me_to_a_long_random_string_at_least_32_chars');
-define('JWT_EXPIRY_HOURS', 24);
+define('JWT_EXPIRY_HOURS', 2);
+
+// Refresh token lifetime (days). Must match the Ktor backend.
+define('JWT_REFRESH_EXPIRY_DAYS', 2);
 
 // CORS — the origin allowed to call the API from a browser. When the dashboard
 // is hosted on a separate origin, set this to that exact URL. Setting '*' is
 // only safe if endpoints don't carry credentials. For QuietMetrix's API-key
 // requests, always pin to the dashboard's exact origin URL in production.
 define('ALLOWED_ORIGIN', '*');
+
+// Content-Security-Policy connect-src directive. Defaults to 'self'.
+// Change this if your dashboard is served from a different origin than the API.
+define('CSP_CONNECT_SRC', "'self'");
+
+// Public base URL of the dashboard, used to build invitation links sent to new
+// users. Example: 'https://example.com/dashboard/'. Leave empty to fall back to
+// the request origin. The invite link is APP_BASE_URL . '?invite=<token>'.
+define('APP_BASE_URL', '');
+
+// Invitation email delivery (optional). When enabled, new-user invites are sent
+// via PHP's mail(). When false (the default), the invite link is only returned
+// to the inviting admin in the API response, to share manually.
+define('INVITE_EMAIL_ENABLED', false);
+define('INVITE_FROM_EMAIL',    'no-reply@example.com');
+
+// Days an invitation link stays valid before it expires.
+define('INVITE_EXPIRY_DAYS', 7);
 
 // If this backend is deployed in a subdirectory of your domain, set the prefix.
 // Example: served at https://example.com/quietmetrix/api/... → '/quietmetrix'

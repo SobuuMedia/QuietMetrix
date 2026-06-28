@@ -193,6 +193,6 @@
   ],
   "variable": [
     { "key": "base", "value": "http://localhost:8080" },
-    { "key": "apiKey", "value": "qm_ak_test_key_change_me" }
+    { "key": "apiKey", "value": "qm_ak_test_key_replace_me" }
   ]
 }

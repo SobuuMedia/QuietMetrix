@@ -8,6 +8,7 @@ import com.quietmetrix.server.domain.ProjectListResponse
 import com.quietmetrix.server.domain.ProjectMemberListResponse
 import com.quietmetrix.server.domain.ProjectMemberResponse
 import com.quietmetrix.server.domain.ProjectResponse
+import com.quietmetrix.server.domain.RegenerateKeyResponse
 import com.quietmetrix.server.domain.UpdateProjectRequest
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
@@ -41,6 +42,14 @@ fun Routing.configureProjectRoutes() {
                 val principal = call.principal<JWTPrincipal>() ?: return@post
                 val userId = principal.payload.getClaim("userId").asString()
 
+                if (principal.roleClaim() != "admin") {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ErrorResponse("forbidden", "Only admins can create projects")
+                    )
+                    return@post
+                }
+
                 if (quotaEnforcer != null) {
                     val user = userRepo.findById(userId.toLong())
                     val planId = user?.get("planId") as? String
@@ -72,10 +81,11 @@ fun Routing.configureProjectRoutes() {
                     return@post
                 }
 
-                val (apiKey, _) = projectRepo.create(request.name, userId.toLong())
+                val apiKey = projectRepo.create(request.name, request.description, userId.toLong())
 
                 call.respond(HttpStatusCode.Created, mapOf(
                     "api_key" to apiKey,
+                    "api_key_last4" to apiKey.takeLast(4),
                     "message" to "Project created. Store this key securely — it will not be shown again."
                 ))
             }
@@ -86,16 +96,17 @@ fun Routing.configureProjectRoutes() {
                 val limit = call.parameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 50
                 val offset = call.parameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
                 val ownerOnly = call.parameters["owner_only"]?.toBoolean() ?: false
+                val isAdmin = principal.roleClaim() == "admin"
 
-                val projects = if (ownerOnly) {
-                    projectRepo.findByOwnerId(userId.toLong(), limit, offset)
-                } else {
-                    projectRepo.findAccessibleByUserId(userId.toLong(), limit, offset)
+                val projects = when {
+                    isAdmin -> projectRepo.findAll(limit, offset)
+                    ownerOnly -> projectRepo.findByOwnerId(userId.toLong(), limit, offset)
+                    else -> projectRepo.findAccessibleByUserId(userId.toLong(), limit, offset)
                 }
-                val total = if (ownerOnly) {
-                    projectRepo.countByOwnerId(userId.toLong())
-                } else {
-                    projectRepo.countAccessibleByUserId(userId.toLong())
+                val total = when {
+                    isAdmin -> projectRepo.countAll()
+                    ownerOnly -> projectRepo.countByOwnerId(userId.toLong())
+                    else -> projectRepo.countAccessibleByUserId(userId.toLong())
                 }
 
                 call.respond(ProjectListResponse(
@@ -103,13 +114,56 @@ fun Routing.configureProjectRoutes() {
                         ProjectResponse(
                             id = "proj_${it["id"]}",
                             name = it["name"] as String,
+                            description = it["description"] as? String,
                             apiKey = "***",
+                            apiKeyLast4 = it["apiKeyLast4"] as? String,
                             planId = it["planId"] as? String,
                             createdAt = it["createdAt"].toString(),
                         )
                     },
                     total = total.toInt(),
                 ))
+            }
+
+            post("/{projectId}/regenerate-key") {
+                val projectIdStr = call.parameters["projectId"] ?: run {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Missing projectId"))
+                    return@post
+                }
+                val id = projectIdStr.removePrefix("proj_").toLongOrNull() ?: run {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid projectId format"))
+                    return@post
+                }
+
+                val principal = call.principal<JWTPrincipal>() ?: return@post
+                val userId = principal.payload.getClaim("userId").asString()
+                val role = principal.roleClaim()
+
+                if (role != "admin" && role != "developer") {
+                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You do not have permission to regenerate API keys"))
+                    return@post
+                }
+
+                val project = projectRepo.findById(id) ?: run {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                    return@post
+                }
+
+                // Non-admins must own or be a member of the project.
+                if (role != "admin") {
+                    val isOwner = project["ownerUserId"].toString() == userId
+                    val membership = if (!isOwner) memberRepo.findMembership(id, userId.toLong()) else null
+                    if (!isOwner && membership == null) {
+                        call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                        return@post
+                    }
+                }
+
+                val newKey = projectRepo.regenerateApiKey(id) ?: run {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                    return@post
+                }
+                call.respond(RegenerateKeyResponse(apiKey = newKey, apiKeyLast4 = newKey.takeLast(4)))
             }
         }
 
@@ -132,9 +186,10 @@ fun Routing.configureProjectRoutes() {
                     return@get
                 }
 
+                val isAdmin = principal.roleClaim() == "admin"
                 val isOwner = project["ownerUserId"].toString() == userId
-                val membership = if (!isOwner) memberRepo.findMembership(id, userId.toLong()) else null
-                if (!isOwner && membership == null) {
+                val membership = if (!isAdmin && !isOwner) memberRepo.findMembership(id, userId.toLong()) else null
+                if (!isAdmin && !isOwner && membership == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
                     return@get
                 }
@@ -142,7 +197,9 @@ fun Routing.configureProjectRoutes() {
                 call.respond(ProjectResponse(
                     id = "proj_${project["id"]}",
                     name = project["name"] as String,
+                    description = project["description"] as? String,
                     apiKey = "***",
+                    apiKeyLast4 = project["apiKeyLast4"] as? String,
                     planId = project["planId"] as? String,
                     createdAt = project["createdAt"].toString(),
                 ))
@@ -166,10 +223,8 @@ fun Routing.configureProjectRoutes() {
                     return@patch
                 }
 
-                val isOwner = project["ownerUserId"].toString() == userId
-                val membership = if (!isOwner) memberRepo.findMembership(id, userId.toLong()) else null
-                if (!isOwner && (membership == null || membership["role"] != "admin")) {
-                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You must be an owner or admin to update this project"))
+                if (principal.roleClaim() != "admin") {
+                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Only admins can update projects"))
                     return@patch
                 }
 
@@ -196,7 +251,9 @@ fun Routing.configureProjectRoutes() {
                 call.respond(ProjectResponse(
                     id = "proj_${project["id"]}",
                     name = request.name,
+                    description = project["description"] as? String,
                     apiKey = "***",
+                    apiKeyLast4 = project["apiKeyLast4"] as? String,
                     planId = project["planId"] as? String,
                     createdAt = project["createdAt"].toString(),
                 ))
@@ -215,13 +272,13 @@ fun Routing.configureProjectRoutes() {
                 val principal = call.principal<JWTPrincipal>() ?: return@delete
                 val userId = principal.payload.getClaim("userId").asString()
 
-                val project = projectRepo.findById(id) ?: run {
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                if (principal.roleClaim() != "admin") {
+                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Only admins can delete projects"))
                     return@delete
                 }
 
-                if (project["ownerUserId"].toString() != userId) {
-                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Only the project owner can delete this project"))
+                projectRepo.findById(id) ?: run {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
                     return@delete
                 }
 
@@ -254,10 +311,8 @@ fun Routing.configureProjectRoutes() {
                         return@post
                     }
 
-                    val isOwner = project["ownerUserId"].toString() == userId
-                    val membership = if (!isOwner) memberRepo.findMembership(projectId, userId.toLong()) else null
-                    if (!isOwner && (membership == null || membership["role"] != "admin")) {
-                        call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You must be an owner or admin to manage members"))
+                    if (principal.roleClaim() != "admin") {
+                        call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Only admins can manage members"))
                         return@post
                     }
 
@@ -334,9 +389,10 @@ fun Routing.configureProjectRoutes() {
                         return@get
                     }
 
+                    val isAdmin = principal.roleClaim() == "admin"
                     val isOwner = project["ownerUserId"].toString() == userId
-                    val membership = if (!isOwner) memberRepo.findMembership(projectId, userId.toLong()) else null
-                    if (!isOwner && membership == null) {
+                    val membership = if (!isAdmin && !isOwner) memberRepo.findMembership(projectId, userId.toLong()) else null
+                    if (!isAdmin && !isOwner && membership == null) {
                         call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You are not a member of this project"))
                         return@get
                     }
@@ -381,38 +437,15 @@ fun Routing.configureProjectRoutes() {
                     }
 
                     val principal = call.principal<JWTPrincipal>() ?: return@delete
-                    val userId = principal.payload.getClaim("userId").asString()
 
-                    val project = projectRepo.findById(projectId) ?: run {
+                    if (principal.roleClaim() != "admin") {
+                        call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Only admins can remove members"))
+                        return@delete
+                    }
+
+                    projectRepo.findById(projectId) ?: run {
                         call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
                         return@delete
-                    }
-
-                    val isOwner = project["ownerUserId"].toString() == userId
-                    val membership = if (!isOwner) memberRepo.findMembership(projectId, userId.toLong()) else null
-                    if (!isOwner && (membership == null || membership["role"] != "admin")) {
-                        call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You must be an owner or admin to remove members"))
-                        return@delete
-                    }
-
-                    if (memberUserId == userId.toLong()) {
-                        val adminMembers = memberRepo.findByProjectId(projectId).count {
-                            (it["role"] as String) == "admin"
-                        }
-                        if (isOwner) {
-                            call.respond(
-                                HttpStatusCode.BadRequest,
-                                ErrorResponse("bad_request", "Owner cannot be removed from the project")
-                            )
-                            return@delete
-                        }
-                        if (adminMembers <= 1) {
-                            call.respond(
-                                HttpStatusCode.BadRequest,
-                                ErrorResponse("bad_request", "You cannot remove yourself as you are the last admin on this project")
-                            )
-                            return@delete
-                        }
                     }
 
                     val removed = memberRepo.remove(projectId, memberUserId)

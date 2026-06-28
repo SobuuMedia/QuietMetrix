@@ -9,6 +9,7 @@ import com.quietmetrix.server.domain.LoginResponse
 import com.quietmetrix.server.domain.RefreshRequest
 import com.quietmetrix.server.domain.UserResponse
 import com.quietmetrix.server.persistence.UserRepository
+import com.quietmetrix.server.util.clientIp
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -46,7 +47,7 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                 return@post
             }
 
-            val ip = call.request.local.remoteAddress
+            val ip = call.clientIp(config.trustedProxies)
             val lockoutUntil = loginLockouts[ip]
             if (lockoutUntil != null && System.currentTimeMillis() < lockoutUntil) {
                 call.respond(
@@ -72,11 +73,13 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
             loginAttempts.remove(ip)
             loginLockouts.remove(ip)
 
+            val role = user["role"] as? String ?: "admin"
             val token = JWT.create()
                 .withAudience(config.auth.jwtAudience)
                 .withIssuer(config.auth.jwtIssuer)
                 .withClaim("userId", user["id"].toString())
                 .withClaim("email", user["email"] as String)
+                .withClaim("role", role)
                 .withExpiresAt(Date(System.currentTimeMillis() + config.auth.sessionTtlHours * 3600_000L))
                 .sign(Algorithm.HMAC256(config.auth.jwtSecret))
 
@@ -85,7 +88,7 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                 .withIssuer(config.auth.jwtIssuer)
                 .withClaim("userId", user["id"].toString())
                 .withClaim("type", "refresh")
-                .withExpiresAt(Date(System.currentTimeMillis() + 7 * 24 * 3600_000L))
+                .withExpiresAt(Date(System.currentTimeMillis() + 2L * 24 * 3600_000L))
                 .sign(Algorithm.HMAC256(config.auth.jwtSecret))
 
             call.respond(LoginResponse(
@@ -94,6 +97,7 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                 user = UserResponse(
                     id = user["id"].toString(),
                     email = user["email"] as String,
+                    role = role,
                     createdAt = user["createdAt"].toString(),
                 )
             ))
@@ -144,11 +148,13 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
             }
 
             // Rotate both tokens
+            val role = user["role"] as? String ?: "admin"
             val newToken = JWT.create()
                 .withAudience(config.auth.jwtAudience)
                 .withIssuer(config.auth.jwtIssuer)
                 .withClaim("userId", userId)
                 .withClaim("email", user["email"] as String)
+                .withClaim("role", role)
                 .withExpiresAt(Date(System.currentTimeMillis() + config.auth.sessionTtlHours * 3600_000L))
                 .sign(Algorithm.HMAC256(config.auth.jwtSecret))
 
@@ -157,7 +163,7 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                 .withIssuer(config.auth.jwtIssuer)
                 .withClaim("userId", userId)
                 .withClaim("type", "refresh")
-                .withExpiresAt(Date(System.currentTimeMillis() + 7 * 24 * 3600_000L))
+                .withExpiresAt(Date(System.currentTimeMillis() + 2L * 24 * 3600_000L))
                 .sign(Algorithm.HMAC256(config.auth.jwtSecret))
 
             call.respond(LoginResponse(
@@ -166,6 +172,7 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                 user = UserResponse(
                     id = userId,
                     email = user["email"] as String,
+                    role = role,
                     createdAt = user["createdAt"].toString(),
                 )
             ))

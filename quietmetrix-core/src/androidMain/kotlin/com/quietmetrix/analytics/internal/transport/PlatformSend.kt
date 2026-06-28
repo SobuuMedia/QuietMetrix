@@ -1,12 +1,16 @@
 package com.quietmetrix.analytics.internal.transport
 
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.android.Android
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 
 internal actual suspend fun platformSend(endpoint: String, apiKey: String, events: List<EnqueuedEvent>): SendResult {
-    val client = HttpClient()
+    // Explicit engine, not the no-arg HttpClient(): the no-arg constructor resolves the engine via
+    // ServiceLoader, which R8/minification strips in consumers' release builds, silently breaking
+    // all sends. An explicitly-referenced engine is reachable code and survives R8 deterministically.
+    val client = HttpClient(Android)
     try {
         val payload = HttpTransport.serializeBatch(events)
         val response = client.post(endpoint) {

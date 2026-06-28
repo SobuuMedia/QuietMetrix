@@ -6,6 +6,7 @@ import io.ktor.server.routing.Routing
 fun Routing.configureAllRoutes(config: AppConfig) {
     configureTrackRoutes()
     configureAuthRoutes(config)
+    configureUserRoutes(config)
     configureProjectRoutes()
     configureDashboardRoutes()
     configureBillingRoutes(config)

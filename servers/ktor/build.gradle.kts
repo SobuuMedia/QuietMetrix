@@ -54,6 +54,7 @@ dependencies {
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.h2)
     testImplementation(kotlin("test"))
+    testImplementation("io.mockk:mockk:1.13.12")
 }
 
 kotlin {
@@ -67,7 +68,10 @@ application {
 flyway {
     url = System.getenv("QM_DB_URL") ?: "jdbc:postgresql://localhost:5432/quietmetrix"
     user = System.getenv("QM_DB_USER") ?: "quietmetrix"
-    password = System.getenv("QM_DB_PASSWORD") ?: "quietmetrix"
+    password = System.getenv("QM_DB_PASSWORD") ?: run {
+        logger.warn("QM_DB_PASSWORD is not set. Flyway migrations will use a placeholder password and will likely fail until you export QM_DB_PASSWORD.")
+        "unset"
+    }
     locations = arrayOf("filesystem:migrations")
 }
 

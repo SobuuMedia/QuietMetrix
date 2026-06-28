@@ -2,17 +2,21 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.androidKotlinMultiplatformLibrary)
     alias(libs.plugins.kotlinSerialization)
     id("maven-publish")
+    id("signing")
 }
 
 group = "com.quietmetrix"
-version = "0.1.0"
+version = "0.1.2"
 
 kotlin {
-    androidTarget {
-        publishLibraryVariants("release")
+    android {
+        namespace = "com.quietmetrix.analytics"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        withHostTest { isIncludeAndroidResources = true }
     }
 
     val xcf = XCFramework("QuietMetrix")
@@ -45,18 +49,6 @@ kotlin {
     }
 }
 
-android {
-    namespace = "com.quietmetrix.analytics"
-    compileSdk = 35
-    defaultConfig {
-        minSdk = libs.versions.android.minSdk.get().toInt()
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-}
-
 publishing {
     publications.withType<MavenPublication>().configureEach {
         pom {
@@ -83,11 +75,8 @@ publishing {
         }
     }
     repositories {
-        // Local Maven (~/.m2) — always available, useful for local integration testing.
-        // Run: ./gradlew :quietmetrix-core:publishToMavenLocal
         mavenLocal()
 
-        // GitHub Packages — set GITHUB_ACTOR and GITHUB_TOKEN env vars to publish.
         val githubActor = System.getenv("GITHUB_ACTOR")
         val githubToken = System.getenv("GITHUB_TOKEN")
         if (githubActor != null && githubToken != null) {
@@ -100,5 +89,37 @@ publishing {
                 }
             }
         }
+
+        // Maven Central via Sonatype Central Portal — ready, but only active when
+        // OSSRH_USERNAME / OSSRH_TOKEN are present. See PUBLISHING.md.
+        val ossrhUsername = System.getenv("OSSRH_USERNAME")
+        val ossrhToken = System.getenv("OSSRH_TOKEN")
+        if (ossrhUsername != null && ossrhToken != null) {
+            maven {
+                name = "sonatype"
+                val isSnapshot = version.toString().endsWith("SNAPSHOT")
+                url = uri(
+                    if (isSnapshot)
+                        "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+                    else
+                        "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+                )
+                credentials {
+                    username = ossrhUsername
+                    password = ossrhToken
+                }
+            }
+        }
+    }
+}
+
+// GPG signing — required for Maven Central, no-op without env vars.
+signing {
+    val signingKey = System.getenv("GPG_SIGNING_KEY") ?: findProperty("signingKey") as? String
+    val signingPassword =
+        System.getenv("GPG_SIGNING_PASSWORD") ?: findProperty("signingPassword") as? String
+    if (signingKey != null && signingPassword != null) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign(publishing.publications)
     }
 }

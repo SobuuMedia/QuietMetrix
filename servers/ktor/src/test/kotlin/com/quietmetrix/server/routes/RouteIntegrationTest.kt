@@ -87,8 +87,7 @@ class RouteIntegrationTest {
         val projectRepo = ProjectRepository(testDb)
         val userRepo = UserRepository(testDb)
         userRepo.create("test@quietmetrix.com", "password123")
-        val keys = projectRepo.create("valid-project", 1L)
-        val apiKey = keys.first
+        val apiKey = projectRepo.create("valid-project", null, 1L)
 
         application {
             install(ContentNegotiation) { json(Json { encodeDefaults = true; ignoreUnknownKeys = true }) }

@@ -26,4 +26,28 @@ actual object TokenStorage {
     actual fun clearRefresh() {
         window.localStorage.removeItem("qm_refresh_token")
     }
+
+    actual fun saveUser(json: String) {
+        window.localStorage.setItem("qm_user", json)
+    }
+
+    actual fun getUser(): String? {
+        return window.localStorage.getItem("qm_user")
+    }
+
+    actual fun clearUser() {
+        window.localStorage.removeItem("qm_user")
+    }
+
+    actual fun saveLastProjectId(projectId: String) {
+        window.localStorage.setItem("qm_last_project_id", projectId)
+    }
+
+    actual fun getLastProjectId(): String? {
+        return window.localStorage.getItem("qm_last_project_id")
+    }
+
+    actual fun clearLastProjectId() {
+        window.localStorage.removeItem("qm_last_project_id")
+    }
 }

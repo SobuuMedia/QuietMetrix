@@ -2,7 +2,6 @@ package com.quietmetrix.server.ingest
 
 import com.quietmetrix.server.domain.Event
 import com.quietmetrix.server.domain.TrackEventRequest
-import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -33,7 +32,7 @@ class EventNormalizer {
     )
 
     fun normalize(request: TrackEventRequest, projectId: String, clientIp: String?): Event {
-        val now = Clock.System.now()
+        val now = Instant.fromEpochMilliseconds(java.time.Instant.now().toEpochMilli())
 
         val eventTs = request.ts?.let { parseTimestamp(it) } ?: now
         val (ts, wasOffline) = validateTimestamp(eventTs, now, request.wasOffline)

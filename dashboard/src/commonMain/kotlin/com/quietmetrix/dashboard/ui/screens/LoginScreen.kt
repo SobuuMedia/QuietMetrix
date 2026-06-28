@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -31,9 +32,11 @@ import com.quietmetrix.dashboard.resources.login_email_label
 import com.quietmetrix.dashboard.resources.login_helper
 import com.quietmetrix.dashboard.resources.login_password_label
 import com.quietmetrix.dashboard.resources.login_title
+import com.quietmetrix.dashboard.ui.components.handCursor
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun LoginScreen(
     loading: Boolean = false,
@@ -90,7 +93,7 @@ fun LoginScreen(
                 Button(
                     onClick = { onLogin(email.trim(), password) },
                     enabled = !loading && email.isNotBlank() && password.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().handCursor(),
                 ) {
                     if (loading) {
                         CircularProgressIndicator(

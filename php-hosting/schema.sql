@@ -7,17 +7,23 @@ CREATE TABLE IF NOT EXISTS users (
     id            VARCHAR(36)  NOT NULL,
     email         VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role          VARCHAR(20)  NOT NULL DEFAULT 'admin',
+    role          VARCHAR(20)  NOT NULL DEFAULT 'admin',   -- admin | developer | reviewer
+    status        VARCHAR(20)  NOT NULL DEFAULT 'active',  -- active | invited
+    invite_token  CHAR(64)     NULL,                       -- set while status = invited
+    invite_expires VARCHAR(32) NULL,                       -- ISO-8601 UTC expiry
     created_at    VARCHAR(32)  NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY idx_users_email (email)
+    UNIQUE KEY idx_users_email (email),
+    KEY idx_users_invite_token (invite_token)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS projects (
-    id              VARCHAR(36)  NOT NULL,
-    name            VARCHAR(255) NOT NULL,
+    id              VARCHAR(36)   NOT NULL,
+    name            VARCHAR(255)  NOT NULL,
+    description     VARCHAR(1000) NULL,
     owner_user_id   VARCHAR(36)  NOT NULL,
     api_key_hash    CHAR(64)     NOT NULL,    -- SHA-256 hex of the random api token
+    api_key_last4   CHAR(4)      NULL,         -- non-sensitive, for masked display
     plan_id         VARCHAR(50)  NULL,         -- nullable, cloud-only field
     created_at      VARCHAR(32)  NOT NULL,
     PRIMARY KEY (id),
