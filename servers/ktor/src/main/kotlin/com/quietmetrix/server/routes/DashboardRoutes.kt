@@ -2,6 +2,7 @@ package com.quietmetrix.server.routes
 
 import com.quietmetrix.server.domain.DailySessionItem
 import com.quietmetrix.server.domain.ErrorResponse
+import com.quietmetrix.server.domain.Event
 import com.quietmetrix.server.domain.RetentionCohort
 import com.quietmetrix.server.domain.RetentionResponse
 import com.quietmetrix.server.domain.SessionsResponse
@@ -61,26 +62,7 @@ fun Routing.configureDashboardRoutes() {
                 val total = eventRepo.countByProjectId(id)
 
                 call.respond(mapOf(
-                    "events" to events.map { event ->
-                        mapOf(
-                            "id" to "evt_${event.id}",
-                            "project_id" to "proj_${event.projectId}",
-                            "event" to event.eventName,
-                            "screen" to event.screen,
-                            "props" to event.props?.let {
-                        try { kotlinx.serialization.json.Json.decodeFromString(kotlinx.serialization.json.JsonObject.serializer(), it) } catch (_: Exception) { it }
-                    },
-                            "sid" to event.sid,
-                            "ts" to event.ts.toString(),
-                            "was_offline" to event.wasOffline,
-                            "country" to event.country,
-                            "device_class" to event.deviceClass,
-                            "language" to event.language,
-                            "platform" to event.platform,
-                            "sdk_version" to event.sdkVersion,
-                            "received_at" to event.receivedAt?.toString(),
-                        )
-                    },
+                    "events" to events.map { eventToEventsResponseMap(it) },
                     "total" to total,
                     "limit" to limit,
                     "offset" to offset,
@@ -132,6 +114,7 @@ fun Routing.configureDashboardRoutes() {
 
                 val topEvents = eventRepo.findTopEvents(id, fromInstant, toInstant, 10)
                 val topScreens = eventRepo.findTopScreens(id, fromInstant, toInstant, 10)
+                val screenDurations = eventRepo.findScreenDurations(id, fromInstant, toInstant, 10)
                 val dailyTotals = eventRepo.findDailyTotals(id, fromInstant, toInstant)
                 val countries = eventRepo.findCountriesBreakdown(id, fromInstant, toInstant)
                 val browsers = eventRepo.findBrowsersBreakdown(id, fromInstant, toInstant)
@@ -151,6 +134,7 @@ fun Routing.configureDashboardRoutes() {
                     "granularity" to granularity,
                     "top_events" to topEvents,
                     "top_screens" to topScreens,
+                    "screen_durations" to screenDurations,
                     "dau" to dailyTotals,
                     "event_counts" to dailyTotals,
                     "countries" to countries,
@@ -301,3 +285,32 @@ fun Routing.configureDashboardRoutes() {
             }
         }
 }
+
+/**
+ * Maps a stored [Event] to the dashboard `/events` JSON shape. Keys mirror the PHP
+ * backend's response so the dashboard's `EventRow` model deserializes identically
+ * against either backend (numeric `id`, `event_name`, `session_id`).
+ */
+internal fun eventToEventsResponseMap(event: Event): Map<String, Any?> = mapOf(
+    "id" to event.id?.toLongOrNull(),
+    "project_id" to "proj_${event.projectId}",
+    "event_name" to event.eventName,
+    "screen" to event.screen,
+    "props" to event.props?.let {
+        try {
+            kotlinx.serialization.json.Json.decodeFromString(kotlinx.serialization.json.JsonObject.serializer(), it)
+        } catch (_: Exception) {
+            it
+        }
+    },
+    "session_id" to event.sid,
+    "duration_ms" to event.durationMs,
+    "ts" to event.ts.toString(),
+    "was_offline" to event.wasOffline,
+    "country" to event.country,
+    "device_class" to event.deviceClass,
+    "language" to event.language,
+    "platform" to event.platform,
+    "sdk_version" to event.sdkVersion,
+    "received_at" to event.receivedAt?.toString(),
+)

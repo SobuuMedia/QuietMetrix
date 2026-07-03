@@ -5,6 +5,13 @@ package com.quietmetrix.dashboard.ui.components.table
 // that feed it. No Compose dependency — fully unit-testable on the JVM.
 // ---------------------------------------------------------------------------
 
+/**
+ * Label for an optional screen name. Treats null AND blank/empty as "absent" so a stray empty
+ * string from the backend renders as [placeholder] (e.g. "—") instead of a mysteriously blank cell.
+ */
+fun screenLabel(name: String?, placeholder: String): String =
+    name?.takeIf { it.isNotBlank() } ?: placeholder
+
 /** Nulls-last comparison for an optional Comparable selector value. */
 fun <T : Comparable<T>> compareNullsLast(ascending: Boolean): Comparator<T?> =
     Comparator { a, b ->
@@ -65,6 +72,21 @@ fun <T> paginate(items: List<T>, page: Int, pageSize: Int): Page<T> {
  * last. Used by the generic DataTable whose columns don't know the comparable
  * type at compile time.
  */
+/** The background treatment a table row should get, in priority order. */
+enum class RowShade { Default, Zebra, Hovered, Selected }
+
+/**
+ * Chooses a row's [RowShade] from its state. Priority: selection first (an open detail row),
+ * then hover feedback, then zebra striping on odd rows, else no shade. Compose-free so the
+ * precedence is unit-testable.
+ */
+fun rowShade(index: Int, selected: Boolean, hovered: Boolean): RowShade = when {
+    selected -> RowShade.Selected
+    hovered -> RowShade.Hovered
+    index % 2 == 1 -> RowShade.Zebra
+    else -> RowShade.Default
+}
+
 @Suppress("UNCHECKED_CAST")
 fun <T> comparatorFor(selector: (T) -> Comparable<*>?, ascending: Boolean): Comparator<T> =
     Comparator { a, b ->

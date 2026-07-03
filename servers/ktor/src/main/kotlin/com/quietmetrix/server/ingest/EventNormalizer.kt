@@ -5,6 +5,8 @@ import com.quietmetrix.server.domain.TrackEventRequest
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 class EventNormalizer {
 
@@ -38,9 +40,11 @@ class EventNormalizer {
         val (ts, wasOffline) = validateTimestamp(eventTs, now, request.wasOffline)
 
         val deviceClass = request.ctx?.ua?.let { classifyDevice(it) }
+            ?: deviceClassFromPlatform(request.sdk?.platform)
         val (browser, browserVer) = request.ctx?.ua?.let { parseBrowser(it) } ?: (null to null)
         val (os, osVer) = request.ctx?.ua?.let { parseOS(it) } ?: (null to null)
         val (sw, sh) = parseScreenResolution(request.ctx?.viewport)
+        val durationMs = parseDuration(request.props?.get("duration_ms"))
 
         return Event(
             projectId = projectId,
@@ -50,7 +54,7 @@ class EventNormalizer {
             sid = request.sid,
             ts = ts,
             wasOffline = wasOffline,
-            country = request.ctx?.country,
+            country = request.ctx?.country?.uppercase()?.take(2),
             deviceClass = deviceClass ?: "unknown",
             language = request.ctx?.language?.take(10),
             platform = request.sdk?.platform,
@@ -63,6 +67,7 @@ class EventNormalizer {
             osVersion = osVer,
             screenWidth = sw,
             screenHeight = sh,
+            durationMs = durationMs,
             referrer = request.ctx?.referrer?.take(500),
             sessionNumber = request.ctx?.sessionNumber,
             isSessionStart = request.ctx?.isSessionStart ?: false,
@@ -103,6 +108,17 @@ class EventNormalizer {
         return "desktop"
     }
 
+    /**
+     * Device class inferred from the SDK platform when no user-agent is available (native mobile /
+     * desktop SDKs don't carry a browser UA). Returns null for unrecognised platforms so the caller
+     * can fall through to "unknown".
+     */
+    private fun deviceClassFromPlatform(platform: String?): String? = when (platform?.lowercase()) {
+        "android", "ios" -> "mobile"
+        "macos", "windows", "linux", "jvm" -> "desktop"
+        else -> null
+    }
+
     private fun parseBrowser(ua: String): Pair<String?, String?> {
         for ((name, regex) in browserPatterns) {
             val match = regex.find(ua) ?: continue
@@ -118,6 +134,12 @@ class EventNormalizer {
             return name to version
         }
         return null to null
+    }
+
+    /** Promotes a `duration_ms` prop (sent by `screen_view` events) to a real column. */
+    private fun parseDuration(element: kotlinx.serialization.json.JsonElement?): Long? {
+        val ms = (element as? JsonPrimitive)?.longOrNull ?: return null
+        return ms.takeIf { it > 0 }
     }
 
     private fun parseScreenResolution(viewport: String?): Pair<Int?, Int?> {

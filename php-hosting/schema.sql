@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS events (
     language     VARCHAR(10)  NULL,
     platform     VARCHAR(20)  NULL,
     sdk_version  VARCHAR(20)  NULL,
+    duration_ms  BIGINT       NULL,    -- time-on-screen (ms), promoted from screen_view props
     PRIMARY KEY (id),
     KEY idx_events_project_ts          (project_id, ts),
     KEY idx_events_project_name_ts     (project_id, event_name, ts),

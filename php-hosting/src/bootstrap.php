@@ -41,6 +41,11 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'users', 'invite_expires', 'VARCHAR(32) NULL');
     addColumnIfMissing($db, 'projects', 'description', 'VARCHAR(1000) NULL');
     addColumnIfMissing($db, 'projects', 'api_key_last4', 'CHAR(4) NULL');
+    // events: device classification + time-on-screen. Existing installs created
+    // before these columns existed must gain them, or inserts that reference them
+    // fail and every tracked event 500s (silently dropping duration_ms/device_class).
+    addColumnIfMissing($db, 'events', 'device_class', 'VARCHAR(20) NULL');
+    addColumnIfMissing($db, 'events', 'duration_ms', 'BIGINT NULL');
 
     // 2. First admin user
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');

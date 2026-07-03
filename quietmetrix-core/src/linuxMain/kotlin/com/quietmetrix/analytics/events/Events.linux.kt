@@ -5,6 +5,7 @@ import com.quietmetrix.analytics.internal.EventValidator
 import com.quietmetrix.analytics.internal.Gate
 import com.quietmetrix.analytics.internal.SDK_VERSION
 import com.quietmetrix.analytics.internal.generateSid
+import com.quietmetrix.analytics.internal.ScreenTracker
 import com.quietmetrix.analytics.internal.transport.*
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -21,7 +22,7 @@ actual suspend fun trackEvent(event: String, screen: String?, props: Map<String,
         EnqueuedEvent(
             event = event,
             screen = screen,
-            props = props,
+            props = ScreenTracker.enrichWithDwell(props),
             sid = sid,
             ts = Clock.System.now(),
             wasOffline = isOffline,

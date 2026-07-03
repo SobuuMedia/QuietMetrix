@@ -191,6 +191,22 @@ Overview page and you'll see it.
 To send events from one of the official SDKs, see `docs/sdk/*.md` at the repo
 root.
 
+### About the Device and Duration columns
+
+Two Events-table columns depend on how events are captured:
+
+- **Device** is derived server-side. If the event carries a browser user-agent
+  (`ctx.ua`) it is classified as `mobile` / `tablet` / `desktop` / `bot`;
+  otherwise it falls back to the SDK platform (`android`/`ios` → `mobile`,
+  `macos`/`windows`/`linux`/`jvm` → `desktop`). Unrecognised sources show as
+  empty. No action is needed — it populates automatically once events arrive.
+- **Duration** ("time on screen") is populated **only when the app reports
+  screens**. The SDK measures dwell time and attaches `duration_ms` to
+  `screen_view` events (and to events fired while a screen is active) — but only
+  if your app calls **`trackScreen(...)`**. Apps that never call `trackScreen`
+  will show an empty Duration column for every row. This is expected: instrument
+  your screens to see time-on-screen data.
+
 ---
 
 ## 10. Demo mode (debug-only)
@@ -223,6 +239,17 @@ To deploy a new version, re-upload the changed files (re-upload everything if
 in doubt). `schema.sql` is idempotent — re-running it is safe. Future schema
 migrations will ship as additional `migrations/NNN_*.sql` files; the worker
 will apply them in order on first request after the upload.
+
+> **Upgrading an existing database:** the installer now auto-adds new columns to
+> already-installed tables on the first request after you upload (see
+> `addColumnIfMissing` in `src/bootstrap.php`) — including `events.duration_ms`
+> (time-on-screen) and `events.device_class`. No manual SQL is needed; just
+> re-upload `src/` and load any page once. If you prefer to apply them by hand:
+>
+> ```sql
+> ALTER TABLE events ADD COLUMN device_class VARCHAR(20) NULL;
+> ALTER TABLE events ADD COLUMN duration_ms  BIGINT      NULL;
+> ```
 
 ---
 

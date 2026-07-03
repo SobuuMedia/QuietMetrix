@@ -1,11 +1,50 @@
 package com.quietmetrix.server.ingest
 
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class EventNormalizerTest {
 
     private val normalizer = EventNormalizer()
+
+    @Test
+    fun `normalize promotes numeric duration_ms from props`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "screen_view",
+            screen = "Home",
+            props = mapOf("duration_ms" to JsonPrimitive(8200)),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals(8200L, event.durationMs)
+    }
+
+    @Test
+    fun `normalize leaves durationMs null when props absent`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(event = "screen_view")
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals(null, event.durationMs)
+    }
+
+    @Test
+    fun `normalize ignores non-numeric duration_ms`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "screen_view",
+            props = mapOf("duration_ms" to JsonPrimitive("not-a-number")),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals(null, event.durationMs)
+    }
+
+    @Test
+    fun `normalize ignores non-positive duration_ms`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "screen_view",
+            props = mapOf("duration_ms" to JsonPrimitive(-5)),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals(null, event.durationMs)
+    }
 
     @Test
     fun `normalize fills defaults for missing optional fields`() {
@@ -67,6 +106,69 @@ class EventNormalizerTest {
     }
 
     @Test
+    fun `normalize falls back to mobile from platform when no ua (android)`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "tap",
+            sdk = com.quietmetrix.server.domain.SdkInfo(platform = "android", version = "0.2.0"),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("mobile", event.deviceClass)
+    }
+
+    @Test
+    fun `normalize falls back to mobile from platform when no ua (ios)`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "tap",
+            sdk = com.quietmetrix.server.domain.SdkInfo(platform = "ios", version = "0.2.0"),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("mobile", event.deviceClass)
+    }
+
+    @Test
+    fun `normalize falls back to desktop from platform when no ua (macos)`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "click",
+            sdk = com.quietmetrix.server.domain.SdkInfo(platform = "macos", version = "0.2.0"),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("desktop", event.deviceClass)
+    }
+
+    @Test
+    fun `normalize falls back to desktop from platform when no ua (jvm)`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "click",
+            sdk = com.quietmetrix.server.domain.SdkInfo(platform = "jvm", version = "0.2.0"),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("desktop", event.deviceClass)
+    }
+
+    @Test
+    fun `normalize prefers ua classification over platform fallback`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "view",
+            sdk = com.quietmetrix.server.domain.SdkInfo(platform = "android", version = "0.2.0"),
+            ctx = com.quietmetrix.server.domain.EventContext(
+                ua = "Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X)",
+            ),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("tablet", event.deviceClass)
+    }
+
+    @Test
+    fun `normalize leaves deviceClass unknown when neither ua nor platform resolves`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "view",
+            sdk = com.quietmetrix.server.domain.SdkInfo(platform = "toaster", version = "0.2.0"),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("unknown", event.deviceClass)
+    }
+
+    @Test
     fun `normalize preserves wasOffline flag`() {
         val request = com.quietmetrix.server.domain.TrackEventRequest(
             event = "tap",
@@ -74,6 +176,37 @@ class EventNormalizerTest {
         )
         val event = normalizer.normalize(request, "1", null)
         assertEquals(true, event.wasOffline)
+    }
+
+    @Test
+    fun `normalize uppercases country to a 2-char code`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "view",
+            ctx = com.quietmetrix.server.domain.EventContext(
+                country = "us",
+            ),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("US", event.country)
+    }
+
+    @Test
+    fun `normalize truncates over-long country to 2 chars`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "view",
+            ctx = com.quietmetrix.server.domain.EventContext(
+                country = "usa",
+            ),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals("US", event.country)
+    }
+
+    @Test
+    fun `normalize leaves country null when absent`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(event = "view")
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals(null, event.country)
     }
 
     @Test

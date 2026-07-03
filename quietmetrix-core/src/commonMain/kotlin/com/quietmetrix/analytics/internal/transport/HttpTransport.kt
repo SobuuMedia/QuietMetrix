@@ -69,6 +69,7 @@ data class EventContextDto(
     val language: String? = null,
     val ua: String? = null,
     val viewport: String? = null,
+    val country: String? = null,
 )
 
 @OptIn(ExperimentalTime::class)
@@ -105,7 +106,7 @@ internal fun EnqueuedEvent.toRequest() = TrackEventRequestDto(
     is_session_start = isSessionStart,
     is_session_end = isSessionEnd,
     sdk = sdk?.let { SdkInfoDto(it.platform, it.version) },
-    ctx = ctx?.let { EventContextDto(it.referrer, it.language, it.ua, it.viewport) },
+    ctx = ctx?.let { EventContextDto(it.referrer, it.language, it.ua, it.viewport, it.country) },
 )
 
 internal expect suspend fun platformSend(endpoint: String, apiKey: String, events: List<EnqueuedEvent>): SendResult

@@ -30,7 +30,7 @@ class GateTest {
     }
 
     @Test
-    fun `shouldTrack returns true when initialized, consent accepted, analytics enabled`() {
+    fun `shouldTrack returns true when initialized and consent accepted and analytics enabled`() {
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "test_"))
         setCookieConsent(true)
         QuietMetrix.setAnalyticsEnabled(true)
@@ -62,7 +62,7 @@ class GateTest {
     }
 
     @Test
-    fun `shouldTrack returns true with default consent (trackingAllowedByDefault=true)`() {
+    fun `shouldTrack returns true with default consent allowed`() {
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "test_", trackingAllowedByDefault = true))
         assertTrue(Gate.shouldTrack())
     }
@@ -97,7 +97,7 @@ class GateTest {
     }
 
     @Test
-    fun `isAnalyticsEnabled returns false after setAnalyticsEnabled(false)`() {
+    fun `isAnalyticsEnabled returns false after disabling analytics`() {
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "test_"))
         QuietMetrix.setAnalyticsEnabled(false)
         assertFalse(QuietMetrix.isAnalyticsEnabled)

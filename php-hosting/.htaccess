@@ -3,6 +3,19 @@
     AddType text/javascript .mjs
 </IfModule>
 
+# Dashboard cache policy. The entry files (index.html, dashboard.js) keep stable
+# names, so they MUST NOT be cached or a redeploy silently keeps showing the old
+# app. The .wasm / .mjs chunks carry a content hash in their name, so they can be
+# cached forever — a new build produces new filenames and busts itself.
+<IfModule mod_headers.c>
+    <FilesMatch "^(index\.html|dashboard\.js)$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+    </FilesMatch>
+    <FilesMatch "\.(wasm|mjs)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>
+
 RewriteEngine On
 RewriteBase /
 

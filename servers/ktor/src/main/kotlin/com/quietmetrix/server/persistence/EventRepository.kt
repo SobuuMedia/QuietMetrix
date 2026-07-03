@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.function
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.sum
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.Instant
@@ -59,6 +60,7 @@ class EventRepository(private val database: Database) {
                 it[osVersion] = event.osVersion
                 it[screenWidth] = event.screenWidth
                 it[screenHeight] = event.screenHeight
+                it[durationMs] = event.durationMs
                 it[referrer] = event.referrer
                 it[sessionNumber] = event.sessionNumber
                 it[isSessionStart] = event.isSessionStart
@@ -135,6 +137,36 @@ class EventRepository(private val database: Database) {
         }
     }
 
+    /** Per-screen dwell time, aggregated from `screen_view` events that carry a `duration_ms`. */
+    fun findScreenDurations(projectId: Long, from: java.time.Instant, to: java.time.Instant, limit: Int = 10): List<Map<String, Any?>> {
+        val avgCol = Events.durationMs.avg()
+        val sumCol = Events.durationMs.sum()
+        val countCol = Events.id.count()
+        return transaction(database) {
+            Events
+                .select(Events.screen, avgCol, sumCol, countCol)
+                .where {
+                    (Events.projectId eq projectId) and
+                    (Events.eventName eq "screen_view") and
+                    (Events.ts greaterEq LocalDateTime.ofInstant(from, ZoneOffset.UTC)) and
+                    (Events.ts lessEq LocalDateTime.ofInstant(to, ZoneOffset.UTC)) and
+                    (Events.screen.isNotNull()) and
+                    (Events.durationMs.isNotNull())
+                }
+                .groupBy(Events.screen)
+                .orderBy(sumCol, SortOrder.DESC)
+                .limit(limit)
+                .map {
+                    mapOf(
+                        "screen" to it[Events.screen]!!,
+                        "count" to it[countCol].toInt(),
+                        "avg_ms" to (it[avgCol]?.toLong() ?: 0L),
+                        "total_ms" to (it[sumCol] ?: 0L),
+                    )
+                }
+        }
+    }
+
     fun findDailyTotals(projectId: Long, from: java.time.Instant, to: java.time.Instant): List<Map<String, Any?>> {
         return transaction(database) {
             Events
@@ -188,6 +220,7 @@ class EventRepository(private val database: Database) {
         osVersion = row[Events.osVersion],
         screenWidth = row[Events.screenWidth],
         screenHeight = row[Events.screenHeight],
+        durationMs = row[Events.durationMs],
         referrer = row[Events.referrer],
         sessionNumber = row[Events.sessionNumber],
         isSessionStart = row[Events.isSessionStart],
@@ -396,7 +429,10 @@ class EventRepository(private val database: Database) {
             val fromLdt = LocalDateTime.ofInstant(from, ZoneOffset.UTC)
             val toLdt = LocalDateTime.ofInstant(to, ZoneOffset.UTC)
 
-            val result = mutableMapOf<String, Int>()
+            // Key each hop by a structured (from, to) Pair rather than a delimited "from→to" string:
+            // the string round-trip is fragile (a delimiter char in a screen name, or a mangled
+            // multibyte separator, silently drops the destination).
+            val result = mutableMapOf<Pair<String, String>, Int>()
             var prevSid: String? = null
             var prevScreen: String? = null
 
@@ -406,15 +442,18 @@ class EventRepository(private val database: Database) {
                     (Events.projectId eq projectId) and
                     (Events.ts greaterEq fromLdt) and
                     (Events.ts lessEq toLdt) and
+                    (Events.eventName eq "screen_view") and
                     Events.screen.isNotNull() and
+                    (Events.screen neq "") and
                     Events.sessionId.isNotNull()
                 }
                 .orderBy(Events.sessionId to SortOrder.ASC, Events.ts to SortOrder.ASC)
                 .forEach { row ->
                     val sid = row[Events.sessionId]
                     val screen = row[Events.screen]!!
-                    if (sid == prevSid && prevScreen != null && screen != prevScreen) {
-                        val key = "$prevScreen→$screen"
+                    val prev = prevScreen
+                    if (sid == prevSid && prev != null && screen != prev) {
+                        val key = prev to screen
                         result[key] = (result[key] ?: 0) + 1
                     }
                     prevSid = sid
@@ -425,8 +464,7 @@ class EventRepository(private val database: Database) {
                 .sortedByDescending { it.value }
                 .take(50)
                 .map { (key, count) ->
-                    val parts = key.split("→", limit = 2)
-                    mapOf("from_screen" to parts[0], "to_screen" to parts[1], "count" to count)
+                    mapOf("from_screen" to key.first, "to_screen" to key.second, "count" to count)
                 }
         }
     }

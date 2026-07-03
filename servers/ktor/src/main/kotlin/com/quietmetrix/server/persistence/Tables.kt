@@ -75,6 +75,7 @@ object Events : Table("events") {
     val osVersion = varchar("os_version", 50).nullable()
     val screenWidth = integer("screen_width").nullable()
     val screenHeight = integer("screen_height").nullable()
+    val durationMs = long("duration_ms").nullable()
     val referrer = varchar("referrer", 500).nullable()
     val sessionNumber = integer("session_number").nullable()
     val isSessionStart = bool("is_session_start").default(false)

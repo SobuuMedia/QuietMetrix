@@ -44,6 +44,7 @@ internal data class EventContext(
     val language: String? = null,
     val ua: String? = null,
     val viewport: String? = null,
+    val country: String? = null,
 )
 
 internal data class SendResult(

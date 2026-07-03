@@ -67,6 +67,52 @@ class ApiModelsTest {
     }
 
     @Test
+    fun transitionsTolerateNullScreens() {
+        // A transition into/out of an unnamed screen must not crash deserialization.
+        val r = json.decodeFromString<TransitionsResponse>(
+            """{"transitions":[{"from_screen":"Home","to_screen":null,"count":4}]}"""
+        )
+        assertEquals(1, r.transitions.size)
+        assertEquals("Home", r.transitions[0].fromScreen)
+        assertNull(r.transitions[0].toScreen)
+        assertEquals(4L, r.transitions[0].count)
+    }
+
+    @Test
+    fun aggregatesDecodeScreenDurations() {
+        val r = json.decodeFromString<AggregatesResponse>(
+            """{"screen_durations":[{"screen":"Home","count":12,"avg_ms":8200,"total_ms":98400}]}"""
+        )
+        assertEquals(1, r.screenDurations.size)
+        val s = r.screenDurations[0]
+        assertEquals("Home", s.screen)
+        assertEquals(12L, s.count)
+        assertEquals(8200L, s.avgMs)
+        assertEquals(98400L, s.totalMs)
+    }
+
+    @Test
+    fun aggregatesWithoutScreenDurationsDefaultsToEmpty() {
+        val r = json.decodeFromString<AggregatesResponse>("""{"top_screens":[]}""")
+        assertEquals(0, r.screenDurations.size)
+    }
+
+    @Test
+    fun eventRowDecodesPerVisitDuration() {
+        val e = json.decodeFromString<EventRow>(
+            """{"event_name":"screen_view","screen":"Home","duration_ms":8200}"""
+        )
+        assertEquals("Home", e.screen)
+        assertEquals(8200L, e.durationMs)
+    }
+
+    @Test
+    fun eventRowWithoutDurationIsNull() {
+        val e = json.decodeFromString<EventRow>("""{"event_name":"tap"}""")
+        assertNull(e.durationMs)
+    }
+
+    @Test
     fun totalsDecodesErrorsAndDefaultsToZero() {
         val withErrors = json.decodeFromString<Totals>("""{"events":10,"offline":2,"errors":3}""")
         assertEquals(3L, withErrors.errors)

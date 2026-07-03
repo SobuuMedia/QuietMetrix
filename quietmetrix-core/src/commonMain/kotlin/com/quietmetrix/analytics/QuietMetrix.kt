@@ -3,6 +3,7 @@ package com.quietmetrix.analytics
 import com.quietmetrix.analytics.internal.ConfigHolder
 import com.quietmetrix.analytics.internal.Gate
 import com.quietmetrix.analytics.internal.InMemoryStore
+import com.quietmetrix.analytics.internal.ScreenTracker
 import com.quietmetrix.analytics.internal.StorageKeys
 import com.quietmetrix.analytics.internal.transport.EventQueue
 import com.quietmetrix.analytics.internal.transport.FlushManager
@@ -49,6 +50,7 @@ object QuietMetrix {
     val isAnalyticsEnabled: Boolean get() = Gate.isAnalyticsEnabled()
 
     fun stop() {
+        ScreenTracker.closeOutAsync()
         FlushManager.stop()
     }
 }

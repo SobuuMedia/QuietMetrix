@@ -54,6 +54,8 @@ data class DashboardState(
     val transitions: TransitionsResponse? = null,
     val sessions: SessionsResponse? = null,
     val liveEvents: List<EventRow> = emptyList(),
+    /** The event whose detail panel is open on the Events screen, if any. */
+    val selectedEvent: EventRow? = null,
     // User management + API-key UX
     val users: List<ApiManagedUser> = emptyList(),
     val members: Map<String, List<ApiMember>> = emptyMap(),
@@ -487,6 +489,16 @@ class DashboardViewModel {
         } catch (e: Throwable) {
             _state.update { it.copy(error = e.message) }
         }
+    }
+
+    /** Opens the detail panel for [event] on the Events screen. */
+    fun selectEvent(event: EventRow) {
+        _state.update { it.copy(selectedEvent = event) }
+    }
+
+    /** Closes the event detail panel. */
+    fun clearSelectedEvent() {
+        _state.update { it.copy(selectedEvent = null) }
     }
 
     fun loadLiveEvents() {

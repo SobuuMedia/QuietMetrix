@@ -9,7 +9,7 @@ function handleProjectEvents(string $projectId): void {
     $before = $_GET['before'] ?? null;
 
     $sql = 'SELECT id, event_name, screen, props, session_id, ts, was_offline,
-                   country, device_class, language, platform, sdk_version
+                   country, device_class, language, platform, sdk_version, duration_ms
               FROM events
              WHERE project_id = ?';
     $params = [$projectId];
@@ -27,6 +27,7 @@ function handleProjectEvents(string $projectId): void {
             $r['props'] = json_decode($r['props'], true);
         }
         $r['was_offline'] = (bool)$r['was_offline'];
+        $r['duration_ms'] = isset($r['duration_ms']) ? (int)$r['duration_ms'] : null;
     }
     jsonResponse(200, ['events' => $rows]);
 }
@@ -67,6 +68,29 @@ function handleProjectAggregates(string $projectId): void {
     );
     $stmt->execute([$projectId, $since]);
     $topScreens = $stmt->fetchAll();
+
+    // Per-screen dwell time — from screen_view events carrying a duration_ms
+    $stmt = $db->prepare(
+        "SELECT screen,
+                COUNT(*)            AS count,
+                ROUND(AVG(duration_ms)) AS avg_ms,
+                SUM(duration_ms)    AS total_ms
+           FROM events
+          WHERE project_id = ? AND ts >= ? AND event_name = 'screen_view'
+            AND screen IS NOT NULL AND duration_ms IS NOT NULL
+          GROUP BY screen
+          ORDER BY total_ms DESC
+          LIMIT 20"
+    );
+    $stmt->execute([$projectId, $since]);
+    $screenDurations = array_map(static function (array $r): array {
+        return [
+            'screen'   => $r['screen'],
+            'count'    => (int)$r['count'],
+            'avg_ms'   => (int)$r['avg_ms'],
+            'total_ms' => (int)$r['total_ms'],
+        ];
+    }, $stmt->fetchAll());
 
     // Daily/hourly counts — emitted as { day, total, offline_total }
     $stmt = $db->prepare(
@@ -133,9 +157,10 @@ function handleProjectAggregates(string $projectId): void {
             'offline' => (int)($totals['offline_total'] ?? 0),
             'errors'  => $errors,
         ],
-        'top_events'     => $topEvents,
-        'top_screens'    => $topScreens,
-        'daily'          => $daily,
+        'top_events'       => $topEvents,
+        'top_screens'      => $topScreens,
+        'screen_durations' => $screenDurations,
+        'daily'            => $daily,
         'countries'      => $countries,
         'platforms'      => $platforms,
         'device_classes' => $deviceClasses,
@@ -150,14 +175,18 @@ function handleProjectTransitions(string $projectId): void {
     $since = gmdate('Y-m-d\TH:i:s\Z', time() - windowSeconds(90));
 
     $stmt = getDb()->prepare(
-        'SELECT session_id, screen, ts
+        "SELECT session_id, screen, ts
            FROM events
-          WHERE project_id = ? AND ts >= ? AND screen IS NOT NULL AND session_id IS NOT NULL
-          ORDER BY session_id, ts'
+          WHERE project_id = ? AND ts >= ? AND event_name = 'screen_view'
+            AND screen IS NOT NULL AND screen <> '' AND session_id IS NOT NULL
+          ORDER BY session_id, ts"
     );
     $stmt->execute([$projectId, $since]);
 
-    $transitions = [];
+    // Count each from -> to hop with a nested map, so from/to stay structured. Avoid packing the
+    // pair into a single delimited string key: that round-trip is fragile (a delimiter char in a
+    // screen name, or a mangled multibyte separator, silently drops the destination).
+    $transitions = [];   // from_screen => [ to_screen => count ]
     $prevKey = null;
     $prevScreen = null;
 
@@ -166,19 +195,21 @@ function handleProjectTransitions(string $projectId): void {
         $currentScreen = $row['screen'];
 
         if ($currentKey === $prevKey && $prevScreen !== null && $currentScreen !== $prevScreen) {
-            $pair = "$prevScreen→$currentScreen";
-            $transitions[$pair] = ($transitions[$pair] ?? 0) + 1;
+            $transitions[$prevScreen][$currentScreen] = ($transitions[$prevScreen][$currentScreen] ?? 0) + 1;
         }
         $prevKey = $currentKey;
         $prevScreen = $currentScreen;
     }
 
-    arsort($transitions);
     $result = [];
-    foreach (array_slice($transitions, 0, 50, true) as $pair => $count) {
-        [$from, $to] = explode('→', $pair, 2);
-        $result[] = ['from_screen' => $from, 'to_screen' => $to, 'count' => $count];
+    foreach ($transitions as $from => $tos) {
+        foreach ($tos as $to => $count) {
+            // Cast: PHP silently coerces digit-only array keys to int.
+            $result[] = ['from_screen' => (string)$from, 'to_screen' => (string)$to, 'count' => $count];
+        }
     }
+    usort($result, static fn(array $a, array $b): int => $b['count'] <=> $a['count']);
+    $result = array_slice($result, 0, 50);
 
     jsonResponse(200, ['transitions' => $result]);
 }

@@ -1,12 +1,12 @@
 package com.quietmetrix.analytics.internal.transport
 
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.time.Clock
 
 class HttpTransportTest {
 
@@ -144,6 +144,19 @@ class HttpTransportTest {
         assertEquals("42", request.props!!["count"]?.jsonPrimitive?.content)
         assertEquals("true", request.props!!["flag"]?.jsonPrimitive?.content)
         assertEquals("hello", request.props!!["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `toRequest carries ctx country into the wire context`() {
+        val event = EnqueuedEvent(
+            event = "page_view",
+            ts = Clock.System.now(),
+            ctx = EventContext(language = "en", country = "US"),
+        )
+
+        val request = event.toRequest()
+        assertEquals("US", request.ctx?.country)
+        assertEquals("en", request.ctx?.language)
     }
 
     @Test

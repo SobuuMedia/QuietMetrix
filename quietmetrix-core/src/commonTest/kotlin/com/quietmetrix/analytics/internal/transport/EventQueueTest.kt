@@ -2,11 +2,21 @@ package com.quietmetrix.analytics.internal.transport
 
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class EventQueueTest {
+
+    // Start each test from an empty queue. Other suites emit events through fire-and-forget
+    // coroutines (e.g. ScreenTracker.closeOutAsync via QuietMetrix.stop) that can land in the
+    // shared EventQueue after their own teardown, so an @AfterTest clear alone is not enough.
+    @BeforeTest
+    fun setUp() = runTest {
+        EventQueue.configure(1000)
+        EventQueue.clear()
+    }
 
     @AfterTest
     fun tearDown() = runTest {
@@ -20,7 +30,7 @@ class EventQueueTest {
             screen = "home",
             props = emptyMap(),
             sid = null,
-            ts = kotlinx.datetime.Clock.System.now(),
+            ts = kotlin.time.Clock.System.now(),
             wasOffline = false,
             sdk = null,
             ctx = null,
@@ -36,7 +46,7 @@ class EventQueueTest {
             screen = null,
             props = emptyMap(),
             sid = null,
-            ts = kotlinx.datetime.Clock.System.now(),
+            ts = kotlin.time.Clock.System.now(),
             wasOffline = false,
             sdk = null,
             ctx = null,
@@ -60,7 +70,7 @@ class EventQueueTest {
                 screen = null,
                 props = emptyMap(),
                 sid = null,
-                ts = kotlinx.datetime.Clock.System.now(),
+                ts = kotlin.time.Clock.System.now(),
                 wasOffline = false,
                 sdk = null,
                 ctx = null,
@@ -80,7 +90,7 @@ class EventQueueTest {
                 screen = null,
                 props = emptyMap(),
                 sid = null,
-                ts = kotlinx.datetime.Clock.System.now(),
+                ts = kotlin.time.Clock.System.now(),
                 wasOffline = false,
                 sdk = null,
                 ctx = null,
@@ -100,7 +110,7 @@ class EventQueueTest {
             screen = null,
             props = emptyMap(),
             sid = null,
-            ts = kotlinx.datetime.Clock.System.now(),
+            ts = kotlin.time.Clock.System.now(),
             wasOffline = false,
             sdk = null,
             ctx = null,
@@ -119,7 +129,7 @@ class EventQueueTest {
                 screen = null,
                 props = emptyMap(),
                 sid = null,
-                ts = kotlinx.datetime.Clock.System.now(),
+                ts = kotlin.time.Clock.System.now(),
                 wasOffline = false,
                 sdk = null,
                 ctx = null,

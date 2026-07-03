@@ -69,6 +69,7 @@
     <string name="event_meta_screen">Pantalla: %1$s</string>
     <string name="event_meta_platform">Plataforma: %1$s</string>
     <string name="event_meta_country">País: %1$s</string>
+    <string name="event_meta_language">Idioma: %1$s</string>
     <string name="event_meta_session">Sesión: %1$s</string>
 
     <!-- Pickers -->
@@ -97,6 +98,7 @@
     <string name="card_daily_volume">Volumen diario</string>
     <string name="card_top_events">Eventos principales</string>
     <string name="card_top_screens">Pantallas principales</string>
+    <string name="card_screen_time">Tiempo medio en pantalla</string>
     <string name="card_sessions_trend">Sesiones diarias</string>
     <string name="card_countries">Países</string>
     <string name="card_platforms">Plataformas</string>
@@ -119,10 +121,28 @@
     <string name="col_from">Desde</string>
     <string name="col_to">Hasta</string>
     <string name="col_count">Recuento</string>
+    <string name="col_device">Dispositivo</string>
+    <string name="col_session">Sesión</string>
+    <string name="col_duration">Tiempo en pantalla</string>
     <string name="page_prev">Anterior</string>
     <string name="page_next">Siguiente</string>
     <string name="page_info">Página %1$d de %2$d</string>
     <string name="badge_offline">sin conexión</string>
+
+    <!-- Events: explorer redesign -->
+    <string name="events_live">En vivo</string>
+    <string name="filter_all">Todos</string>
+    <string name="summary_total">Eventos totales</string>
+    <string name="summary_offline">Sin conexión</string>
+    <string name="summary_types">Tipos de evento</string>
+    <string name="summary_top_event">Evento principal</string>
+    <string name="summary_top_country">País principal</string>
+    <string name="detail_title">Detalle del evento</string>
+    <string name="detail_props">Propiedades</string>
+    <string name="detail_no_props">Sin propiedades</string>
+    <string name="label_language">Idioma</string>
+    <string name="label_sdk">Versión del SDK</string>
+    <string name="action_close">Cerrar</string>
 
     <!-- Projects -->
     <string name="projects_your">Tus proyectos</string>

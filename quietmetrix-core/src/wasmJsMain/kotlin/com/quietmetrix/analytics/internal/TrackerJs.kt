@@ -28,14 +28,18 @@ internal const val TRACKER_JS_TEMPLATE = """
     function send(event, screen) {
         if (!isTrackingAllowed()) return;
         try {
+            var lang = navigator.language || null;
             var body = JSON.stringify({
-                event:    event,
-                screen:   screen   || null,
-                referrer: document.referrer || null,
-                language: navigator.language ? navigator.language.split('-')[0] : null,
-                ua:       navigator.userAgent || null,
-                width:    window.innerWidth   || null,
-                sid:      sid,
+                event:  event,
+                screen: screen || null,
+                sid:    sid,
+                ctx: {
+                    referrer: document.referrer || null,
+                    language: lang ? lang.split('-')[0] : null,
+                    ua:       navigator.userAgent || null,
+                    viewport: (window.innerWidth || '') + 'x' + (window.innerHeight || ''),
+                    country:  (lang && lang.indexOf('-') !== -1) ? lang.split('-')[1].toUpperCase() : null,
+                },
             });
             var blob = new Blob([body], { type: 'application/json' });
             navigator.sendBeacon

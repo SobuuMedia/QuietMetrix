@@ -45,7 +45,7 @@ class FlushManagerTest {
                 screen = null,
                 props = emptyMap(),
                 sid = null,
-                ts = kotlinx.datetime.Clock.System.now(),
+                ts = kotlin.time.Clock.System.now(),
                 wasOffline = false,
                 sdk = null,
                 ctx = null,

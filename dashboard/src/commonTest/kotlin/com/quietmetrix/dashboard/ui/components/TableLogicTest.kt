@@ -1,10 +1,13 @@
 package com.quietmetrix.dashboard.ui.components
 
 import com.quietmetrix.dashboard.ui.components.table.Page
+import com.quietmetrix.dashboard.ui.components.table.RowShade
 import com.quietmetrix.dashboard.ui.components.table.comparatorFor
 import com.quietmetrix.dashboard.ui.components.table.compareNullsLast
 import com.quietmetrix.dashboard.ui.components.table.filterItems
 import com.quietmetrix.dashboard.ui.components.table.paginate
+import com.quietmetrix.dashboard.ui.components.table.rowShade
+import com.quietmetrix.dashboard.ui.components.table.screenLabel
 import com.quietmetrix.dashboard.ui.components.table.sortItems
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -105,4 +108,39 @@ class TableLogicTest {
     }
 
     private fun List<Row>.filterNotNullScreen() = mapNotNull { it.screen }
+
+    // --- rowShade: which background a table row gets, by priority. ----------------------------
+
+    @Test
+    fun rowShadeSelectedWinsOverEverything() {
+        assertEquals(RowShade.Selected, rowShade(index = 1, selected = true, hovered = true))
+        assertEquals(RowShade.Selected, rowShade(index = 0, selected = true, hovered = false))
+    }
+
+    @Test
+    fun rowShadeHoveredWinsOverZebra() {
+        assertEquals(RowShade.Hovered, rowShade(index = 1, selected = false, hovered = true))
+        assertEquals(RowShade.Hovered, rowShade(index = 0, selected = false, hovered = true))
+    }
+
+    @Test
+    fun rowShadeZebraOnOddRowsOnly() {
+        assertEquals(RowShade.Zebra, rowShade(index = 1, selected = false, hovered = false))
+        assertEquals(RowShade.Default, rowShade(index = 0, selected = false, hovered = false))
+        assertEquals(RowShade.Zebra, rowShade(index = 3, selected = false, hovered = false))
+    }
+
+    // --- screenLabel: null/blank screen names fall back to the placeholder. --------------------
+
+    @Test
+    fun screenLabelUsesRealName() {
+        assertEquals("Home", screenLabel("Home", "—"))
+    }
+
+    @Test
+    fun screenLabelFallsBackForNullBlankAndEmpty() {
+        assertEquals("—", screenLabel(null, "—"))
+        assertEquals("—", screenLabel("", "—"))
+        assertEquals("—", screenLabel("   ", "—"))
+    }
 }

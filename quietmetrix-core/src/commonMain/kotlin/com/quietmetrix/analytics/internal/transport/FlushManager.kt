@@ -160,21 +160,7 @@ internal object FlushManager {
                 jsonStr
             )
             scope?.launch {
-                dtos.forEach { dto ->
-                    EventQueue.enqueue(
-                        EnqueuedEvent(
-                            event = dto.event,
-                            screen = dto.screen,
-                            props = dto.props?.let { it.mapValues { entry -> entry.value.toString() } } ?: emptyMap(),
-                            sid = dto.sid,
-                            ts = Instant.parse(dto.ts),
-                            wasOffline = dto.was_offline,
-                            userId = dto.uid,
-                            sdk = dto.sdk?.let { SdkInfo(it.platform, it.version) },
-                            ctx = dto.ctx?.let { EventContext(it.referrer, it.language, it.ua, it.viewport) },
-                        )
-                    )
-                }
+                dtos.forEach { dto -> EventQueue.enqueue(dto.toEnqueued()) }
             }
         } catch (_: Exception) {
             log("Failed to restore persisted queue")
@@ -187,3 +173,21 @@ internal object FlushManager {
         }
     }
 }
+
+/**
+ * Rebuilds a queued [EnqueuedEvent] from a persisted [TrackEventRequestDto] on the offline-replay
+ * path. Maps the full context — including `country`, which a positional constructor previously
+ * dropped. Kept as a top-level function so it can be unit-tested without the FlushManager runtime.
+ */
+@OptIn(ExperimentalTime::class)
+internal fun TrackEventRequestDto.toEnqueued(): EnqueuedEvent = EnqueuedEvent(
+    event = event,
+    screen = screen,
+    props = props?.let { it.mapValues { entry -> entry.value.toString() } } ?: emptyMap(),
+    sid = sid,
+    ts = Instant.parse(ts),
+    wasOffline = was_offline,
+    userId = uid,
+    sdk = sdk?.let { SdkInfo(it.platform, it.version) },
+    ctx = ctx?.let { EventContext(it.referrer, it.language, it.ua, it.viewport, it.country) },
+)

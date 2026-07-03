@@ -2,6 +2,7 @@ package com.quietmetrix.dashboard.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)
@@ -115,6 +116,7 @@ data class AggregatesResponse(
     val totals: Totals = Totals(),
     @SerialName("top_events")  val topEvents:  List<TopEvent>  = emptyList(),
     @SerialName("top_screens") val topScreens: List<TopScreen> = emptyList(),
+    @SerialName("screen_durations") val screenDurations: List<ScreenDuration> = emptyList(),
     val daily: List<DailyPoint> = emptyList(),
     val countries: List<BreakdownItem> = emptyList(),
     val platforms: List<BreakdownItem> = emptyList(),
@@ -133,8 +135,8 @@ data class TransitionsResponse(
 
 @Serializable
 data class Transition(
-    @SerialName("from_screen") val fromScreen: String,
-    @SerialName("to_screen") val toScreen: String,
+    @SerialName("from_screen") val fromScreen: String? = null,
+    @SerialName("to_screen") val toScreen: String? = null,
     val count: Long,
 )
 
@@ -172,6 +174,14 @@ data class TopEvent(@SerialName("event_name") val eventName: String, val count: 
 data class TopScreen(val screen: String? = null, val count: Long)
 
 @Serializable
+data class ScreenDuration(
+    val screen: String? = null,
+    val count: Long = 0,
+    @SerialName("avg_ms") val avgMs: Long = 0,
+    @SerialName("total_ms") val totalMs: Long = 0,
+)
+
+@Serializable
 data class DailyPoint(
     val day: String,
     val total: Long = 0,
@@ -190,6 +200,7 @@ data class EventRow(
     @SerialName("event_name")   val eventName:   String  = "",
     val screen: String? = null,
     @SerialName("session_id")   val sessionId:   String? = null,
+    @SerialName("duration_ms")  val durationMs:  Long?   = null,
     val ts: String = "",
     @SerialName("was_offline")  val wasOffline:  Boolean = false,
     val country: String? = null,
@@ -197,4 +208,5 @@ data class EventRow(
     val language:    String? = null,
     val platform:    String? = null,
     @SerialName("sdk_version")  val sdkVersion:  String? = null,
+    val props:       JsonElement? = null,
 )

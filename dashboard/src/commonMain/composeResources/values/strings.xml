@@ -69,6 +69,7 @@
     <string name="event_meta_screen">Screen: %1$s</string>
     <string name="event_meta_platform">Platform: %1$s</string>
     <string name="event_meta_country">Country: %1$s</string>
+    <string name="event_meta_language">Language: %1$s</string>
     <string name="event_meta_session">Session: %1$s</string>
 
     <!-- Pickers -->
@@ -97,6 +98,7 @@
     <string name="card_daily_volume">Daily volume</string>
     <string name="card_top_events">Top events</string>
     <string name="card_top_screens">Top screens</string>
+    <string name="card_screen_time">Avg time on screen</string>
     <string name="card_sessions_trend">Daily sessions</string>
     <string name="card_countries">Countries</string>
     <string name="card_platforms">Platforms</string>
@@ -119,10 +121,28 @@
     <string name="col_from">From</string>
     <string name="col_to">To</string>
     <string name="col_count">Count</string>
+    <string name="col_device">Device</string>
+    <string name="col_session">Session</string>
+    <string name="col_duration">Time on screen</string>
     <string name="page_prev">Previous</string>
     <string name="page_next">Next</string>
     <string name="page_info">Page %1$d of %2$d</string>
     <string name="badge_offline">offline</string>
+
+    <!-- Events: explorer redesign -->
+    <string name="events_live">Live</string>
+    <string name="filter_all">All</string>
+    <string name="summary_total">Total events</string>
+    <string name="summary_offline">Offline</string>
+    <string name="summary_types">Event types</string>
+    <string name="summary_top_event">Top event</string>
+    <string name="summary_top_country">Top country</string>
+    <string name="detail_title">Event detail</string>
+    <string name="detail_props">Properties</string>
+    <string name="detail_no_props">No properties</string>
+    <string name="label_language">Language</string>
+    <string name="label_sdk">SDK version</string>
+    <string name="action_close">Close</string>
 
     <!-- Projects -->
     <string name="projects_your">Your projects</string>

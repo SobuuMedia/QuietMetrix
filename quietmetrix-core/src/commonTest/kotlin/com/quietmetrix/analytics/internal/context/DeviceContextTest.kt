@@ -1,16 +1,9 @@
 package com.quietmetrix.analytics.internal.context
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DeviceContextTest {
-
-    @Test
-    fun `platform is jvm`() {
-        assertEquals("jvm", DeviceContext().platform)
-    }
 
     @Test
     fun `platform is a non-blank string`() {
@@ -19,7 +12,7 @@ class DeviceContextTest {
     }
 
     @Test
-    fun `language is available when system property is set`() {
+    fun `language is non-blank when present`() {
         val language = DeviceContext().language
         if (language != null) {
             assertTrue(language.isNotBlank())
@@ -27,9 +20,10 @@ class DeviceContextTest {
     }
 
     @Test
-    fun `userAgent is available on JVM`() {
+    fun `userAgent is non-blank when present`() {
         val ua = DeviceContext().userAgent
-        assertNotNull(ua)
-        assertTrue(ua.isNotBlank())
+        if (ua != null) {
+            assertTrue(ua.isNotBlank())
+        }
     }
 }

@@ -28,6 +28,7 @@ data class Event(
     val osVersion: String? = null,
     val screenWidth: Int? = null,
     val screenHeight: Int? = null,
+    val durationMs: Long? = null,
     val referrer: String? = null,
     val sessionNumber: Int? = null,
     val isSessionStart: Boolean = false,

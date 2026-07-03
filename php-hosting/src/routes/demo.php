@@ -56,6 +56,13 @@ function handleDemoAggregates(): void {
             ['screen' => 'docs',     'count' => (int)($total * 0.14)],
             ['screen' => 'settings', 'count' => (int)($total * 0.15)],
         ],
+        'screen_durations' => [
+            ['screen' => 'docs',     'count' => (int)($total * 0.14), 'avg_ms' => 94000, 'total_ms' => (int)($total * 0.14) * 94000],
+            ['screen' => 'pricing',  'count' => (int)($total * 0.21), 'avg_ms' => 47000, 'total_ms' => (int)($total * 0.21) * 47000],
+            ['screen' => 'home',     'count' => (int)($total * 0.32), 'avg_ms' => 22000, 'total_ms' => (int)($total * 0.32) * 22000],
+            ['screen' => 'settings', 'count' => (int)($total * 0.15), 'avg_ms' => 18000, 'total_ms' => (int)($total * 0.15) * 18000],
+            ['screen' => 'login',    'count' => (int)($total * 0.18), 'avg_ms' =>  9000, 'total_ms' => (int)($total * 0.18) *  9000],
+        ],
         'daily'         => $daily,
     ]);
 }
@@ -68,19 +75,22 @@ function handleDemoEvents(): void {
     $screens  = ['home', 'pricing', 'login', 'docs', 'settings', null];
     $platforms = ['android', 'ios', 'web', 'macos', 'jvm'];
     for ($i = 0; $i < 50; $i++) {
+        $screen = $screens[$i % count($screens)];
         $events[] = [
             'id'           => 1000 - $i,
             'event_name'   => $names[$i % count($names)],
-            'screen'       => $screens[$i % count($screens)],
+            'screen'       => $screen,
             'props'        => $i % 3 === 0 ? ['plan' => 'pro', 'amount' => 29] : null,
             'session_id'   => 'demo-' . ($i % 7),
             'ts'           => gmdate('Y-m-d\TH:i:s\Z', time() - $i * 60),
             'was_offline'  => $i % 11 === 0,
             'country'      => ['US','GB','DE','FR','ES','BR'][$i % 6],
             'device_class' => $i % 2 === 0 ? 'mobile' : 'desktop',
-            'language'     => 'en',
+            'language'     => ['en','en','de','fr','es','pt'][$i % 6],
             'platform'     => $platforms[$i % count($platforms)],
             'sdk_version'  => '0.2.0',
+            // Dwell time, present only while a screen is active (mirrors real capture).
+            'duration_ms'  => $screen !== null ? 5000 + ($i % 12) * 1500 : null,
         ];
     }
     jsonResponse(200, ['demo' => true, 'events' => $events]);
