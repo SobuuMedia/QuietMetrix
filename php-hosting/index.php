@@ -98,7 +98,7 @@ if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
 
 $cspConnectSrc = defined('CSP_CONNECT_SRC') ? CSP_CONNECT_SRC : "'self'";
 header("Content-Security-Policy: default-src 'self'; "
-     . "script-src 'self'; "
+     . "script-src 'self' 'wasm-unsafe-eval'; "
      . "style-src 'self' 'unsafe-inline'; "
      . "img-src 'self' data:; "
      . "connect-src $cspConnectSrc; "

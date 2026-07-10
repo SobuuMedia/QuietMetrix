@@ -12,7 +12,19 @@ fun Application.configureDefaultHeaders() {
         call.response.headers.append("X-Content-Type-Options", "nosniff")
         call.response.headers.append("X-Frame-Options", "DENY")
         call.response.headers.append("Referrer-Policy", "no-referrer")
-        call.response.headers.append("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+        // The dashboard is a Compose/Kotlin-Wasm app: WebAssembly instantiation
+        // needs 'wasm-unsafe-eval' in script-src, and Compose injects inline
+        // styles (style-src 'unsafe-inline'). Everything else stays same-origin.
+        call.response.headers.append(
+            "Content-Security-Policy",
+            "default-src 'self'; " +
+                "script-src 'self' 'wasm-unsafe-eval'; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "img-src 'self' data:; " +
+                "connect-src 'self'; " +
+                "frame-ancestors 'none'; " +
+                "base-uri 'self'",
+        )
 
         val proto = call.request.header("X-Forwarded-Proto")
         val isSecure = proto == "https" || call.request.local.scheme == "https"
