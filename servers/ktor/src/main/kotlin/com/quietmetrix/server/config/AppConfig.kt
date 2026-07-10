@@ -37,6 +37,8 @@ data class AppConfig(
                     jwtIssuer = config.propertyOrNull("quietmetrix.auth.jwtIssuer")?.getString() ?: "quietmetrix",
                     jwtAudience = config.propertyOrNull("quietmetrix.auth.jwtAudience")?.getString() ?: "quietmetrix-api",
                     sessionTtlHours = config.propertyOrNull("quietmetrix.auth.sessionTtlHours")?.getString()?.toInt() ?: 2,
+                    adminEmail = config.propertyOrNull("quietmetrix.auth.adminEmail")?.getString()?.takeIf { it.isNotBlank() },
+                    adminPassword = config.propertyOrNull("quietmetrix.auth.adminPassword")?.getString()?.takeIf { it.isNotBlank() },
                 ),
                 rateLimit = RateLimitConfig(
                     enabled = config.propertyOrNull("quietmetrix.rateLimit.enabled")?.getString()?.toBoolean() ?: (profile == Profile.CLOUD),
@@ -104,6 +106,8 @@ data class AuthConfig(
     val jwtIssuer: String,
     val jwtAudience: String,
     val sessionTtlHours: Int,
+    val adminEmail: String? = null,
+    val adminPassword: String? = null,
 )
 
 data class RateLimitConfig(

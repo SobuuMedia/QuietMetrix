@@ -32,6 +32,12 @@ fun Application.module() {
     configureStatusPages()
     configureSecurity(config)
 
+    // Seed an initial admin from QM_ADMIN_EMAIL / QM_ADMIN_PASSWORD on first run.
+    val userRepo: com.quietmetrix.server.persistence.UserRepository = get()
+    if (seedAdminUser(userRepo, config.auth.adminEmail, config.auth.adminPassword)) {
+        environment.log.info("Seeded initial admin user: ${config.auth.adminEmail}")
+    }
+
     val ingestChannel: IngestChannel = get()
     ingestChannel.start(this)
 
