@@ -1,0 +1,17 @@
+# Keep the Docker build context small and free of stale build outputs.
+.git
+.gradle
+.kotlin
+**/build
+kotlin-js-store
+**/node_modules
+.idea
+*.iml
+.DS_Store
+*.log
+.dev-ktor.log
+.dev-ktor.pid
+local.properties
+.env
+php-hosting/config.php
+samples/ios/**/xcuserdata

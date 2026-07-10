@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand / generic -->
+    <string name="brand">QuietMetrix</string>
+
+    <!-- Login screen -->
+    <string name="login_title">Iniciar sesión</string>
+    <string name="login_email_label">Correo electrónico</string>
+    <string name="login_password_label">Contraseña</string>
+    <string name="login_button">Iniciar sesión</string>
+    <string name="login_helper">¿Primera vez? Usa el correo y la contraseña de administrador configurados en tu archivo de configuración.</string>
+
+    <!-- Login errors -->
+    <string name="login_error_invalid_credentials">Correo o contraseña incorrectos.</string>
+    <string name="login_error_network">No se pudo conectar con el servidor. Comprueba tu conexión.</string>
+    <string name="login_error_server">El servidor devolvió un error. Inténtalo de nuevo en un momento.</string>
+    <string name="login_error_misconfigured">El servidor no está configurado correctamente. Contacta con el administrador.</string>
+    <string name="login_error_unknown">Algo salió mal. Inténtalo de nuevo.</string>
+
+    <!-- Tab info dialogs -->
+    <string name="tab_info_overview">Los eventos y pantallas principales muestran lo que más hacen tus usuarios. El gráfico diario sigue la tendencia de volumen en el período seleccionado. Todos los datos son agregados: no se expone ningún usuario individual.</string>
+    <string name="tab_info_events">Registro de eventos en orden cronológico inverso. Cada fila es un evento de analítica enviado por el SDK. Úsalo para inspeccionar props, pantallas y metadatos al depurar tu integración.</string>
+    <string name="tab_info_projects">Administra tus proyectos y claves de API. Cada proyecto tiene una clave única: crea proyectos separados para distintas apps, entornos (dev/staging/prod) o plataformas.</string>
+    <string name="tab_info_settings">Activa datos de demostración para pruebas en modo depuración. El interruptor solo aparece cuando el servidor corre en configuración de depuración; las implementaciones de producción lo ocultan por defecto.</string>
+    <string name="tab_info_flow">Las transiciones de pantalla muestran cómo navegan los usuarios tu app. Cada fila es una ruta común de una pantalla a la siguiente, agrupada por sesión. Una caída alta en un paso puede indicar fricción: investiga por qué los usuarios abandonan ahí.</string>
+    <string name="tab_info_live">Eventos entrantes en tiempo real. Este feed se actualiza cada pocos segundos para mostrar los eventos más recientes. Útil al integrar el SDK: observa los eventos aparecer segundos después de dispararse en tu app.</string>
+
+    <!-- UI elements -->
+    <string name="tab_info_content_description">Información</string>
+    <string name="create_project_dialog_title">Crear proyecto</string>
+    <string name="create_project_name_label">Nombre</string>
+    <string name="create_project_description_label">Descripción (opcional)</string>
+    <string name="create_project_button">Crear</string>
+    <string name="create_project_cancel">Cancelar</string>
+    <string name="create_project_action">Crear proyecto</string>
+
+    <!-- Navigation (side menu) -->
+    <string name="nav_overview">Resumen</string>
+    <string name="nav_events">Eventos</string>
+    <string name="nav_flow">Flujo</string>
+    <string name="nav_live">En vivo</string>
+    <string name="nav_projects">Proyectos</string>
+    <string name="nav_users">Usuarios</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="nav_menu_cd">Abrir menú de navegación</string>
+
+    <!-- Common actions -->
+    <string name="action_signout">Cerrar sesión</string>
+    <string name="action_dismiss">Descartar</string>
+    <string name="action_got_it">Entendido</string>
+    <string name="action_copy_api_key">Copiar clave de API</string>
+    <string name="action_refresh">Actualizar</string>
+
+    <!-- Generic states / placeholders -->
+    <string name="state_loading">Cargando</string>
+    <string name="value_none">—</string>
+    <string name="badge_demo">DEMO</string>
+    <string name="snackbar_api_key_copied">Clave de API copiada al portapapeles</string>
+
+    <!-- New project key dialog -->
+    <string name="project_created_title">Proyecto creado</string>
+    <string name="project_created_key_warning">Copia esta clave ahora: no se volverá a mostrar.</string>
+    <string name="project_created_api_key_label">Clave de API</string>
+
+    <!-- Donut chart -->
+    <string name="donut_total">Total</string>
+
+    <!-- Event meta line -->
+    <string name="event_meta_screen">Pantalla: %1$s</string>
+    <string name="event_meta_platform">Plataforma: %1$s</string>
+    <string name="event_meta_country">País: %1$s</string>
+    <string name="event_meta_language">Idioma: %1$s</string>
+    <string name="event_meta_session">Sesión: %1$s</string>
+
+    <!-- Pickers -->
+    <string name="picker_no_projects">Sin proyectos</string>
+    <string name="picker_select_project">Selecciona un proyecto</string>
+    <string name="picker_window">Últimos %1$d días</string>
+
+    <!-- Time-range options -->
+    <string name="range_1h">Última hora</string>
+    <string name="range_1d">Último día</string>
+    <string name="range_7d">Últimos 7 días</string>
+    <string name="range_30d">Últimos 30 días</string>
+    <string name="range_90d">Últimos 90 días</string>
+
+    <!-- KPI labels -->
+    <string name="kpi_events">Eventos</string>
+    <string name="kpi_offline_captured">Capturados sin conexión</string>
+    <string name="kpi_errors">Errores</string>
+    <string name="kpi_window">Período</string>
+    <string name="kpi_window_value">%1$d días</string>
+    <string name="kpi_sessions">Sesiones</string>
+    <string name="kpi_events_per_session">Eventos / sesión</string>
+    <string name="kpi_avg_duration">Duración media</string>
+
+    <!-- Card titles -->
+    <string name="card_daily_volume">Volumen diario</string>
+    <string name="card_top_events">Eventos principales</string>
+    <string name="card_top_screens">Pantallas principales</string>
+    <string name="card_screen_time">Tiempo medio en pantalla</string>
+    <string name="card_sessions_trend">Sesiones diarias</string>
+    <string name="card_countries">Países</string>
+    <string name="card_platforms">Plataformas</string>
+    <string name="card_device_classes">Clases de dispositivo</string>
+
+    <!-- Empty / loading states -->
+    <string name="state_no_data">Aún no hay datos.</string>
+    <string name="state_no_events">Aún no hay eventos.</string>
+    <string name="state_no_transitions">Aún no hay transiciones de pantalla.</string>
+    <string name="state_waiting_live">Esperando eventos…</string>
+    <string name="state_no_projects">Aún no hay proyectos: crea uno abajo.</string>
+
+    <!-- Events / tables -->
+    <string name="search_events">Buscar eventos</string>
+    <string name="col_event">Evento</string>
+    <string name="col_screen">Pantalla</string>
+    <string name="col_platform">Plataforma</string>
+    <string name="col_country">País</string>
+    <string name="col_time">Hora</string>
+    <string name="col_from">Desde</string>
+    <string name="col_to">Hasta</string>
+    <string name="col_count">Recuento</string>
+    <string name="col_device">Dispositivo</string>
+    <string name="col_session">Sesión</string>
+    <string name="col_duration">Tiempo en pantalla</string>
+    <string name="page_prev">Anterior</string>
+    <string name="page_next">Siguiente</string>
+    <string name="page_info">Página %1$d de %2$d</string>
+    <string name="badge_offline">sin conexión</string>
+
+    <!-- Events: explorer redesign -->
+    <string name="events_live">En vivo</string>
+    <string name="filter_all">Todos</string>
+    <string name="summary_total">Eventos totales</string>
+    <string name="summary_offline">Sin conexión</string>
+    <string name="summary_types">Tipos de evento</string>
+    <string name="summary_top_event">Evento principal</string>
+    <string name="summary_top_country">País principal</string>
+    <string name="detail_title">Detalle del evento</string>
+    <string name="detail_props">Propiedades</string>
+    <string name="detail_no_props">Sin propiedades</string>
+    <string name="label_language">Idioma</string>
+    <string name="label_sdk">Versión del SDK</string>
+    <string name="action_close">Cerrar</string>
+
+    <!-- Projects -->
+    <string name="projects_your">Tus proyectos</string>
+    <string name="projects_delete">Eliminar</string>
+    <string name="projects_delete_confirm_title">Eliminar proyecto</string>
+    <string name="projects_delete_confirm_body">¿Eliminar "%1$s"? Esto no se puede deshacer.</string>
+    <string name="projects_created">Creado %1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_appearance">Apariencia</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Oscuro</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_server_mode">Modo del servidor: %1$s</string>
+    <string name="server_mode_debug">depuración</string>
+    <string name="server_mode_production">producción</string>
+    <string name="settings_demo_title">Usar datos de demostración en este panel</string>
+    <string name="settings_demo_explanation">Disponible porque el servidor corre con DEBUG=true. Al activarlo, los gráficos y tablas muestran datos sintéticos en lugar de consultar la base de datos. No tiene efecto en implementaciones de producción.</string>
+    <string name="settings_refresh">Actualizar datos</string>
+    <string name="settings_about_title">Acerca de</string>
+    <string name="settings_about_body">QuietMetrix: un panel de analítica autoalojable y orientado a la privacidad.</string>
+
+    <!-- Projects: gestión de clave API -->
+    <string name="create_app_action">Nueva app</string>
+    <string name="api_key_label">Clave API</string>
+    <string name="action_regenerate">Regenerar</string>
+    <string name="action_copy">Copiar</string>
+    <string name="regenerate_confirm_title">¿Regenerar la clave API?</string>
+    <string name="regenerate_confirm_body">La clave API actual de "%1$s" dejará de funcionar de inmediato. Obtendrás una nueva clave para copiar en tus apps.</string>
+    <string name="regenerated_key_title">Nueva clave API</string>
+
+    <!-- Gestión de usuarios -->
+    <string name="tab_info_users">Gestiona quién puede acceder a QuietMetrix. Los administradores gestionan todo; los desarrolladores ven los proyectos asignados y pueden rotar claves API; los revisores tienen acceso de solo lectura a sus proyectos asignados.</string>
+    <string name="users_title">Usuarios</string>
+    <string name="users_invite_action">Invitar usuario</string>
+    <string name="users_email_label">Correo</string>
+    <string name="users_role_label">Rol</string>
+    <string name="role_admin">Administrador</string>
+    <string name="role_developer">Desarrollador</string>
+    <string name="role_reviewer">Revisor</string>
+    <string name="status_invited">Invitado</string>
+    <string name="status_active">Activo</string>
+    <string name="users_invite_send">Enviar invitación</string>
+    <string name="users_invite_cancel">Cancelar</string>
+    <string name="invite_link_title">Enlace de invitación</string>
+    <string name="invite_link_body">Comparte este enlace con el nuevo usuario: establecerá su propia contraseña para iniciar sesión.</string>
+    <string name="snackbar_invite_link_copied">Enlace de invitación copiado al portapapeles</string>
+    <string name="users_remove">Eliminar</string>
+    <string name="users_remove_confirm_title">Eliminar usuario</string>
+    <string name="users_remove_confirm_body">¿Eliminar a "%1$s"? Perderá el acceso de inmediato.</string>
+    <string name="users_empty">Aún no hay usuarios.</string>
+
+    <!-- Acceso a proyectos (asignación) -->
+    <string name="access_title">Acceso a proyectos</string>
+    <string name="access_pick_project">Proyecto</string>
+    <string name="access_add_user">Añadir usuario</string>
+    <string name="access_remove">Quitar</string>
+    <string name="access_empty">Ningún usuario asignado a este proyecto.</string>
+    <string name="access_hint">Asigna desarrolladores y revisores a los proyectos que deben ver.</string>
+
+    <!-- Pantalla de aceptación de invitación -->
+    <string name="invite_accept_title">Acepta tu invitación</string>
+    <string name="invite_accept_subtitle">Establece una contraseña para %1$s y termina de crear tu cuenta.</string>
+    <string name="invite_set_password">Contraseña</string>
+    <string name="invite_confirm_password">Confirmar contraseña</string>
+    <string name="invite_password_too_short">La contraseña debe tener al menos 8 caracteres.</string>
+    <string name="invite_password_mismatch">Las contraseñas no coinciden.</string>
+    <string name="invite_invalid_token">Esta invitación no es válida o ha expirado.</string>
+    <string name="invite_submit">Crear cuenta e iniciar sesión</string>
+    <string name="invite_back_to_login">Volver a iniciar sesión</string>
+    <string name="invite_loading">Comprobando tu invitación…</string>
+</resources>

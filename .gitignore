@@ -1,0 +1,38 @@
+.gradle/
+build/
+.idea/
+.kotlin/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.DS_Store
+kotlin-js-store/
+xcuserdata/
+**/build/
+
+# Logs
+*.log
+.dev-ktor.log
+.dev-ktor.pid
+
+# Local AI / agent tooling — never publish.
+.agents/
+.opencode/
+.claude/
+AGENTS.md
+FOUND_ISSUES.md
+skills-lock.json
+
+# Docker Compose local env — copy from docker/.env.example, never commit.
+.env
+
+# php-hosting: per-deployment secrets, never commit.
+php-hosting/config.php
+
+# Generated dashboard bundles — produced by `./gradlew :dashboard:installDashboard`.
+# Don't commit; let CI / the deploy step rebuild them.
+php-hosting/dashboard/*
+!php-hosting/dashboard/.gitkeep
+servers/ktor/src/main/resources/dashboard/
