@@ -59,20 +59,21 @@ class ProjectRoutesIntegrationTest {
     }
 
     @Test
-    fun `create project at limit returns 403 for free plan`() = testApplication {
+    fun `self-host imposes no project limit`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr2;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
         transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
         val userRepo = UserRepository(testDb)
-        userRepo.create("freeuser@test.com", "password")
+        userRepo.create("selfhost@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
         val quotaEnforcer = QuotaEnforcer(projectRepo)
-        projectRepo.create("Existing Project", null, 1L)
+        // Pre-create many projects; a self-host instance must never hit a paid-tier cap.
+        repeat(100) { i -> projectRepo.create("Project $i", null, 1L) }
 
         application {
             routing {
                 post("/api/v1/projects") {
                     val count = projectRepo.countByOwnerId(1L)
-                    if (!quotaEnforcer.checkProjectLimit("free", count)) {
+                    if (!quotaEnforcer.checkProjectLimit(null, count)) {
                         call.respondText("""{"error":"project_limit_reached"}""", ContentType.Application.Json, HttpStatusCode.Forbidden)
                         return@post
                     }
@@ -81,7 +82,7 @@ class ProjectRoutesIntegrationTest {
             }
         }
         val response = client.post("/api/v1/projects") { contentType(ContentType.Application.Json) }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.Created, response.status)
     }
 
     @Test

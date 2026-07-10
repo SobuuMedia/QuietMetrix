@@ -51,9 +51,9 @@
     <div id="toast" class="toast"></div>
 
     <script type="module">
-        // Import the wasmJs bundle built by ./gradlew :quietmetrix-core:wasmJsBrowserDevelopmentWebpack
+        // Import the wasmJs bundle built by ./gradlew :quietmetrix-sdk:wasmJsBrowserDevelopmentWebpack
         // Adjust the path below to match your local build output.
-        import { QuietMetrix, QuietMetrixConfig, trackEvent } from '../../quietmetrix-core/build/js/packages/quietmetrix-core/kotlin/quietmetrix-core.mjs';
+        import { QuietMetrix, QuietMetrixConfig, trackEvent } from '../../quietmetrix-sdk/build/js/packages/quietmetrix-sdk/kotlin/quietmetrix-sdk.mjs';
 
         const config = new QuietMetrixConfig(
             "qmweb_",       // storageKeyPrefix

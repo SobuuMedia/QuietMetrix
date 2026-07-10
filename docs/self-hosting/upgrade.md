@@ -12,13 +12,13 @@
 
 ```bash
 # 1. Back up
-docker compose -f docker/docker-compose.ktor.yml exec postgres pg_dump -U quietmetrix quietmetrix > backup_$(date +%Y%m%d).sql
+docker compose exec postgres pg_dump -U quietmetrix quietmetrix > backup_$(date +%Y%m%d).sql
 
 # 2. Pull the latest image
-docker compose -f docker/docker-compose.ktor.yml pull
+docker compose pull
 
 # 3. Restart — Flyway migrations run automatically on startup
-docker compose -f docker/docker-compose.ktor.yml up -d
+docker compose up -d
 
 # 4. Verify
 curl -s https://yourhost/api/v1/health | jq .
@@ -32,16 +32,16 @@ If a migration fails or the new version has issues:
 
 ```bash
 # 1. Stop the server
-docker compose -f docker/docker-compose.ktor.yml down
+docker compose down
 
 # 2. Restore the database
-cat backup_YYYYMMDD.sql | docker compose -f docker/docker-compose.ktor.yml exec -T postgres psql -U quietmetrix quietmetrix
+cat backup_YYYYMMDD.sql | docker compose exec -T postgres psql -U quietmetrix quietmetrix
 
-# 3. Pin to the previous version in docker-compose.ktor.yml
+# 3. Pin to the previous version in docker-compose.yml
 #    Change the image tag, e.g. quietmetrix:0.1.0 → quietmetrix:0.1.0
 
 # 4. Start the previous version
-docker compose -f docker/docker-compose.ktor.yml up -d
+docker compose up -d
 ```
 
 ## Shared Hosting (PHP + MySQL)
@@ -80,8 +80,7 @@ done
 | QuietMetrix Version | Min. Postgres | Min. MySQL | Notes |
 |--------------------|---------------|-------------|-------|
 | 0.1.x | 14 | 8.0 | Initial release |
-| 0.2.x | 14 | 8.0 | Adds batch tracking, consent endpoints |
-| 0.3.x | 15 | 8.0 | Adds billing tables (cloud profile only) |
+| 0.2.x | 16 | 8.0 | Adds batch tracking, consent endpoints, session enrichment |
 
 ## Breaking Changes
 

@@ -41,6 +41,13 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'users', 'invite_expires', 'VARCHAR(32) NULL');
     addColumnIfMissing($db, 'projects', 'description', 'VARCHAR(1000) NULL');
     addColumnIfMissing($db, 'projects', 'api_key_last4', 'CHAR(4) NULL');
+    // Abuse-defense Stage 2: per-project install-id salt (backfilled for existing projects).
+    addColumnIfMissing($db, 'projects', 'install_salt', 'CHAR(64) NULL');
+    // Stage 3: event-name allowlist
+    addColumnIfMissing($db, 'projects', 'strict_schema', "TINYINT(1) NOT NULL DEFAULT 0");
+    addColumnIfMissing($db, 'projects', 'allowed_events', 'JSON NULL');
+    // Backfill salts for any projects that predate the column.
+    $db->exec("UPDATE projects SET install_salt = SUBSTR(MD5(CONCAT(RAND(), UUID())), 1, 64) WHERE install_salt IS NULL");
     // events: device classification + time-on-screen. Existing installs created
     // before these columns existed must gain them, or inserts that reference them
     // fail and every tracked event 500s (silently dropping duration_ms/device_class).

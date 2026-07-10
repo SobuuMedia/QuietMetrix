@@ -53,31 +53,4 @@ class RateLimiter(private val config: RateLimitConfig, private val scope: Corout
         }
     }
 
-    inner class TokenBucket(private val rate: Int, private val burst: Int) {
-        private val lock = java.util.concurrent.locks.ReentrantLock()
-        private var tokens: Double = burst.toDouble()
-        private var lastRefill: Long = System.nanoTime()
-
-        fun tryConsume(): Boolean {
-            lock.lock()
-            return try {
-                refill()
-                if (tokens >= 1.0) {
-                    tokens -= 1.0
-                    true
-                } else false
-            } finally {
-                lock.unlock()
-            }
-        }
-
-        fun remaining(): Int = tokens.toInt().coerceAtLeast(0)
-
-        private fun refill() {
-            val now = System.nanoTime()
-            val elapsed = (now - lastRefill) / 1_000_000_000.0
-            tokens = (tokens + elapsed * rate).coerceAtMost(burst.toDouble())
-            lastRefill = now
-        }
     }
-}

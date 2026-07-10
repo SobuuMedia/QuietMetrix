@@ -19,6 +19,8 @@ require_once __DIR__ . '/src/db.php';
 require_once __DIR__ . '/src/jwt.php';
 require_once __DIR__ . '/src/auth.php';
 require_once __DIR__ . '/src/rateLimit.php';
+require_once __DIR__ . '/src/installs.php';
+require_once __DIR__ . '/src/quarantine.php';
 require_once __DIR__ . '/src/bootstrap.php';
 
 // ---------------------------------------------------------------------------

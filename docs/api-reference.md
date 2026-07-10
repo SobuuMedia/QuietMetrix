@@ -8,7 +8,7 @@ Both the PHP+MySQL and Ktor+Postgres backends implement this contract identicall
 
 ### API key (Tracking)
 
-Tracking endpoints use the `X-QM-Api-Key` header. API keys are per-project and safe to embed in client code.
+Tracking endpoints use the `X-QM-Api-Key` header. The API key is **publishable**: write-only and project-scoped, safe to embed in client code (browser bundles, mobile apps, F-Droid builds). It cannot read analytics or access admin routes. Rotate it via `POST /api/v1/projects/{id}/regenerate-key` (Bearer auth) when a published key is abused. See [Threat model & abuse defense](security/publishable-api-key.md).
 
 ```
 X-QM-Api-Key: qm_ak_abc123def456ghi789
@@ -89,13 +89,6 @@ Roles: `owner` (full control), `admin` (manage members and settings), `viewer` (
 
 - `GET /api/v1/projects/:id/events` — Paginated raw events
 - `GET /api/v1/projects/:id/aggregates` — Aggregated metrics
-
-### Billing (Cloud Only)
-
-- `POST /api/v1/billing/checkout` — Create checkout session
-- `POST /api/v1/billing/webhook/stripe` — Stripe webhook
-- `POST /api/v1/billing/webhook/adyen` — Adyen webhook
-- `GET /api/v1/billing/usage` — Current period usage
 
 ## Error Responses
 

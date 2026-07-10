@@ -62,6 +62,32 @@ class EventValidator {
         }
         return ValidationResult.Valid
     }
+
+    /**
+     * Stage 3 — per-project event-name allowlist (opt-in via `projects.strict_schema`).
+     * Call after [validate] / [validateBatch]. An empty [allowedEvents] set is treated as
+     * "not enforceable" (returns Valid) so callers can pass the configured allowlist without
+     * a separate enabled check.
+     */
+    fun validateStrict(request: TrackEventRequest, allowedEvents: Set<String>): ValidationResult {
+        if (allowedEvents.isEmpty()) return ValidationResult.Valid
+        return if (request.event in allowedEvents) {
+            ValidationResult.Valid
+        } else {
+            ValidationResult.Invalid(listOf("unknown_event: ${request.event}"))
+        }
+    }
+
+    fun validateBatchStrict(events: List<TrackEventRequest>, allowedEvents: Set<String>): ValidationResult {
+        if (allowedEvents.isEmpty()) return ValidationResult.Valid
+        events.forEachIndexed { index, event ->
+            val result = validateStrict(event, allowedEvents)
+            if (result is ValidationResult.Invalid) {
+                return ValidationResult.Invalid(result.errors.map { "events[$index]: $it" })
+            }
+        }
+        return ValidationResult.Valid
+    }
 }
 
 sealed class ValidationResult {

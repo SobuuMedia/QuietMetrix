@@ -9,6 +9,6 @@ data class Project(
     val name: String,
     val ownerUserId: String,
     val apiKey: String,
-    val planId: Plan? = null,
+    val planId: String? = null,
     val createdAt: Instant,
 )

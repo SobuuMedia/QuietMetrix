@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         // The QuietMetrix XCFramework is produced by the KMP build:
-        //   ./gradlew :quietmetrix-core:assembleQuietMetrixXCFramework
+        //   ./gradlew :quietmetrix-sdk:assembleQuietMetrixXCFramework
         // Copy the framework into Frameworks/ or link it from the output path.
     ],
     targets: [

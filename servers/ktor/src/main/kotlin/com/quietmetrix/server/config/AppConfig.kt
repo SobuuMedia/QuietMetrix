@@ -7,7 +7,8 @@ data class AppConfig(
     val db: DbConfig,
     val auth: AuthConfig,
     val rateLimit: RateLimitConfig,
-    val billing: BillingConfig?,
+    val ipRateLimit: IpRateLimitConfig = IpRateLimitConfig(),
+    val installRateLimit: InstallRateLimitConfig = InstallRateLimitConfig(),
     val cors: CorsConfig = CorsConfig(),
     val trustedProxies: Set<String> = emptySet(),
 ) {
@@ -21,17 +22,6 @@ data class AppConfig(
             val profile = Profile.entries.firstOrNull {
                 it.name.equals(profileStr, ignoreCase = true)
             } ?: Profile.SELFHOST
-
-            val billingConfig = if (profile == Profile.CLOUD) {
-                BillingConfig(
-                    provider = config.property("quietmetrix.billing.provider").getString(),
-                    stripeSecretKey = config.propertyOrNull("quietmetrix.billing.stripeSecretKey")?.getString(),
-                    stripeWebhookSecret = config.propertyOrNull("quietmetrix.billing.stripeWebhookSecret")?.getString(),
-                    adyenApiKey = config.propertyOrNull("quietmetrix.billing.adyenApiKey")?.getString(),
-                    adyenMerchantAccount = config.propertyOrNull("quietmetrix.billing.adyenMerchantAccount")?.getString(),
-                    adyenHmacKey = config.propertyOrNull("quietmetrix.billing.adyenHmacKey")?.getString(),
-                )
-            } else null
 
             val appConfig = AppConfig(
                 profile = profile,
@@ -53,9 +43,20 @@ data class AppConfig(
                     requestsPerSecond = config.propertyOrNull("quietmetrix.rateLimit.requestsPerSecond")?.getString()?.toInt() ?: 10,
                     burstPerMinute = config.propertyOrNull("quietmetrix.rateLimit.burstPerMinute")?.getString()?.toInt() ?: 60,
                 ),
-                billing = billingConfig,
+                ipRateLimit = IpRateLimitConfig(
+                    enabled = config.propertyOrNull("quietmetrix.ipRateLimit.enabled")?.getString()?.toBoolean() ?: true,
+                    requestsPerSecond = config.propertyOrNull("quietmetrix.ipRateLimit.requestsPerSecond")?.getString()?.toInt() ?: 5,
+                    burstPerMinute = config.propertyOrNull("quietmetrix.ipRateLimit.burstPerMinute")?.getString()?.toInt() ?: 60,
+                ),
+                installRateLimit = InstallRateLimitConfig(
+                    enabled = config.propertyOrNull("quietmetrix.installRateLimit.enabled")?.getString()?.toBoolean() ?: true,
+                    requestsPerSecond = config.propertyOrNull("quietmetrix.installRateLimit.requestsPerSecond")?.getString()?.toInt() ?: 1,
+                    burstPerMinute = config.propertyOrNull("quietmetrix.installRateLimit.burstPerMinute")?.getString()?.toInt() ?: 30,
+                    rampEventThreshold = config.propertyOrNull("quietmetrix.installRateLimit.rampEventThreshold")?.getString()?.toLong() ?: 500L,
+                    rampWindowMinutes = config.propertyOrNull("quietmetrix.installRateLimit.rampWindowMinutes")?.getString()?.toLong() ?: 10L,
+                ),
                 cors = CorsConfig(
-                    allowedOrigins = config.propertyOrNull("quietmetrix.cors.allowedOrigins")?.getList() ?: emptyList(),
+                    allowedOrigins = parseOrigins(config.propertyOrNull("quietmetrix.cors.allowedOrigins")),
                 ),
                 trustedProxies = config.propertyOrNull("quietmetrix.security.trustedProxies")?.getList()?.toSet() ?: emptySet(),
             )
@@ -68,12 +69,20 @@ data class AppConfig(
             require(appConfig.cors.allowedOrigins.isNotEmpty()) {
                 "QM_CORS_ALLOWED_ORIGINS must be set. Provide a comma-separated list of allowed origins."
             }
-            if (appConfig.isCloud) {
-                require(!appConfig.billing?.stripeWebhookSecret.isNullOrBlank() || !appConfig.billing?.adyenHmacKey.isNullOrBlank()) {
-                    "CLOUD profile requires QM_STRIPE_WEBHOOK_SECRET or QM_ADYEN_HMAC_KEY"
-                }
-            }
             return appConfig
+        }
+
+        /**
+         * Accepts either a HOCON list (as used in tests / .conf files) or a single
+         * comma-separated string (as delivered by the QM_CORS_ALLOWED_ORIGINS env var).
+         */
+        private fun parseOrigins(value: io.ktor.server.config.ApplicationConfigValue?): List<String> {
+            if (value == null) return emptyList()
+            return try {
+                value.getList()
+            } catch (_: Exception) {
+                value.getString().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            }
         }
     }
 }
@@ -103,13 +112,29 @@ data class RateLimitConfig(
     val burstPerMinute: Int,
 )
 
-data class BillingConfig(
-    val provider: String,
-    val stripeSecretKey: String?,
-    val stripeWebhookSecret: String?,
-    val adyenApiKey: String?,
-    val adyenMerchantAccount: String?,
-    val adyenHmacKey: String?,
+/**
+ * Per-IP ingest throttling (abuse defense Stage 1).
+ * Keyed on the trusted-proxy-validated client IP. Defaults enabled — this is the primary
+ * anti-pollution control for publishable API keys (F-Droid etc.). See
+ * docs/security/publishable-api-key.md.
+ */
+data class IpRateLimitConfig(
+    val enabled: Boolean = true,
+    val requestsPerSecond: Int = 5,
+    val burstPerMinute: Int = 60,
+)
+
+/**
+ * Per-install ingest throttling + ramp-up detector (abuse defense Stage 2). Keyed on the
+ * salt-hashed `anonymousId`. A brand-new install that fires more than [rampEventThreshold]
+ * events within [rampWindowMinutes] is auto-revoked. See docs/security/publishable-api-key.md.
+ */
+data class InstallRateLimitConfig(
+    val enabled: Boolean = true,
+    val requestsPerSecond: Int = 1,
+    val burstPerMinute: Int = 30,
+    val rampEventThreshold: Long = 500L,
+    val rampWindowMinutes: Long = 10L,
 )
 
 fun ApplicationConfig.toAppConfig(): AppConfig = AppConfig.from(this)

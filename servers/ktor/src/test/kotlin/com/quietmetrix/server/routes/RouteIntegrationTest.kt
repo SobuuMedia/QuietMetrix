@@ -19,6 +19,7 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -35,18 +36,22 @@ import kotlin.test.assertTrue
 class RouteIntegrationTest {
 
     @Test
-    fun `health endpoint returns ok`() = testApplication {
+    fun `health endpoint serializes HealthResponse`() = testApplication {
         application {
             install(ContentNegotiation) { json(Json { encodeDefaults = true; ignoreUnknownKeys = true }) }
             routing {
                 get("/health") {
-                    call.respondText("""{"ok":true,"version":"0.1.0"}""", ContentType.Application.Json)
+                    // Must respond with a @Serializable type — a mixed-type map
+                    // (Boolean + String) fails kotlinx.serialization at runtime.
+                    call.respond(com.quietmetrix.server.domain.HealthResponse(ok = true, version = "0.2.0"))
                 }
             }
         }
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
-        assertTrue(response.bodyAsText().contains("ok"))
+        val body = response.bodyAsText()
+        assertTrue(body.contains("\"ok\":true"))
+        assertTrue(body.contains("\"version\":\"0.2.0\""))
     }
 
     @Test

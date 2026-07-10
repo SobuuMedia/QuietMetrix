@@ -248,6 +248,13 @@ fun Routing.configureProjectRoutes() {
 
                 projectRepo.updateName(id, request.name)
 
+                // Stage 3 — optional event-name allowlist configuration.
+                if (request.strictSchema != null || request.allowedEvents != null) {
+                    val enabled = request.strictSchema ?: projectRepo.getStrictSchema(id).enabled
+                    val allowed = request.allowedEvents?.toSet() ?: projectRepo.getStrictSchema(id).allowedEvents
+                    projectRepo.setStrictSchema(id, enabled, allowed)
+                }
+
                 call.respond(ProjectResponse(
                     id = "proj_${project["id"]}",
                     name = request.name,

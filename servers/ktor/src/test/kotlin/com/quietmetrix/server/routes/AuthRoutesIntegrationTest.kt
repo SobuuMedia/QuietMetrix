@@ -62,7 +62,6 @@ class AuthRoutesIntegrationTest {
         db = DbConfig("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "sa", "", "org.h2.Driver", 5),
         auth = AuthConfig("integration-test-secret-key-do-not-use-ever-64-chars!!", "quietmetrix", "quietmetrix-api", 2),
         rateLimit = RateLimitConfig(enabled = false, 10, 60),
-        billing = null,
     )
 
     private fun Application.testModule(config: AppConfig) {

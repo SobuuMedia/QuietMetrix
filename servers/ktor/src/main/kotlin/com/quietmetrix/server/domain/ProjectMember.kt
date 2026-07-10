@@ -1,5 +1,6 @@
 package com.quietmetrix.server.domain
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -20,6 +21,8 @@ data class AddMemberRequest(
 @Serializable
 data class UpdateProjectRequest(
     val name: String,
+    @SerialName("strict_schema") val strictSchema: Boolean? = null,
+    @SerialName("allowed_events") val allowedEvents: List<String>? = null,
 )
 
 @Serializable

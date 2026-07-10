@@ -9,7 +9,7 @@ Privacy-respecting analytics for every platform. Open-source, self-hostable, GDP
     ```bash
     git clone https://github.com/sobuumedia/quietmetrix.git
     cd quietmetrix
-    docker compose -f docker/docker-compose.ktor.yml up -d
+    docker compose up -d
     # Visit https://yourhost/setup to create your first admin user
     ```
 

@@ -9,6 +9,5 @@ fun Routing.configureAllRoutes(config: AppConfig) {
     configureUserRoutes(config)
     configureProjectRoutes()
     configureDashboardRoutes()
-    configureBillingRoutes(config)
     configureStaticDashboardRoutes()
 }

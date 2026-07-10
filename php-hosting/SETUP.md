@@ -38,7 +38,7 @@ In the IONOS control panel:
 
 1. **Create the MySQL database** (Hosting → Databases → Create database).
    Note down the host, database name, user, and password — IONOS gives you
-   real values like `db5020162947.hosting-data.io` / `dbs15517982`.
+   values shaped like `db<XXXXXXXXXX>.hosting-data.io` / `dbs<XXXXXXXX>`.
 2. **Pick the domain or subdomain** you want QuietMetrix on (e.g.
    `analytics.yourdomain.com`) and point its document root at the folder you
    are about to upload to (e.g. `/quietmetrix/`).
@@ -51,9 +51,9 @@ In the IONOS control panel:
 Open `config.php` and fill in:
 
 ```php
-define('DB_HOST', 'db5020162947.hosting-data.io');   // from IONOS panel
-define('DB_NAME', 'dbs15517982');
-define('DB_USER', 'dbu1128638');
+define('DB_HOST', 'db<XXXXXXXXXX>.hosting-data.io');   // from IONOS panel
+define('DB_NAME', 'dbs<XXXXXXXX>');
+define('DB_USER', 'dbu<XXXXXXX>');
 define('DB_PASS', 'your-database-password');
 
 define('ADMIN_EMAIL',    'you@yourdomain.com');
@@ -258,7 +258,7 @@ will apply them in order on first request after the upload.
 Recommended IONOS backup approach:
 
 ```bash
-mysqldump -h db5020162947.hosting-data.io -u dbu1128638 -p dbs15517982 \
+mysqldump -h db<XXXXXXXXXX>.hosting-data.io -u dbu<XXXXXXX> -p dbs<XXXXXXXX> \
     | gzip > qm-backup-$(date +%F).sql.gz
 ```
 

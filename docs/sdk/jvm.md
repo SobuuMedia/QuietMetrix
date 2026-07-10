@@ -6,7 +6,7 @@ Add the QuietMetrix dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-core:0.2.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
 }
 ```
 
@@ -15,7 +15,7 @@ For Maven projects, add to your `pom.xml`:
 ```xml
 <dependency>
     <groupId>com.quietmetrix</groupId>
-    <artifactId>quietmetrix-core-jvm</artifactId>
+    <artifactId>quietmetrix-sdk-jvm</artifactId>
     <version>0.2.0</version>
 </dependency>
 ```

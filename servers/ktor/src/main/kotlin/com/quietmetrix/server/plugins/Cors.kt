@@ -13,7 +13,19 @@ fun Application.configureCors(config: AppConfig) {
         require(origins.isNotEmpty()) {
             "QM_CORS_ALLOWED_ORIGINS must be set. Provide a comma-separated list of allowed origins."
         }
-        origins.forEach { allowHost(it, schemes = listOf("http", "https")) }
+        // Ktor's allowHost expects a bare host (no scheme). Accept full origins
+        // like "http://localhost:8080" and split off the scheme.
+        origins.forEach { origin ->
+            val trimmed = origin.trim()
+            when {
+                trimmed.startsWith("http://") ->
+                    allowHost(trimmed.removePrefix("http://"), schemes = listOf("http"))
+                trimmed.startsWith("https://") ->
+                    allowHost(trimmed.removePrefix("https://"), schemes = listOf("https"))
+                else ->
+                    allowHost(trimmed, schemes = listOf("http", "https"))
+            }
+        }
         allowCredentials = true
         allowMethod(HttpMethod.Get)
         allowMethod(HttpMethod.Post)

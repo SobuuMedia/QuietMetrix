@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  repo-hygiene:
+    name: Repo Hygiene (no private infra strings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for leaked private infrastructure strings
+        run: ./scripts/check-repo-hygiene.sh
+
+  sdk-tests:
+    name: SDK (Kotlin Multiplatform) Tests
+    # The SDK's unit suite runs on the iOS simulator target, which needs macOS.
+    # Some androidMain tests require a real Android Context and only pass under
+    # instrumentation, so the host JVM / Android-host test task is not used here.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Run SDK unit tests
+        run: ./gradlew :quietmetrix-sdk:iosSimulatorArm64Test
+
+  ktor-tests:
+    name: Ktor Server Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Run Ktor server tests
+        run: ./gradlew :servers:ktor:test
+
+  php-tests:
+    name: PHP Server Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: php-hosting
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo
+          coverage: none
+
+      - name: Validate PHP syntax
+        run: |
+          php -l index.php
+          php -l src/*.php
+          php -l src/routes/*.php
+
+      - name: Run smoke test
+        run: |
+          cp config.example.php config.php
+          php -S localhost:8081 &
+          sleep 2
+          curl -sSf http://localhost:8081/api/v1/health || exit 1

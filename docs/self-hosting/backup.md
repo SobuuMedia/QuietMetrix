@@ -6,7 +6,7 @@
 
 ```bash
 # Single backup
-docker compose -f docker/docker-compose.ktor.yml exec postgres pg_dump -U quietmetrix quietmetrix > backup_$(date +%Y%m%d).sql
+docker compose exec postgres pg_dump -U quietmetrix quietmetrix > backup_$(date +%Y%m%d).sql
 ```
 
 ### Automated Daily Backups
@@ -14,15 +14,15 @@ docker compose -f docker/docker-compose.ktor.yml exec postgres pg_dump -U quietm
 Add to your server's crontab:
 
 ```bash
-0 2 * * * docker compose -f /path/to/quietmetrix/docker/docker-compose.ktor.yml exec -T postgres pg_dump -U quietmetrix quietmetrix | gzip > /backups/qm_$(date +\%Y\%m\%d).sql.gz
+0 2 * * * docker compose exec -T postgres pg_dump -U quietmetrix quietmetrix | gzip > /backups/qm_$(date +\%Y\%m\%d).sql.gz
 ```
 
 ### Config Backup
 
-The Ktor server is configured entirely via environment variables. Back up your `docker-compose.ktor.yml` and `.env` file:
+The Ktor server is configured entirely via environment variables. Back up your `docker-compose.yml` and `.env` file:
 
 ```bash
-cp docker/docker-compose.ktor.yml ~/backups/
+cp docker-compose.yml .env ~/backups/
 cp .env ~/backups/
 ```
 
@@ -30,17 +30,17 @@ cp .env ~/backups/
 
 ```bash
 # Stop the server to prevent writes during restore
-docker compose -f docker/docker-compose.ktor.yml stop ktor
+docker compose stop ktor
 
 # Drop and recreate the database
-docker compose -f docker/docker-compose.ktor.yml exec postgres psql -U quietmetrix -c "DROP DATABASE quietmetrix;"
-docker compose -f docker/docker-compose.ktor.yml exec postgres psql -U quietmetrix -c "CREATE DATABASE quietmetrix;"
+docker compose exec postgres psql -U quietmetrix -c "DROP DATABASE quietmetrix;"
+docker compose exec postgres psql -U quietmetrix -c "CREATE DATABASE quietmetrix;"
 
 # Restore from backup
-cat backup_YYYYMMDD.sql | docker compose -f docker/docker-compose.ktor.yml exec -T postgres psql -U quietmetrix quietmetrix
+cat backup_YYYYMMDD.sql | docker compose exec -T postgres psql -U quietmetrix quietmetrix
 
 # Start the server
-docker compose -f docker/docker-compose.ktor.yml start ktor
+docker compose start ktor
 ```
 
 ### Point-in-Time Recovery (PITR)

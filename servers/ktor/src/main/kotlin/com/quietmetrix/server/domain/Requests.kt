@@ -52,6 +52,12 @@ data class ErrorResponse(
 )
 
 @Serializable
+data class HealthResponse(
+    val ok: Boolean = true,
+    val version: String,
+)
+
+@Serializable
 data class LoginRequest(
     val email: String,
     val password: String,

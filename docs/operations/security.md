@@ -112,7 +112,7 @@ If the JWT secret is rotated, all existing admin sessions are invalidated and us
 - In Docker, the Postgres container is on an internal network and not exposed to the host by default
 
 ```yaml
-# docker-compose.ktor.yml — Postgres is not exposed to the host
+# docker-compose.yml — Postgres is not exposed to the host
 services:
   postgres:
     # ports: are intentionally omitted
@@ -145,4 +145,4 @@ QuietMetrix projects support three roles for team collaboration:
 
 - Only the **owner** can delete a project or transfer ownership.
 - An **admin** cannot remove the owner or promote/demote other members.
-- A **viewer** has no access to billing, project settings, or member management.
+- A **viewer** has no access to project settings or member management.

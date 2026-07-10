@@ -8,43 +8,57 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/sobuumedia/quietmetrix.git
-cd quietmetrix
-docker compose -f docker/docker-compose.ktor.yml up -d
+git clone https://github.com/SobuuMedia/QuietMetrix.git
+cd QuietMetrix
+cp docker/.env.example .env      # set QM_DB_PASSWORD and QM_JWT_SECRET
+docker compose up --build
 ```
 
-This starts three containers:
-- **ktor** — The Kotlin+Ktor analytics server on port 8080
-- **postgres** — PostgreSQL 16 database
-- **caddy** — Reverse proxy with automatic HTTPS
+This runs three services in order:
+
+- **postgres** — PostgreSQL 16 (healthchecked).
+- **migrate** — a one-shot Flyway job that applies `servers/ktor/migrations/`,
+  then exits.
+- **ktor** — builds the Wasm dashboard and the fat jar, then serves the API and
+  dashboard on port 8080.
+
+After startup:
+
+- API: <http://localhost:8080/api/v1/health>
+- Dashboard: <http://localhost:8080/dashboard/>
 
 ## Environment Variables
 
+Set these in the repo-root `.env` file (copied from `docker/.env.example`):
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `QM_PROFILE` | `selfhost` | `selfhost` or `cloud` |
-| `QM_DB_URL` | `jdbc:postgresql://postgres:5432/quietmetrix` | Database JDBC URL |
-| `QM_DB_USER` | `quietmetrix` | Database username |
-| `QM_DB_PASSWORD` | `quietmetrix` | Database password |
-| `QM_JWT_SECRET` | `change-me-in-production` | JWT signing secret |
-| `QM_RATE_LIMIT_ENABLED` | `false` (selfhost) | Enable rate limiting |
+| `QM_DB_PASSWORD` | *(required)* | Postgres password (shared by all services) |
+| `QM_JWT_SECRET` | *(required)* | JWT signing secret — `openssl rand -hex 32` |
+| `QM_CORS_ALLOWED_ORIGINS` | `http://localhost:8080` | Comma-separated browser origins allowed to call the API |
 
 ## First-time Setup
 
-1. Visit `https://yourhost/setup` to create an admin user and run database migrations.
-2. Create a project via the admin API.
-3. Copy the API key into your SDK configuration.
+1. Create an admin user (bcrypt-hashed) with a direct DB insert — see the
+   [main README](../../README.md#first-time-setup-admin--projects).
+2. Log in at `/dashboard/` and create a project.
+3. Copy the project's API key into your SDK configuration.
+
+## TLS / reverse proxy
+
+For production HTTPS, front the Ktor service with a reverse proxy such as Caddy
+(see `docker/caddy/Caddyfile`) terminating TLS and forwarding to `ktor:8080`.
 
 ## Backups
 
 ```bash
-docker compose -f docker/docker-compose.ktor.yml exec postgres pg_dump -U quietmetrix quietmetrix > backup.sql
+docker compose exec postgres pg_dump -U quietmetrix quietmetrix > backup.sql
 ```
 
 ## Upgrading
 
 ```bash
-docker compose -f docker/docker-compose.ktor.yml pull
-docker compose -f docker/docker-compose.ktor.yml up -d
-# Flyway migrations run automatically on startup
+git pull
+docker compose up --build -d
+# The migrate service applies any new Flyway migrations before Ktor restarts.
 ```

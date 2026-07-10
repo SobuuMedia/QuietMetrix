@@ -5,22 +5,9 @@
         </encoder>
     </appender>
 
-    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
-    </appender>
-
     <logger name="com.quietmetrix" level="INFO"/>
 
-    <if condition='property("QM_PROFILE").equals("cloud")'>
-        <then>
-            <root level="INFO">
-                <appender-ref ref="JSON"/>
-            </root>
-        </then>
-        <else>
-            <root level="INFO">
-                <appender-ref ref="STDOUT"/>
-            </root>
-        </else>
-    </if>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
 </configuration>

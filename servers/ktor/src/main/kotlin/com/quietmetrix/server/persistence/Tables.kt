@@ -34,6 +34,15 @@ object Projects : Table("projects") {
     // Non-sensitive last 4 chars of the plaintext key, for masked display in the
     // dashboard. The full key is never recoverable (only hashes are stored).
     val apiKeyLast4 = varchar("api_key_last4", 4).nullable()
+    // Per-project salt used to hash install `anonymousId` values before storage in
+    // `install_meta` / audit tables. Rotated on API-key regeneration (old install rows are
+    // discarded at rotation). See docs/security/publishable-api-key.md — Privacy note.
+    val installSalt = varchar("install_salt", 64).nullable()
+    // Stage 3 — opt-in event-name allowlist. When `strict_schema` is true, ingest rejects
+    // events whose name is not in `allowed_events` (JSON array). Bounded blast radius for
+    // a publishable API key. See docs/security/publishable-api-key.md.
+    val strictSchema = bool("strict_schema").default(false)
+    val allowedEvents = text("allowed_events").nullable()
     val planId = varchar("plan_id", 50).nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val deletedAt = datetime("deleted_at").nullable()
@@ -106,6 +115,25 @@ object UsageCounters : Table("usage_counters") {
     override val primaryKey = PrimaryKey(projectId, period)
 }
 
+object InstallMeta : Table("install_meta") {
+    val id = long("id").autoIncrement()
+    val projectId = long("project_id").references(Projects.id)
+    // Salted SHA-256 hex of the SDK's `anonymousId`. Never the raw id. See
+    // docs/security/publishable-api-key.md — Privacy note.
+    val anonymousIdHash = varchar("anonymous_id_hash", 64)
+    val firstSeenAt = datetime("first_seen_at").clientDefault { LocalDateTime.now() }
+    val lastSeenAt = datetime("last_seen_at").clientDefault { LocalDateTime.now() }
+    val eventCount = long("event_count").default(0L)
+    val revoked = bool("revoked").default(false)
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(projectId, anonymousIdHash)
+        index(false, projectId, revoked)
+    }
+}
+
 object ProjectMembers : Table("project_members") {
     val id = long("id").autoIncrement()
     val projectId = long("project_id").references(Projects.id)
@@ -118,6 +146,33 @@ object ProjectMembers : Table("project_members") {
     init {
         uniqueIndex(projectId, userId)
     }
+}
+
+object EventsQuarantine : Table("events_quarantine") {
+    val id = long("id").autoIncrement()
+    val projectId = long("project_id").references(Projects.id)
+    val payload = text("payload")  // JSON-serialised TrackEventRequest, for replay on release
+    val quarantineReason = varchar("quarantine_reason", 50)
+    val quarantineDetail = text("quarantine_detail").nullable()
+    val clientIp = varchar("client_ip", 45).nullable()
+    val anonymousIdHash = varchar("anonymous_id_hash", 64).nullable()
+    val quarantinedAt = datetime("quarantined_at").clientDefault { LocalDateTime.now() }
+    override val primaryKey = PrimaryKey(id)
+    init { index(false, projectId, quarantinedAt) }
+}
+
+object IngestAudit : Table("ingest_audit") {
+    val id = long("id").autoIncrement()
+    val projectId = long("project_id").references(Projects.id)
+    val apiKeyLast4 = varchar("api_key_last4", 4).nullable()
+    val clientIp = varchar("client_ip", 45).nullable()
+    val anonymousIdHash = varchar("anonymous_id_hash", 64).nullable()
+    val eventName = varchar("event_name", 255)
+    val disposition = varchar("disposition", 20)
+    val reason = text("reason").nullable()
+    val auditedAt = datetime("audited_at").clientDefault { LocalDateTime.now() }
+    override val primaryKey = PrimaryKey(id)
+    init { index(false, projectId, auditedAt) }
 }
 
 object Sessions : Table("sessions") {

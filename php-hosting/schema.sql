@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS projects (
     owner_user_id   VARCHAR(36)  NOT NULL,
     api_key_hash    CHAR(64)     NOT NULL,    -- SHA-256 hex of the random api token
     api_key_last4   CHAR(4)      NULL,         -- non-sensitive, for masked display
+    install_salt    CHAR(64)     NULL,         -- per-project salt for hashing install ids (Stage 2)
+    -- Stage 3 — opt-in event-name allowlist. When strict_schema=1, only events whose name
+    -- is in the allowed_events JSON array are accepted. Bounded blast radius for
+    -- publishable API keys (F-Droid etc.).
+    strict_schema   TINYINT(1)   NOT NULL DEFAULT 0,
+    allowed_events  JSON         NULL,
     plan_id         VARCHAR(50)  NULL,         -- nullable, cloud-only field
     created_at      VARCHAR(32)  NOT NULL,
     PRIMARY KEY (id),
@@ -80,4 +86,51 @@ CREATE TABLE IF NOT EXISTS usage_counters (
     events_count BIGINT      NOT NULL DEFAULT 0,
     PRIMARY KEY (project_id, period),
     CONSTRAINT fk_uc_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Abuse-defense Stage 2: per-install tracking. The SDK's anonymousId is salt-hashed
+-- (projects.install_salt) before storage — the raw id is never stored. See
+-- docs/security/publishable-api-key.md — Privacy note.
+CREATE TABLE IF NOT EXISTS install_meta (
+    id                BIGINT       NOT NULL AUTO_INCREMENT,
+    project_id        VARCHAR(36)  NOT NULL,
+    anonymous_id_hash CHAR(64)     NOT NULL,
+    first_seen_at     VARCHAR(32)  NOT NULL,
+    last_seen_at      VARCHAR(32)  NOT NULL,
+    event_count       BIGINT       NOT NULL DEFAULT 0,
+    revoked           TINYINT(1)   NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_install_meta_project_install (project_id, anonymous_id_hash),
+    KEY idx_install_meta_project_revoked (project_id, revoked),
+    CONSTRAINT fk_install_meta_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Abuse-defense Stage 4: quarantine + audit tables. See docs/security/publishable-api-key.md.
+CREATE TABLE IF NOT EXISTS events_quarantine (
+    id                  BIGINT       NOT NULL AUTO_INCREMENT,
+    project_id          VARCHAR(36)  NOT NULL,
+    payload             TEXT         NOT NULL,
+    quarantine_reason   VARCHAR(50)  NOT NULL,
+    quarantine_detail   TEXT,
+    client_ip           VARCHAR(45),
+    anonymous_id_hash   CHAR(64),
+    quarantined_at      VARCHAR(32)  NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_quarantine_project_time (project_id, quarantined_at),
+    CONSTRAINT fk_q_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ingest_audit (
+    id                  BIGINT       NOT NULL AUTO_INCREMENT,
+    project_id          VARCHAR(36)  NOT NULL,
+    api_key_last4       CHAR(4),
+    client_ip           VARCHAR(45),
+    anonymous_id_hash   CHAR(64),
+    event_name          VARCHAR(255) NOT NULL,
+    disposition         VARCHAR(20)  NOT NULL,
+    reason              TEXT,
+    audited_at          VARCHAR(32)  NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_audit_project_time (project_id, audited_at),
+    CONSTRAINT fk_audit_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

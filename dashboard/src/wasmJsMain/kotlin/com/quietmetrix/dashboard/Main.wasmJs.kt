@@ -43,8 +43,8 @@ private fun isAllowedApiBase(url: String): Boolean {
     if (url.startsWith("https://localhost:")) return true
     if (url.startsWith("http://127.0.0.1:")) return true
     if (url.startsWith("https://127.0.0.1:")) return true
-    // Production domain
-    if (url.startsWith("https://quietmetrix.getsobuu.com")) return true
+    // Production runs same-origin (empty string above), so no host is hardcoded
+    // here. The `?api=` override is a local-dev convenience only.
     return false
 }
 

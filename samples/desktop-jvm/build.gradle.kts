@@ -15,6 +15,6 @@ application {
 }
 
 dependencies {
-    implementation(project(":quietmetrix-core"))
+    implementation(project(":quietmetrix-sdk"))
     implementation(libs.kotlinx.coroutines.core)
 }

@@ -35,11 +35,11 @@ Include the script tag in your HTML. The SDK attaches to `window.QuietMetrix`:
 
 ### Kotlin/Wasm (Multiplatform)
 
-If you are sharing Kotlin code across Android, iOS, and Web targets, the `wasmJs` target is already included in `quietmetrix-core`:
+If you are sharing Kotlin code across Android, iOS, and Web targets, the `wasmJs` target is already included in `quietmetrix-sdk`:
 
 ```kotlin
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-core:0.2.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
 }
 ```
 

@@ -31,6 +31,11 @@ define('JWT_REFRESH_EXPIRY_DAYS', 2);
 // requests, always pin to the dashboard's exact origin URL in production.
 define('ALLOWED_ORIGIN', '*');
 
+// Stage 5 — server-side origin allowlist for ingest routes (/track*). Comma-separated
+// origins allowed to post events when an Origin/Referer header is present (browser
+// traffic). Mobile SDKs send no Origin and are unaffected. Empty = do not enforce.
+define('ALLOWED_ORIGINS', '');
+
 // Content-Security-Policy connect-src directive. Defaults to 'self'.
 // Change this if your dashboard is served from a different origin than the API.
 define('CSP_CONNECT_SRC', "'self'");
@@ -66,6 +71,21 @@ define('DEBUG', false);
 define('RATE_LIMIT_ENABLED', true);
 define('RATE_LIMIT_RPS',     10);   // requests per second per API key
 define('RATE_LIMIT_BURST',   60);   // burst tokens
+
+// Per-IP ingest throttling — abuse defense Stage 1 for the publishable (write-only,
+// project-scoped) API key. Bounded blast radius: a single host cannot saturate a
+// project's shared bucket. See docs/security/publishable-api-key.md.
+define('INGEST_IP_ENABLED', true);
+define('INGEST_IP_RPS',     5);   // requests per second per source IP
+define('INGEST_IP_BURST',   60);  // burst tokens per source IP
+
+// Per-install (anonymousId) ingest throttling + ramp-up detector — abuse defense Stage 2.
+// The SDK's anonymousId is salt-hashed before storage; the raw id is never stored.
+define('INGEST_INSTALL_ENABLED', true);
+define('INGEST_INSTALL_RPS',       1);    // requests per second per install
+define('INGEST_INSTALL_BURST',     30);    // burst tokens per install
+define('INGEST_INSTALL_RAMP_EVENTS', 500); // auto-revoke threshold (events)
+define('INGEST_INSTALL_RAMP_MINUTES', 10); // ramp-up window (minutes)
 
 // Trusted proxy IPs — only these IPs' X-Forwarded-For headers are trusted.
 // Set to your load balancer or CDN edge IPs. Empty = trust nobody.

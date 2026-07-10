@@ -1,5 +1,6 @@
 package com.quietmetrix.server.persistence
 
+import com.quietmetrix.server.persistence.tables.InstallMeta
 import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
@@ -18,7 +19,7 @@ class ApiKeyRegenerationTest {
 
     private fun db(name: String): Database {
         val db = Database.connect("jdbc:h2:mem:$name;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers) }
+        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, InstallMeta) }
         return db
     }
 

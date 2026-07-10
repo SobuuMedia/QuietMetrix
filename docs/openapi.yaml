@@ -6,25 +6,28 @@ info:
     servers implement this contract identically. Any SDK or HTTP client works against either backend.
 
     ## Authentication
-    - **Tracking endpoints** use an API key via the `X-QM-Api-Key` header. API keys are
-      per-project and are safe to embed in client-side code (they only allow writes, not reads).
+    - **Tracking endpoints** use a publishable, write-only, project-scoped API key via the
+      `X-QM-Api-Key` header. The key only allows writes (ingest), never reads, and is scoped
+      to one project. It is safe to embed in client-side code and is NOT a secret — it is
+      expected to ship in browser bundles, mobile apps, and F-Droid builds. Rotate it via
+      `POST /api/v1/projects/{id}/regenerate-key` (Bearer auth) when a published key is abused.
+      See docs/security/publishable-api-key.md for the full threat model and abuse-defense
+      controls (per-IP, per-install, quarantine, schema allowlist).
     - **Admin/Dashboard endpoints** use session authentication obtained via `POST /api/v1/auth/login`.
 
-    ## Profiles
-    - **Self-hosted** (`QM_PROFILE=selfhost` or unset): all tracking and admin endpoints available.
-      Rate limiting is optional/configurable. No billing endpoints.
-    - **Cloud** (`QM_PROFILE=cloud`): adds `/api/v1/billing/*` endpoints with Stripe or Adyen
-      integration and per-plan rate limits.
-  version: 0.1.0
+    QuietMetrix is fully self-hosted and unlimited: all tracking and admin
+    endpoints are available, with no quotas. Rate limiting is optional and
+    configurable via `QM_RATE_LIMIT_*` environment variables.
+  version: 0.2.0
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: https://cloud.quietmetrix.com
-    description: QuietMetrix Cloud (Ktor + cloud profile)
   - url: http://localhost:8080
-    description: Local development server
+    description: Local self-hosted server (docker compose up --build)
+  - url: https://your-domain.example
+    description: Your self-hosted deployment
 
 tags:
   - name: Tracking
@@ -35,8 +38,6 @@ tags:
     description: Project management (session auth)
   - name: Dashboard
     description: Aggregated analytics data
-  - name: Billing
-    description: Cloud-only billing and quota endpoints
 
 paths:
   /api/v1/health:
@@ -786,194 +787,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/billing/checkout:
-    post:
-      tags: [Billing]
-      operationId: createCheckoutSession
-      summary: Create a checkout session (cloud only)
-      description: |
-        Creates a hosted checkout session for upgrading the project's plan.
-        Only available when `QM_PROFILE=cloud`.
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CheckoutRequest"
-            examples:
-              stripe:
-                summary: Stripe checkout
-                value:
-                  plan_id: startup
-                  provider: stripe
-                  success_url: "https://app.example.com/billing/success"
-                  cancel_url: "https://app.example.com/billing/cancel"
-              adyen:
-                summary: Adyen checkout
-                value:
-                  plan_id: startup
-                  provider: adyen
-                  return_url: "https://app.example.com/billing/return"
-      responses:
-        "200":
-          description: Checkout session created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CheckoutResponse"
-              examples:
-                stripe:
-                  value:
-                    provider: stripe
-                    checkout_url: "https://checkout.stripe.com/c/pay/cs_live_..."
-                adyen:
-                  value:
-                    provider: adyen
-                    checkout_url: "https://checkout-test.adyen.com/checkout/pay..."
-        "401":
-          description: Invalid or missing session token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Project or plan not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/billing/webhook/stripe:
-    post:
-      tags: [Billing]
-      operationId: stripeWebhook
-      summary: Receive Stripe webhook events (cloud only)
-      description: |
-        Endpoint for Stripe webhook events. Validates the Stripe signature header
-        before processing. Only available when `QM_PROFILE=cloud`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              description: Stripe webhook event payload
-      parameters:
-        - name: Stripe-Signature
-          in: header
-          required: true
-          schema:
-            type: string
-          description: Stripe webhook signature for verification
-      responses:
-        "200":
-          description: Webhook processed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  received:
-                    type: boolean
-              example:
-                received: true
-        "400":
-          description: Invalid payload or signature verification failed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/billing/webhook/adyen:
-    post:
-      tags: [Billing]
-      operationId: adyenWebhook
-      summary: Receive Adyen webhook events (cloud only)
-      description: |
-        Endpoint for Adyen webhook events. Validates the HMAC signature
-        before processing. Only available when `QM_PROFILE=cloud`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              description: Adyen webhook notification payload
-      responses:
-        "200":
-          description: Webhook accepted
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  received:
-                    type: boolean
-              example:
-                received: true
-        "400":
-          description: Invalid payload or HMAC verification failed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/billing/usage:
-    get:
-      tags: [Billing]
-      operationId: getBillingUsage
-      summary: Get current billing period usage (cloud only)
-      description: |
-        Returns the current billing period's event count against the project's
-        plan limit. Only available when `QM_PROFILE=cloud`.
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: projectId
-          in: query
-          required: true
-          schema:
-            type: string
-          description: Project ID to check usage for
-      responses:
-        "200":
-          description: Current billing usage
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BillingUsageResponse"
-              example:
-                project_id: "proj_xyz789"
-                plan_id: "startup"
-                period:
-                  start: "2026-04-01T00:00:00Z"
-                  end: "2026-04-30T23:59:59Z"
-                events:
-                  used: 45230
-                  limit: 1000000
-                requests:
-                  used: 5420
-                  limit:
-                    per_second: 200
-                    per_minute: 12000
-                projects:
-                  used: 3
-                  limit: 10
-        "401":
-          description: Invalid or missing session token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Project not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
 components:
   securitySchemes:
     ApiKey:
@@ -1328,27 +1141,6 @@ components:
           type: integer
           description: Total number of members in the project
 
-    ProjectLimits:
-      type: object
-      required:
-        - projects_used
-        - projects_limit
-        - events_used
-        - events_limit
-      properties:
-        projects_used:
-          type: integer
-          description: Number of projects currently in use
-        projects_limit:
-          type: integer
-          description: Maximum projects allowed on the current plan
-        events_used:
-          type: integer
-          description: Number of events consumed in the current billing period
-        events_limit:
-          type: integer
-          description: Maximum events allowed per billing period
-
     StoredEvent:
       type: object
       description: A persisted event as returned by the admin API
@@ -1388,7 +1180,7 @@ components:
           type: string
           nullable: true
           maxLength: 2
-          description: ISO 3166-1 alpha-2 country code derived from IP (PII: IP is not stored)
+          description: "ISO 3166-1 alpha-2 country code derived from IP (PII: IP is not stored)"
           example: "DE"
         device_class:
           type: string
@@ -1407,6 +1199,17 @@ components:
         sdk_version:
           type: string
           example: "0.2.0"
+        duration_ms:
+          type: integer
+          format: int64
+          nullable: true
+          description: >
+            Time-on-screen in milliseconds, promoted from the `duration_ms` prop
+            into a dedicated column by both backends. On `screen_view` events
+            this is the final dwell of the previous screen; on all other events
+            it is the running dwell (ms elapsed on the current screen when the
+            event fired). Null when no screen was active.
+          example: 5200
         received_at:
           type: string
           format: date-time
@@ -1501,97 +1304,3 @@ components:
               count:
                 type: integer
           description: Event counts per granularity bucket
-
-    CheckoutRequest:
-      type: object
-      required:
-        - plan_id
-      properties:
-        plan_id:
-          type: string
-          enum: [hobby, startup, business]
-          description: The plan to subscribe to
-        provider:
-          type: string
-          enum: [stripe, adyen]
-          description: |
-            Payment provider to use. Overrides the server default `QM_BILLING_PROVIDER`.
-        success_url:
-          type: string
-          format: uri
-          description: URL to redirect after successful payment (Stripe only)
-        cancel_url:
-          type: string
-          format: uri
-          description: URL to redirect after cancelled payment (Stripe only)
-        return_url:
-          type: string
-          format: uri
-          description: URL to redirect after payment (Adyen only)
-
-    CheckoutResponse:
-      type: object
-      required:
-        - provider
-        - checkout_url
-      properties:
-        provider:
-          type: string
-          enum: [stripe, adyen]
-        checkout_url:
-          type: string
-          format: uri
-          description: URL to redirect the user to for payment
-
-    BillingUsageResponse:
-      type: object
-      required:
-        - project_id
-        - plan_id
-        - period
-        - events
-        - requests
-      properties:
-        project_id:
-          type: string
-        plan_id:
-          type: string
-          enum: [free, hobby, startup, business]
-        period:
-          type: object
-          properties:
-            start:
-              type: string
-              format: date-time
-            end:
-              type: string
-              format: date-time
-        events:
-          type: object
-          properties:
-            used:
-              type: integer
-            limit:
-              type: integer
-              description: -1 for unlimited
-        requests:
-          type: object
-          properties:
-            used:
-              type: integer
-            limit:
-              type: object
-              properties:
-                per_second:
-                  type: integer
-                per_minute:
-                  type: integer
-        projects:
-          type: object
-          properties:
-            used:
-              type: integer
-              description: Number of projects currently in use
-            limit:
-              type: integer
-              description: Maximum projects allowed on the current plan

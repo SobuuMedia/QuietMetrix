@@ -27,7 +27,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":quietmetrix-core"))
+    implementation(project(":quietmetrix-sdk"))
     implementation(libs.androidx.core)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }

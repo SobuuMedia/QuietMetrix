@@ -36,11 +36,8 @@ Everything is MIT-licensed. No vendor lock-in.
   - [Admin Endpoints](#admin-endpoints)
   - [Project Management](#project-management)
   - [Members & Teams](#members--teams)
-  - [Billing (Cloud only)](#billing-cloud-only)
-- [Plans & Limits](#plans--limits)
 - [Multi-Project Support](#multi-project-support)
   - [Creating Projects](#creating-projects)
-  - [Project Limits by Plan](#project-limits-by-plan)
   - [Team Members & Roles](#team-members--roles)
   - [Deleting Projects](#deleting-projects)
 - [Development](#development)
@@ -70,7 +67,6 @@ QuietMetrix is a full-stack analytics platform. It gives you:
 | **SDK** | Kotlin Multiplatform | Client library for tracking events |
 | **Ktor server** | Kotlin + Ktor 3 + PostgreSQL | Docker-native backend |
 | **PHP server** | PHP 8.2+ + MySQL | Shared-hosting compatible backend |
-| **Cloud** | Ktor + Stripe/Adyen | Managed SaaS (optional) |
 
 **SDK targets:** Android, iOS, macOS, Windows (MinGW), Linux, Web (Wasm/JS), JVM
 
@@ -79,8 +75,7 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 **Key design decisions:**
 - API keys are bcrypt-hashed in the database — never stored in plaintext
 - Events go through an async inbox → processing → rollup pipeline
-- Self-hosted mode has no quotas (unlimited events, unlimited projects)
-- Cloud mode enforces per-plan limits on events/month, projects, and rate
+- Fully self-hosted and unlimited: no quotas, no per-plan caps, no telemetry
 
 ---
 
@@ -90,9 +85,9 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 
 ```kotlin
 // 1. Add dependency (KMP project, build.gradle.kts)
-implementation(project(":quietmetrix-core"))
+implementation(project(":quietmetrix-sdk"))
 // or from Maven Central when published:
-// implementation("com.quietmetrix:quietmetrix-core:0.2.0")
+// implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
 
 // 2. Initialize once at app startup
 import com.quietmetrix.analytics.*
@@ -122,13 +117,18 @@ QuietMetrix.identify("user_123")
 
 ### Docker backend (5 minutes)
 
+One command brings up Postgres, runs migrations, builds the dashboard, and starts
+the Ktor server:
+
 ```bash
-git clone https://github.com/sobuumedia/quietmetrix.git
-cd quietmetrix
-docker compose -f docker/docker-compose.ktor.yml up -d
-# Verify: curl http://localhost:8080/api/v1/health → {"ok":true}
-# Create admin user via direct DB insert (see detailed setup below),
-# then login and create a project.
+git clone https://github.com/SobuuMedia/QuietMetrix.git
+cd QuietMetrix
+cp docker/.env.example .env      # set QM_DB_PASSWORD, QM_JWT_SECRET
+docker compose up --build
+# API:       http://localhost:8080/api/v1/health  → {"ok":true}
+# Dashboard: http://localhost:8080/dashboard/
+# Create the admin user via direct DB insert (see detailed setup below),
+# then log in and create a project.
 ```
 
 ### PHP backend, IONOS / shared hosting (10 minutes)
@@ -187,7 +187,7 @@ vendor/bin/phinx migrate
 
 ```
 QuietMetrix/
-├── quietmetrix-core/              # KMP SDK (7 targets)
+├── quietmetrix-sdk/              # KMP SDK (7 targets)
 │   ├── build.gradle.kts
 │   └── src/
 │       ├── commonMain/            # Shared business logic
@@ -212,9 +212,8 @@ QuietMetrix/
 │   │       ├── ingest/            # EventValidator, EventNormalizer, IngestChannel
 │   │       ├── persistence/       # Exposed tables + repositories
 │   │       ├── plugins/           # CORS, Monitoring, Security, RateLimiting
-│   │       ├── ratelimit/         # RateLimiter, QuotaEnforcer
-│   │       ├── billing/           # PaymentProvider, StripeProvider, AdyenProvider
-│   │       └── routes/            # Track, Auth, Project, Dashboard, Billing
+│   │       ├── ratelimit/         # RateLimiter, QuotaEnforcer (unlimited self-host)
+│   │       └── routes/            # Track, Auth, Project, Dashboard
 │   │
 │   └── php/                       # PHP + MySQL server (Docker / Slim 4 variant)
 │       ├── composer.json
@@ -248,10 +247,10 @@ QuietMetrix/
 │       ├── css/style.css
 │       └── js/{api,app}.js
 │
+├── docker-compose.yml             # One-command stack: Postgres + migrate + Ktor
 ├── docker/
-│   ├── docker-compose.ktor.yml    # Ktor + Postgres + Caddy
-│   ├── docker-compose.php.yml     # PHP + MySQL + Caddy
-│   └── caddy/Caddyfile
+│   ├── .env.example               # Copy to repo-root .env
+│   └── caddy/Caddyfile            # Optional TLS reverse proxy for production
 │
 ├── docs/                          # MkDocs documentation site
 │   ├── mkdocs.yml
@@ -260,8 +259,7 @@ QuietMetrix/
 │   ├── openapi.yaml               # Shared API contract (OpenAPI 3.1)
 │   ├── sdk/                       # Platform-specific SDK guides
 │   ├── self-hosting/              # Docker, PHP, upgrade, backup
-│   ├── operations/                # Rate limits, GDPR, security, payments
-│   └── commercial-strategy.md
+│   └── operations/                # Rate limits, GDPR, security
 │
 ├── samples/
 │   ├── android/                   # Android sample app
@@ -302,7 +300,7 @@ QuietMetrix/
 │ • macOS          │                               │  • JWT auth + rate limit │
 │ • Windows        │                               │  • Postgres 16           │
 │ • Linux          │ ◄───────────────────────────  │  • Flyway migrations     │
-│ • Web (Wasm)     │  202 Accepted {ok, queued}    │  • Stripe/Adyen (cloud)  │
+│ • Web (Wasm)     │  202 Accepted {ok, queued}    │  • Serves the dashboard  │
 │ • JVM Desktop    │                               └──────────────────────────┘
 │                  │
 │ • Event Queue    │                                          ▲
@@ -314,15 +312,6 @@ QuietMetrix/
                                                    │  • MySQL 8               │
                                                    │  • Phinx migrations      │
                                                    │  • Cron event processor  │
-                                                   └──────────────────────────┘
-                                                              ▲
-                                                              │ internal gRPC / REST
-                                                              ▼
-                                                   ┌──────────────────────────┐
-                                                   │  cloud.quietmetrix.com   │
-                                                   │  • Managed Ktor instance │
-                                                   │  • Stripe/Adyen billing  │
-                                                   │  • Per-plan rate limits  │
                                                    └──────────────────────────┘
 ```
 
@@ -349,23 +338,23 @@ QuietMetrix/
 
 ```bash
 # Clone
-git clone https://github.com/sobuumedia/quietmetrix.git
-cd quietmetrix
+git clone https://github.com/SobuuMedia/QuietMetrix.git
+cd QuietMetrix
 
 # Prepare environment variables
-cp docker/.env.example docker/.env
-# Edit docker/.env and set strong passwords for QM_DB_PASSWORD and QM_JWT_SECRET
+cp docker/.env.example .env
+# Edit .env and set strong values for QM_DB_PASSWORD and QM_JWT_SECRET
 
-# Start (Postgres auto-creates DB, Flyway runs migrations on Ktor boot)
-docker compose -f docker/docker-compose.ktor.yml up -d
+# Start everything: Postgres, Flyway migrations, dashboard build, Ktor server
+docker compose up --build
 
 # Check health
 curl http://localhost:8080/api/v1/health
-# → {"ok":true,"version":"0.1.0"}
+# → {"ok":true,"version":"0.2.0"}
 
 # Create admin user (bcrypt hash cost 12)
 # Generate hash: python3 -c "import bcrypt; print(bcrypt.hashpw(b'password', bcrypt.gensalt(12)).decode())"
-docker compose -f docker/docker-compose.ktor.yml exec postgres psql -U quietmetrix -d quietmetrix -c \
+docker compose exec postgres psql -U quietmetrix -d quietmetrix -c \
   "INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '\$2a\$12\$HASHED_VALUE');"
 
 # Login
@@ -463,11 +452,12 @@ mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `QM_PROFILE` | `selfhost` | `selfhost` (no billing/no quotas) or `cloud` |
+| `QM_PROFILE` | `selfhost` | Deployment profile (self-hosted, unlimited) |
 | `QM_DB_URL` | `jdbc:postgresql://localhost:5432/quietmetrix` | JDBC URL |
 | `QM_DB_USER` | `quietmetrix` | DB username |
 | `QM_DB_PASSWORD` | `quietmetrix` | DB password |
 | `QM_DB_POOL_SIZE` | `10` | HikariCP connection pool size |
+| `QM_CORS_ALLOWED_ORIGINS` | *(required)* | Comma-separated origins allowed to call the API from a browser (e.g. the dashboard origin) |
 | `QM_JWT_SECRET` | `change-me...` | HMAC256 signing secret |
 | `QM_JWT_ISSUER` | `quietmetrix` | JWT issuer claim |
 | `QM_JWT_AUDIENCE` | `quietmetrix-api` | JWT audience claim |
@@ -476,6 +466,14 @@ mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2
 | `QM_RATE_LIMIT_ENABLED` | `false` (selfhost) / `true` (cloud) | Enable per-project rate limiting |
 | `QM_RATE_LIMIT_RPS` | `10` | Request per second limit |
 | `QM_RATE_LIMIT_BURST` | `60` | Burst per minute |
+| `QM_INGEST_IP_ENABLED` | `true` | Per-IP ingest throttling (abuse defense for the publishable key) |
+| `QM_INGEST_IP_RPS` | `5` | Per-IP requests/second on `/track` + `/track/batch` |
+| `QM_INGEST_IP_BURST` | `60` | Per-IP burst tokens |
+| `QM_INGEST_INSTALL_ENABLED` | `true` | Per-install (`anonymousId`) ingest throttling |
+| `QM_INGEST_INSTALL_RPS` | `1` | Per-install requests/second |
+| `QM_INGEST_INSTALL_BURST` | `30` | Per-install burst tokens |
+| `QM_INGEST_INSTALL_RAMP_EVENTS` | `500` | Auto-revoke an install that sends this many events in the ramp window |
+| `QM_INGEST_INSTALL_RAMP_MINUTES` | `10` | Ramp-up window length (minutes) |
 
 #### PHP server
 
@@ -496,17 +494,6 @@ mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2
 | `QM_RATE_LIMIT_ENABLED` | `false` | Enable rate limiting |
 | `QM_RATE_LIMIT_RPS` | `10` | Requests per second |
 | `QM_RATE_LIMIT_BURST` | `60` | Burst per minute |
-
-#### Cloud-only billing env vars
-
-| Variable | Description |
-|----------|-------------|
-| `QM_BILLING_PROVIDER` | `stripe` or `adyen` |
-| `QM_BILLING_STRIPE_SECRET_KEY` | Stripe secret API key (`sk_live_...`) |
-| `QM_BILLING_STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (`whsec_...`) |
-| `QM_BILLING_ADYEN_API_KEY` | Adyen API key |
-| `QM_BILLING_ADYEN_MERCHANT_ACCOUNT` | Adyen merchant account name |
-| `QM_BILLING_ADYEN_HMAC_KEY` | Adyen webhook HMAC key |
 
 ### Database Migrations
 
@@ -572,13 +559,13 @@ repositories { mavenCentral() }
 
 // module build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-core:0.2.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
 }
 ```
 
 #### iOS (Swift Package / XCFramework)
 
-Add the `QuietMetrix.xcframework` produced by `./gradlew :quietmetrix-core:assembleXCFramework` to your Xcode project, or include the KMP shared module directly.
+Add the `QuietMetrix.xcframework` produced by `./gradlew :quietmetrix-sdk:assembleXCFramework` to your Xcode project, or include the KMP shared module directly.
 
 ```swift
 import QuietMetrix
@@ -597,7 +584,7 @@ QuietMetrix.shared.trackEvent(event: "page_view", screen: "home")
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-core:0.2.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
 }
 ```
 
@@ -770,7 +757,7 @@ The authoritative API spec is `docs/openapi.yaml` (OpenAPI 3.1). Both backends i
 
 ### Authentication
 
-**API key** — For tracking endpoints. Passed as `X-QM-Api-Key` header. Generated per-project, safe to embed in client code.
+**API key** — For tracking endpoints. Passed as `X-QM-Api-Key` header. The API key is **publishable**: write-only and project-scoped, so it is safe to embed in client code (browser bundles, mobile apps, F-Droid builds). It cannot read analytics or access admin routes — those require a Bearer token. See [Threat model & abuse defense](docs/security/publishable-api-key.md). Rotate it via `POST /api/v1/projects/{id}/regenerate-key` (Bearer-auth) when a published key is abused.
 
 ```
 X-QM-Api-Key: qm_ak_abc123def456ghi789
@@ -892,8 +879,6 @@ Response: `201 Created`
 }
 ```
 
-**Cloud limit:** Free plan = 1 project; Hobby = 3; Startup = 10; Business = 50. Returns `403 Forbidden` if limit reached.
-
 #### `GET /api/v1/projects` — List accessible projects
 
 Auth: Bearer Token
@@ -948,59 +933,17 @@ Role must be `viewer` or `admin` (not `owner`). Returns `201 Created`.
 
 Auth: Bearer Token, must be owner or admin. Cannot remove self if last admin.
 
-### Billing (Cloud only)
-
-#### `POST /api/v1/billing/checkout` — Create checkout session
-
-Auth: Bearer Token
-
-Request: `{ "project_id": "proj_1", "plan_id": "startup" }`
-
-Plan IDs: `hobby`, `startup`, `business` (free is default, not purchasable).
-
-#### `GET /api/v1/billing/usage` — Current usage
-
-Auth: Bearer Token
-
-Response:
-```json
-{
-  "events": { "used": 45230, "limit": 100000 },
-  "projects": { "used": 2, "limit": 3 },
-  "rate": { "requests_per_second": 50, "retention_days": 90 }
-}
-```
-
-#### `POST /api/v1/billing/webhook/stripe` — Stripe webhook
-
-No Bearer auth. Validated via Stripe webhook signature.
-
-#### `POST /api/v1/billing/webhook/adyen` — Adyen webhook
-
-No Bearer auth. Validated via Adyen HMAC signature.
-
----
-
-## Plans & Limits
-
-| Tier | Price | Events/Month | Projects | RPS | Retention |
-|------|-------|-------------|----------|-----|-----------|
-| Free | $0 | 10,000 | 1 | 10 | 30 days |
-| Hobby | $9/mo | 100,000 | 3 | 50 | 90 days |
-| Startup | $29/mo | 1,000,000 | 10 | 200 | 365 days |
-| Business | $99/mo | 10,000,000 | 50 | 1,000 | 730 days |
-
-**Self-hosted:** All limits are disabled. `planId = null` → unlimited events, unlimited projects, no rate limiting by default. Rate limiting can be enabled via `QM_RATE_LIMIT_ENABLED=true`.
-
-**Downgrade behavior:** When a cloud user downgrades, their existing projects continue to work. They simply cannot create new projects beyond the new tier's limit.
-
 ---
 
 ## Multi-Project Support
 
+QuietMetrix is self-hosted and unlimited: create as many projects and ingest as
+many events as your database can hold. No plans, no quotas, no billing.
+
 ### Creating Projects
 
-Each project has its own API key. You can create multiple projects (up to your plan's limit) and use different API keys for different apps:
+Each project has its own API key. You can create multiple projects and use
+different API keys for different apps:
 
 ```kotlin
 // App 1
@@ -1017,16 +960,6 @@ QuietMetrix.init(QuietMetrixConfig(
 ```
 
 Each project appears separately in the dashboard with its own events, aggregates, and members.
-
-### Project Limits by Plan
-
-- **Free:** 1 project
-- **Hobby:** 3 projects
-- **Startup:** 10 projects
-- **Business:** 50 projects
-- **Self-hosted:** Unlimited
-
-When a user hits their project limit, `POST /api/v1/projects` returns `403 Forbidden` with `"error": "project_limit_reached"`.
 
 ### Team Members & Roles
 
@@ -1059,17 +992,17 @@ Projects are soft-deleted — `deleted_at` is set, events are preserved. The pro
 
 ```bash
 # Compile all targets
-./gradlew :quietmetrix-core:compileKotlinJvm
-./gradlew :quietmetrix-core:compileDebugKotlinAndroid
+./gradlew :quietmetrix-sdk:compileKotlinJvm
+./gradlew :quietmetrix-sdk:compileDebugKotlinAndroid
 
 # Run SDK tests (JVM)
-./gradlew :quietmetrix-core:jvmTest
+./gradlew :quietmetrix-sdk:jvmTest
 
 # Publish to local Maven (~/.m2)
-./gradlew :quietmetrix-core:publishToMavenLocal
+./gradlew :quietmetrix-sdk:publishToMavenLocal
 
 # Build XCFramework for iOS
-./gradlew :quietmetrix-core:assembleXCFramework
+./gradlew :quietmetrix-sdk:assembleXCFramework
 ```
 
 ### Running the Ktor Server Locally
@@ -1121,7 +1054,7 @@ php bin/qm-worker.php
 ./gradlew :servers:ktor:test
 
 # All SDK tests (JVM target)
-./gradlew :quietmetrix-core:jvmTest
+./gradlew :quietmetrix-sdk:jvmTest
 
 # Specific test class
 ./gradlew :servers:ktor:test --tests "*RouteIntegrationTest*"
@@ -1136,23 +1069,19 @@ vendor/bin/phpunit
 
 ## Docker
 
-### Docker Compose Files
-
-#### `docker/docker-compose.ktor.yml` — Ktor + Postgres + Caddy
+### `docker-compose.yml` — the one-command stack
 
 ```bash
-docker compose -f docker/docker-compose.ktor.yml up -d
+cp docker/.env.example .env    # set QM_DB_PASSWORD, QM_JWT_SECRET
+docker compose up --build
 ```
 
-Three services: Ktor server (port 8080), Postgres 16, Caddy reverse proxy (ports 80/443).
+Three services run in order: **postgres** (16-alpine, healthchecked) →
+**migrate** (Flyway applies `servers/ktor/migrations/`) → **ktor** (builds the
+Wasm dashboard and fat jar, then serves the API + dashboard on port 8080).
 
-#### `docker/docker-compose.php.yml` — PHP + MySQL + Caddy
-
-```bash
-docker compose -f docker/docker-compose.php.yml up -d
-```
-
-Three services: PHP-FPM + Apache, MySQL 8, Caddy reverse proxy.
+For production TLS, put the Ktor service behind the reverse proxy in
+`docker/caddy/Caddyfile`.
 
 ### Building Images
 
@@ -1172,7 +1101,7 @@ docker build -f servers/php/Dockerfile -t quietmetrix-php:latest .
 
 | Module | Framework | Count | Location |
 |--------|-----------|-------|----------|
-| SDK | kotlin.test | 20+ | `quietmetrix-core/src/commonTest/` |
+| SDK | kotlin.test | 20+ | `quietmetrix-sdk/src/commonTest/` |
 | Ktor server | Kotest + JUnit 5 | 36 | `servers/ktor/src/test/` |
 | PHP server | PHPUnit 11 | 5+ | `servers/php/tests/` |
 
@@ -1232,10 +1161,9 @@ GitHub Actions workflows in `.github/workflows/`:
 
 ## Operations
 
-- **Rate limits:** Per-project rate limiting (configurable per plan in cloud mode). See `docs/operations/rate-limits.md`.
+- **Rate limits:** Configurable per-project, per-IP, and per-install throttling. See `docs/operations/rate-limits.md`.
 - **GDPR compliance:** Built-in consent gates, data export/delete-friendly design. See `docs/operations/gdpr.md`.
 - **Security:** API keys are bcrypt-hashed. JWT secrets must be strong. See `docs/operations/security.md`.
-- **Payments:** Stripe and Adyen webhook handling. See `docs/operations/payments.md`.
 - **Backups:** `pg_dump` for Postgres, `mysqldump` for MySQL. See `docs/self-hosting/backup.md`.
 - **Upgrading:** `docker compose pull && up -d` or `git pull && vendor/bin/phinx migrate`. See `docs/self-hosting/upgrade.md`.
 
@@ -1249,4 +1177,4 @@ All code is MIT-licensed. No feature gating, no closed-source components. You ca
 
 ---
 
-**Get started:** `docker compose -f docker/docker-compose.ktor.yml up -d` → `curl localhost:8080/api/v1/health`
+**Get started:** `docker compose up --build` → `curl localhost:8080/api/v1/health`

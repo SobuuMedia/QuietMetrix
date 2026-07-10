@@ -28,8 +28,6 @@ nav:
       - Rate limits: operations/rate-limits.md
       - GDPR: operations/gdpr.md
       - Security: operations/security.md
-      - Payments: operations/payments.md
-  - Commercial strategy: commercial-strategy.md
 
 markdown_extensions:
   - admonition
