@@ -15,13 +15,13 @@ Bump `version` before each release, then commit and tag (`v0.1.0`, `v0.2.0`, …
 
 ## Release targets
 
-The module's `publishing` block activates each repository only when the matching env vars are present, so a single command (`:quietmetrix-sdk:publish`) is safe to run in any environment.
+The module's `publishing` block always registers `mavenLocal` and `sonatype`, and adds `GitHubPackages` when its env vars are present — so the target-specific publish tasks always exist. Each remote repository simply fails at publish time if its credentials are missing, so a single command (`:quietmetrix-sdk:publish`) is safe to run in any environment.
 
-| Repository       | Activated by                                            | When to use                                          |
-| ---------------- | ------------------------------------------------------- | ---------------------------------------------------- |
-| `mavenLocal`     | Always                                                  | Quick dev integration tests on your machine.         |
-| `GitHubPackages` | `GITHUB_ACTOR` + `GITHUB_TOKEN`                         | **Current production release target.**               |
-| `sonatype`       | `OSSRH_USERNAME` + `OSSRH_TOKEN` (+ GPG signing vars)   | Maven Central — **future**, see below.               |
+| Repository       | Task always present? | Credentials                                             | When to use                                          |
+| ---------------- | -------------------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| `mavenLocal`     | Yes                  | none                                                    | Quick dev integration tests on your machine.         |
+| `GitHubPackages` | Only with env vars   | `GITHUB_ACTOR` + `GITHUB_TOKEN`                         | **Current production release target.**               |
+| `sonatype`       | Yes                  | `OSSRH_USERNAME` + `OSSRH_PASSWORD`/`OSSRH_TOKEN` (or `-PossrhUsername`/`-PossrhPassword`), plus GPG signing vars | Maven Central via the Central Portal, see below.     |
 
 ## GitHub Packages release (current)
 
@@ -51,9 +51,9 @@ maven {
 ```
 …and depend on `com.quietmetrix:quietmetrix-sdk:<version>`. They need a PAT with at least `read:packages`.
 
-## Maven Central release (future)
+## Maven Central release
 
-The module is **prepared** for Central — POM metadata, staging URL, and signing block are wired. The remaining steps are organisational:
+The module is **wired** for Central — POM metadata, the Central Portal staging URL, an (empty) javadoc jar per publication, GPG signing, and the sign→publish task ordering are all in place. `:quietmetrix-sdk:publishAllPublicationsToSonatypeRepository` exists unconditionally; it just needs credentials + a signing key at run time. The remaining setup is organisational:
 
 ### 1. Sonatype Central Portal account
 
@@ -76,17 +76,24 @@ Store the armored private key and its passphrase in CI secrets:
 ### 3. Central API token
 
 - In Central Portal → *Account* → *Generate User Token*.
-- Store the username + token in CI secrets:
+- Store the username + token in CI secrets (or pass as `-PossrhUsername` / `-PossrhPassword`):
   - `OSSRH_USERNAME`
-  - `OSSRH_TOKEN`
+  - `OSSRH_PASSWORD` (the token; `OSSRH_TOKEN` is also accepted as a fallback)
 
 ### 4. Release command
 
 ```bash
+export GPG_SIGNING_KEY="$(gpg --armor --export-secret-keys <KEY_ID>)"
+export GPG_SIGNING_PASSWORD=<passphrase>
+export OSSRH_USERNAME=<portal-token-user>
+export OSSRH_PASSWORD=<portal-token>
+
 ./gradlew :quietmetrix-sdk:publishAllPublicationsToSonatypeRepository
 ```
 
-Then log in to https://central.sonatype.com → *Deployments* → *Promote*.
+Then log in to https://central.sonatype.com → *Deployments* → *Promote*. A `-SNAPSHOT`
+version routes to the Central snapshots repository automatically. If your account uses a
+different staging host, override `-PsonatypeReleaseUrl` / `-PsonatypeSnapshotUrl`.
 
 ### 5. SNAPSHOT releases
 
@@ -100,4 +107,4 @@ A `-SNAPSHOT` suffix on `version` automatically routes to the snapshots URL — 
 - [ ] CI is green on `main`.
 - [ ] Tag pushed (`git tag v0.x.y && git push --tags`).
 - [ ] `:quietmetrix-sdk:publish` (GitHub Packages).
-- [ ] (Future) `:quietmetrix-sdk:publishAllPublicationsToSonatypeRepository` + portal promote.
+- [ ] `:quietmetrix-sdk:publishAllPublicationsToSonatypeRepository` + portal promote (Maven Central).

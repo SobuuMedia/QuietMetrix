@@ -7,8 +7,18 @@ on:
 
 jobs:
   publish:
-    name: Publish to Maven Local
-    runs-on: ubuntu-latest
+    name: Publish to Maven Central
+    # The SDK has Apple (macOS/iOS) Kotlin/Native targets, which can only be
+    # compiled on a macOS runner. publishAllPublications... builds every target,
+    # so the whole job must run on macOS.
+    runs-on: macos-latest
+    env:
+      # Names the build reads: quietmetrix-sdk/build.gradle.kts resolves
+      # OSSRH_* for the Sonatype credentials and GPG_SIGNING_* for signing.
+      OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+      OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+      GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+      GPG_SIGNING_PASSWORD: ${{ secrets.GPG_SIGNING_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,17 +37,22 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Publish to Maven Local
+      - name: Verify tag matches SDK version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
+          echo "tag=$tag  build.gradle.kts version=$version"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match SDK version '$version' in quietmetrix-sdk/build.gradle.kts. Bump the version before tagging."
+            exit 1
+          fi
+
+      - name: Smoke-test the publication (Maven Local)
         run: ./gradlew :quietmetrix-sdk:publishToMavenLocal
 
-      - name: Publish to Maven Central
-        if: env.MAVEN_CENTRAL_USERNAME != ''
-        env:
-          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          MAVEN_CENTRAL_GPG_KEY: ${{ secrets.MAVEN_CENTRAL_GPG_KEY }}
-          MAVEN_CENTRAL_GPG_PASSPHRASE: ${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}
-        run: ./gradlew :quietmetrix-sdk:publish
+      - name: Publish to Maven Central (Sonatype Central Portal)
+        if: env.OSSRH_USERNAME != ''
+        run: ./gradlew :quietmetrix-sdk:publishAllPublicationsToSonatypeRepository
 
   release:
     name: Create GitHub Release
