@@ -602,24 +602,30 @@ fun main() {
 }
 ```
 
-#### Web (Wasm / JS)
+#### Web (JavaScript / TypeScript)
 
-```html
-<!-- Option A: CDN -->
-<script src="https://cdn.quietmetrix.com/quietmetrix.js"></script>
+Published to npm as `@quietmetrix/sdk` — framework-agnostic (Vue, React, Svelte, plain JS),
+with bundled TypeScript types. See [docs/sdk/web.md](docs/sdk/web.md) for the full guide.
 
-<!-- Option B: Local bundle -->
-<script src="quietmetrix.js"></script>
-
-<script>
-  QuietMetrix.init({
-    storageKeyPrefix: 'myapp_',
-    trackingEndpoint: 'https://your-server.com/api/v1/track',
-    apiKey: 'qm_ak_...'
-  });
-  QuietMetrix.trackEvent('page_view', { screen: 'home' });
-</script>
+```bash
+npm install @quietmetrix/sdk
 ```
+
+```javascript
+import { init, trackEvent } from "@quietmetrix/sdk";
+
+init({
+    storageKeyPrefix: "myapp_",
+    trackingEndpoint: "https://your-server.com/api/v1/track",
+    apiKey: "qm_ak_...",
+});
+trackEvent("page_view", { screen: "home" });
+```
+
+> A CDN / `window.QuietMetrix` global build for `<script>`-tag usage is planned for a future release.
+
+For Kotlin Multiplatform consumers, the `wasmJs` browser target is also available via the Gradle
+dependency `io.github.sobuumedia:quietmetrix-sdk`.
 
 #### macOS / Linux / Windows (native Kotlin)
 

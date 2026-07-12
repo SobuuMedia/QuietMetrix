@@ -8,6 +8,9 @@ package com.quietmetrix.analytics.internal
  * After substitution and injection, `window.__quietmetrixTrack(event, screen)` becomes
  * available globally. The IIFE shape is preserved so it can be appended as a single
  * <script> textContent without leaking helpers into the global scope.
+ *
+ * Lives in commonMain so both the `js` and `wasmJs` browser targets share the exact same
+ * snippet (it is plain text with no platform interop).
  */
 internal const val TRACKER_JS_TEMPLATE = """
 (function () {

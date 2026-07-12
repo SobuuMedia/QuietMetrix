@@ -1,15 +1,106 @@
-# SDK: Web (Wasm)
+# SDK: Web (JavaScript / TypeScript)
+
+The web SDK is published to npm as `@quietmetrix/sdk`. It is framework-agnostic — the same API
+works in Vue, React, Svelte, or plain JavaScript. TypeScript definitions are bundled.
+
+It is compiled from the shared Kotlin Multiplatform core, so the browser behaves identically to
+the Android and iOS SDKs. All browser lookups (localStorage, navigator, window) degrade
+gracefully, so importing the package during server-side rendering (Nuxt, Next-style SSR) does
+not throw — tracking simply becomes a no-op until it runs in the browser.
 
 ## Installation
-
-### npm
 
 ```bash
 npm install @quietmetrix/sdk
 ```
 
 ```javascript
-import { init, trackEvent, setCookieConsent, setAnalyticsEnabled } from "@quietmetrix/sdk";
+import { init, trackEvent } from "@quietmetrix/sdk";
+
+init({
+    storageKeyPrefix: "myapp_",
+    trackingEndpoint: "https://your-server.com/api/v1/track", // your ingest URL
+    apiKey: "qm_ak_your_api_key",                              // your API key
+});
+```
+
+You can also import the whole namespace:
+
+```javascript
+import * as QuietMetrix from "@quietmetrix/sdk";
+QuietMetrix.init({ /* ... */ });
+```
+
+> **CDN / `window.QuietMetrix` global:** not yet available. A UMD/IIFE build for
+> `<script>`-tag usage is planned for a future release. For now, install from npm and bundle
+> with your app.
+
+## Initialization
+
+`init` takes an options object. Only `storageKeyPrefix`, `trackingEndpoint`, and `apiKey` are
+commonly needed; the rest have sensible defaults.
+
+```javascript
+init({
+    storageKeyPrefix: "myapp_",
+    trackingEndpoint: "https://your-server.com/api/v1/track",
+    apiKey: "qm_ak_your_api_key",
+    flushIntervalMs: 30000,             // default 30000
+    maxQueueSize: 1000,                 // default 1000
+    autoTrackInitialPageView: true,     // default true
+    trackingAllowedByDefault: false,    // default false
+    debug: false,                       // default false
+});
+```
+
+`trackingEndpoint` must be `https://` (or omitted for offline-only mode).
+
+## Track Events
+
+```javascript
+trackEvent("page_view", { screen: "home" });
+trackEvent("button_click", { screen: "pricing", props: { plan: "startup" } });
+trackEvent("signup_complete", { screen: "onboarding" });
+```
+
+`trackEvent` returns a `Promise`; you can `await` it if you need to know the event was queued.
+
+## Using it in Vue
+
+Initialize once in your entry file, then track route changes with the router:
+
+```ts
+// main.ts
+import { createApp } from "vue";
+import { init } from "@quietmetrix/sdk";
+import App from "./App.vue";
+import router from "./router";
+
+init({
+    storageKeyPrefix: "myapp_",
+    trackingEndpoint: "https://your-server.com/api/v1/track",
+    apiKey: "qm_ak_your_api_key",
+});
+
+createApp(App).use(router).mount("#app");
+```
+
+```ts
+// router.ts — track page views on navigation
+import { trackEvent } from "@quietmetrix/sdk";
+
+router.afterEach((to) => {
+    trackEvent("page_view", { screen: to.path });
+});
+```
+
+## Using it in React
+
+Identical package, identical calls — just wire them into your app entry and router:
+
+```tsx
+// index.tsx
+import { init } from "@quietmetrix/sdk";
 
 init({
     storageKeyPrefix: "myapp_",
@@ -18,121 +109,82 @@ init({
 });
 ```
 
-### CDN
+```tsx
+// track page views on route change (react-router)
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { trackEvent } from "@quietmetrix/sdk";
 
-Include the script tag in your HTML. The SDK attaches to `window.QuietMetrix`:
-
-```html
-<script src="https://cdn.quietmetrix.com/sdk/v0.2.0/quietmetrix.js"></script>
-<script>
-    QuietMetrix.init({
-        storageKeyPrefix: "myapp_",
-        trackingEndpoint: "https://your-server.com/api/v1/track",
-        apiKey: "qm_ak_your_api_key",
-    });
-</script>
-```
-
-### Kotlin/Wasm (Multiplatform)
-
-If you are sharing Kotlin code across Android, iOS, and Web targets, the `wasmJs` target is already included in `quietmetrix-sdk`:
-
-```kotlin
-dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
+export function usePageViews() {
+    const location = useLocation();
+    useEffect(() => {
+        trackEvent("page_view", { screen: location.pathname });
+    }, [location.pathname]);
 }
-```
-
-The same `trackEvent`, `setCookieConsent`, and `setAnalyticsEnabled` calls work across all targets.
-
-## Initialization
-
-```javascript
-QuietMetrix.init({
-    storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
-    apiKey: "qm_ak_your_api_key",
-    flushIntervalMs: 30000,
-    maxQueueSize: 1000,
-});
-```
-
-## Track Events
-
-```javascript
-QuietMetrix.trackEvent("page_view", { screen: "home" });
-QuietMetrix.trackEvent("button_click", { screen: "pricing", props: { plan: "startup" } });
-QuietMetrix.trackEvent("signup_complete", { screen: "onboarding" });
-```
-
-## Page Views
-
-The SDK does **not** auto-track page views. To track page views on a single-page application, call `trackEvent` on route changes:
-
-```javascript
-// With a SPA router (React, Vue, etc.)
-router.afterEach((to) => {
-    QuietMetrix.trackEvent("page_view", { screen: to.path });
-});
-```
-
-For traditional multi-page sites, call it on every page load:
-
-```html
-<script>
-    QuietMetrix.init({ /* ... */ });
-    QuietMetrix.trackEvent("page_view", { screen: window.location.pathname });
-</script>
 ```
 
 ## Consent
 
 ```javascript
-// After user accepts cookies via your consent banner
-QuietMetrix.setCookieConsent(true);
+import { setCookieConsent, setAnalyticsEnabled, isTrackingAllowed } from "@quietmetrix/sdk";
+
+// After the user accepts cookies via your consent banner
+setCookieConsent(true);
 
 // Master kill switch — separate from cookie consent
-QuietMetrix.setAnalyticsEnabled(true);
+setAnalyticsEnabled(true);
 
 // Check if tracking is currently allowed
-if (QuietMetrix.isTrackingAllowed()) {
+if (isTrackingAllowed()) {
     // safe to track
 }
 ```
 
-The consent state is persisted in `localStorage` under the configured `storageKeyPrefix`.
+Consent state is persisted in `localStorage` under the configured `storageKeyPrefix`.
 
 ## Identify
 
-The `identify` call hashes the user ID before sending it to the server:
+`identify` hashes the user id before it is sent to the server:
 
 ```javascript
-QuietMetrix.identify("user_123");
+import { identify } from "@quietmetrix/sdk";
+
+identify("user_123");
+identify(null); // clear
 ```
 
 ## Force Flush
 
 ```javascript
-await QuietMetrix.flush();
+import { flush } from "@quietmetrix/sdk";
+
+await flush();
 ```
 
 Call this before the page unloads to ensure pending events are sent:
 
 ```javascript
 window.addEventListener("beforeunload", () => {
-    QuietMetrix.flush();
+    flush();
 });
 ```
 
 ## Offline Support
 
-Events are buffered in `localStorage` when the browser is offline and sent when connectivity is restored. The `was_offline` flag is set on events captured while disconnected. The SDK listens for `online`/`offline` browser events and flushes automatically when the connection returns.
+Events are buffered in `localStorage` when the browser is offline and sent when connectivity is
+restored. The `was_offline` flag is set on events captured while disconnected. The SDK listens
+for `online`/`offline` browser events and flushes automatically when the connection returns.
 
-## Builder Pattern (CDN / Global)
+## Kotlin/Wasm (Multiplatform)
 
-When using the CDN build, you can also use the builder-style API:
+If you are sharing Kotlin code across Android, iOS, and Web targets, the `wasmJs` target is also
+included in `quietmetrix-sdk`:
 
-```javascript
-QuietMetrix.init({ /* ... */ })
-    .trackEvent("page_view", { screen: "home" });
+```kotlin
+dependencies {
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.3.0")
+}
 ```
+
+The same `trackEvent`, `setCookieConsent`, and `setAnalyticsEnabled` calls work across all
+targets.
