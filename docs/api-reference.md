@@ -40,7 +40,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
   "sid": "abc123",
   "ts": "2026-04-30T12:34:56Z",
   "was_offline": false,
-  "sdk": {"platform": "android", "version": "0.2.0"},
+  "sdk": {"platform": "android", "version": "0.4.0"},
   "ctx": {"language": "en", "ua": "...", "viewport": "412x914"}
 }
 ```
@@ -89,6 +89,20 @@ Roles: `owner` (full control), `admin` (manage members and settings), `viewer` (
 
 - `GET /api/v1/projects/:id/events` — Paginated raw events
 - `GET /api/v1/projects/:id/aggregates` — Aggregated metrics
+
+### Funnels
+
+See the [Funnels developer guide](sdk/funnels.md) for concepts, matching rules, and a worked
+example of the results payload.
+
+- `GET /api/v1/projects/:id/funnels` — Bearer auth. List active funnels for the project.
+- `POST /api/v1/projects/:id/funnels` — Bearer auth, admin/developer role. Create a funnel.
+- `PATCH /api/v1/projects/:id/funnels/:funnelKey` — Bearer auth, admin/developer role. Update a funnel; locks it against further SDK auto-registration.
+- `DELETE /api/v1/projects/:id/funnels/:funnelKey` — Bearer auth, admin/developer role. Archive a funnel; unlocks the key for SDK re-registration.
+- `GET /api/v1/projects/:id/funnels/:funnelKey/results` — Bearer auth. Query params: `range` (seconds, default 7 days), `breakdown` (`country` \| `platform` \| `device_class` \| `language`), `trend` (`1` to include a daily trend series).
+- `POST /api/v1/funnels/register` — API key auth (`X-QM-Api-Key`). Upserts funnel definitions declared by the SDK; a no-op for any funnel already locked by a dashboard edit.
+
+A step's `props` are string→string exact-match filters compared against the matching event's own props (stringified), not the freeform, mixed-type `props` an event itself carries — an empty filter is always `{}` on the wire, never `[]`.
 
 ## Error Responses
 

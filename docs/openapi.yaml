@@ -18,7 +18,7 @@ info:
     QuietMetrix is fully self-hosted and unlimited: all tracking and admin
     endpoints are available, with no quotas. Rate limiting is optional and
     configurable via `QM_RATE_LIMIT_*` environment variables.
-  version: 0.2.0
+  version: 0.4.0
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -38,6 +38,8 @@ tags:
     description: Project management (session auth)
   - name: Dashboard
     description: Aggregated analytics data
+  - name: Funnels
+    description: Step-conversion funnels — SDK-declared or dashboard-managed
 
 paths:
   /api/v1/health:
@@ -89,7 +91,7 @@ paths:
                   ts: "2026-04-30T12:34:56Z"
                   sdk:
                     platform: android
-                    version: "0.2.0"
+                    version: "0.4.0"
                   ctx:
                     language: en
                     ua: "Mozilla/5.0 (Linux; Android 14)"
@@ -107,7 +109,7 @@ paths:
                   was_offline: false
                   sdk:
                     platform: wasmJs
-                    version: "0.2.0"
+                    version: "0.4.0"
                   ctx:
                     language: en
                     ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
@@ -215,7 +217,7 @@ paths:
                   ts: "2026-04-30T12:34:56Z"
                   sdk:
                     platform: android
-                    version: "0.2.0"
+                    version: "0.4.0"
                 - event: button_click
                   screen: home
                   props:
@@ -225,7 +227,7 @@ paths:
                   was_offline: true
                   sdk:
                     platform: android
-                    version: "0.2.0"
+                    version: "0.4.0"
       responses:
         "202":
           description: All events accepted into the ingest queue
@@ -787,6 +789,279 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/projects/{projectId}/funnels:
+    get:
+      tags: [Funnels]
+      operationId: listFunnels
+      summary: List active funnels
+      description: Returns all active (non-archived) funnels for the project.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: List of funnels
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelsResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags: [Funnels]
+      operationId: createFunnel
+      summary: Create a funnel
+      description: |
+        Creates a funnel with `source: "dashboard"`. Requires the admin or developer role.
+        Limited to 20 active funnels per project and 10 steps per funnel; see
+        [the Funnels guide](sdk/funnels.md#limits).
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFunnelRequest"
+            example:
+              funnel_key: signup
+              name: Signup
+              steps:
+                - key: view
+                  event: screen_view
+                  screen: signup
+                - key: submit
+                  event: signup_submitted
+              window_seconds: 604800
+      responses:
+        "201":
+          description: Funnel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: Invalid funnel definition (bad key, step count, or window)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin or developer on this project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A funnel with this key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: funnel_exists
+                message: "A funnel with this key already exists"
+
+  /api/v1/projects/{projectId}/funnels/{funnelKey}:
+    patch:
+      tags: [Funnels]
+      operationId: updateFunnel
+      summary: Update a funnel
+      description: |
+        Updates a funnel's name, description, steps, or window. Requires the admin or
+        developer role. Editing from the dashboard sets `locked: true`, after which SDK
+        registration (`POST /api/v1/funnels/register`) silently skips this key.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/FunnelKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFunnelRequest"
+      responses:
+        "200":
+          description: Funnel updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: Invalid funnel definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin or developer on this project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Funnel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Funnels]
+      operationId: deleteFunnel
+      summary: Archive a funnel
+      description: |
+        Archives (soft-deletes) the funnel and unlocks its key, so a matching SDK
+        registration can recreate it on a future app launch. Requires the admin or
+        developer role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/FunnelKey"
+      responses:
+        "200":
+          description: Funnel archived
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin or developer on this project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Funnel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/funnels/{funnelKey}/results:
+    get:
+      tags: [Funnels]
+      operationId: getFunnelResults
+      summary: Get funnel conversion results
+      description: |
+        Analyzes step conversion, drop-off, and time-to-convert over the requested range.
+        See [the Funnels guide](sdk/funnels.md#reading-the-results) for a worked example of
+        the response fields.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/FunnelKey"
+        - name: range
+          in: query
+          schema:
+            type: integer
+            default: 604800
+          description: Lookback window in seconds, ending now (default 7 days)
+        - name: breakdown
+          in: query
+          schema:
+            type: string
+            enum: [country, platform, device_class, language]
+          description: Optional dimension to split results by, attributed by each actor's entry event
+        - name: trend
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
+          description: Pass `1` to include a daily entered/converted trend series
+      responses:
+        "200":
+          description: Funnel results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResultsResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Funnel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/funnels/register:
+    post:
+      tags: [Funnels]
+      operationId: registerFunnels
+      summary: Register funnels declared by the SDK
+      description: |
+        Upserts funnel definitions declared in app code. Called automatically by the SDK on
+        `init` when the declared funnels changed since the last successful registration — see
+        [the registration lifecycle](sdk/funnels.md#registration-lifecycle). A funnel already
+        locked by a dashboard edit is skipped, not overwritten.
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterFunnelsRequest"
+      responses:
+        "200":
+          description: Registration result, per funnel key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterFunnelsResponse"
+        "400":
+          description: Invalid funnel definition in the request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     ApiKey:
@@ -812,6 +1087,15 @@ components:
         type: string
         pattern: "^proj_[a-zA-Z0-9]+$"
       description: Unique project identifier
+
+    FunnelKey:
+      name: funnelKey
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9_-]{1,64}$"
+      description: The funnel's slug key
 
   schemas:
     SdkInfo:
@@ -1198,7 +1482,7 @@ components:
           example: "android"
         sdk_version:
           type: string
-          example: "0.2.0"
+          example: "0.4.0"
         duration_ms:
           type: integer
           format: int64
@@ -1230,6 +1514,353 @@ components:
           type: integer
         offset:
           type: integer
+
+    FunnelStepDefinition:
+      type: object
+      required:
+        - key
+        - event
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Slug identifying this step within its funnel (used by `Funnel.step(key)` in the SDK)
+        event:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Event name this step matches
+        name:
+          type: string
+          nullable: true
+          description: Display name shown in the dashboard (defaults to the key)
+        screen:
+          type: string
+          nullable: true
+          description: If set, only events with this exact screen match this step
+        props:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            If set, only events whose props exactly match ALL of these key-value pairs match
+            this step. Unlike an event's own `props` (which accepts any JSON scalar — see
+            `TrackEventRequest.props`), a funnel step's `props` are always string-keyed,
+            string-valued exact filters compared against the event's props as strings, so a
+            numeric or boolean event prop still matches a filter of the same value written as a
+            string. An empty filter always serializes as `{}`, never `[]`.
+          example: {}
+
+    FunnelResponse:
+      type: object
+      required:
+        - funnel_key
+        - name
+        - steps
+        - window_seconds
+        - source
+        - locked
+        - created_at
+        - updated_at
+      properties:
+        funnel_key:
+          type: string
+          example: "signup"
+        name:
+          type: string
+          example: "Signup"
+        description:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          minItems: 2
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/FunnelStepDefinition"
+        window_seconds:
+          type: integer
+          format: int64
+          minimum: 60
+          maximum: 7776000
+          description: Conversion window in seconds (60s to 90 days), measured from the first step's match
+          example: 604800
+        source:
+          type: string
+          enum: [sdk, dashboard]
+          description: Whether this funnel was auto-registered by the SDK or created/edited in the dashboard
+        locked:
+          type: boolean
+          description: True once a dashboard edit has locked this key against further SDK auto-registration
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    FunnelsResponse:
+      type: object
+      required:
+        - funnels
+      properties:
+        funnels:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelResponse"
+
+    CreateFunnelRequest:
+      type: object
+      required:
+        - funnel_key
+        - name
+        - steps
+      properties:
+        funnel_key:
+          type: string
+          pattern: "^[a-z0-9_-]{1,64}$"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          minItems: 2
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/FunnelStepDefinition"
+        window_seconds:
+          type: integer
+          format: int64
+          minimum: 60
+          maximum: 7776000
+          default: 604800
+
+    UpdateFunnelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          nullable: true
+          minItems: 2
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/FunnelStepDefinition"
+        window_seconds:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 60
+          maximum: 7776000
+
+    RegisterFunnelsRequest:
+      type: object
+      properties:
+        funnels:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateFunnelRequest"
+
+    RegisterFunnelsResponse:
+      type: object
+      properties:
+        registered:
+          type: array
+          items:
+            type: string
+          description: Funnel keys created or updated by this call
+        skippedLocked:
+          type: array
+          items:
+            type: string
+          description: Funnel keys skipped because a dashboard edit had already locked them
+        rejected:
+          type: object
+          additionalProperties:
+            type: string
+          description: Funnel keys that failed validation, mapped to the rejection reason
+
+    FunnelStepResult:
+      type: object
+      required:
+        - key
+        - count
+        - conversion_from_entry
+        - conversion_from_previous
+        - dropped
+        - drop_rate
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+          nullable: true
+        count:
+          type: integer
+          description: Actors who reached this step
+        conversion_from_entry:
+          type: number
+          format: double
+          description: count / entered
+        conversion_from_previous:
+          type: number
+          format: double
+          description: count / previous step's count
+        dropped:
+          type: integer
+          description: Actors who reached the previous step but not this one
+        drop_rate:
+          type: number
+          format: double
+        median_ms_from_previous:
+          type: integer
+          format: int64
+          nullable: true
+          description: Nearest-rank median time from the previous step, in milliseconds
+        p90_ms_from_previous:
+          type: integer
+          format: int64
+          nullable: true
+          description: Nearest-rank 90th-percentile time from the previous step, in milliseconds
+
+    FunnelBreakdownValue:
+      type: object
+      required:
+        - value
+        - entered
+        - overall_conversion
+        - steps
+      properties:
+        value:
+          type: string
+          description: The breakdown dimension's value for this group (e.g. a country code)
+        entered:
+          type: integer
+        overall_conversion:
+          type: number
+          format: double
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelStepResult"
+
+    FunnelBreakdown:
+      type: object
+      required:
+        - dimension
+        - values
+      properties:
+        dimension:
+          type: string
+          enum: [country, platform, device_class, language]
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelBreakdownValue"
+
+    FunnelTrendPoint:
+      type: object
+      required:
+        - bucket
+        - entered
+        - converted
+        - conversion
+      properties:
+        bucket:
+          type: string
+          format: date
+          description: The day (UTC) this entry cohort started on
+        entered:
+          type: integer
+        converted:
+          type: integer
+        conversion:
+          type: number
+          format: double
+
+    FunnelResultsResponse:
+      type: object
+      required:
+        - funnel
+        - range
+        - counted_by
+        - entered
+        - converted
+        - overall_conversion
+        - steps
+        - truncated
+      properties:
+        funnel:
+          type: object
+          properties:
+            funnel_key:
+              type: string
+            name:
+              type: string
+            window_seconds:
+              type: integer
+              format: int64
+            steps:
+              type: array
+              items:
+                $ref: "#/components/schemas/FunnelStepDefinition"
+        range:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        counted_by:
+          type: string
+          enum: [install, session]
+          description: |
+            "install" when every matched actor had an install-hash; "session" if any fell
+            back to session-scoped counting (events sent before the install-identity
+            migration, or with no install-hash available) — see the
+            [privacy note](sdk/funnels.md#privacy-note).
+        entered:
+          type: integer
+          description: Actors whose first step landed inside the requested range
+        converted:
+          type: integer
+          description: Actors who reached the last step
+        overall_conversion:
+          type: number
+          format: double
+        median_total_ms:
+          type: integer
+          format: int64
+          nullable: true
+          description: Nearest-rank median time from entry to full completion, among those who completed
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelStepResult"
+        breakdown:
+          allOf:
+            - $ref: "#/components/schemas/FunnelBreakdown"
+          nullable: true
+        trend:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/FunnelTrendPoint"
+        truncated:
+          type: boolean
+          description: True if the underlying event scan hit its internal row cap; narrow the range for complete results
 
     AggregatesResponse:
       type: object

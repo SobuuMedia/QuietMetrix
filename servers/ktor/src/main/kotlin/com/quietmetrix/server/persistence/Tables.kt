@@ -1,5 +1,6 @@
 package com.quietmetrix.server.persistence.tables
 
+import com.quietmetrix.server.funnels.FunnelValidation
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.javatime.datetime
@@ -38,6 +39,10 @@ object Projects : Table("projects") {
     // `install_meta` / audit tables. Rotated on API-key regeneration (old install rows are
     // discarded at rotation). See docs/security/publishable-api-key.md — Privacy note.
     val installSalt = varchar("install_salt", 64).nullable()
+    // Separate per-project salt for funnel/analytics identity (events.install_hash). Unlike
+    // installSalt, this is NEVER rotated on API-key regeneration — funnel and retention history
+    // must survive a key rotation. See docs/security/publishable-api-key.md — Privacy note.
+    val analyticsSalt = varchar("analytics_salt", 64).nullable()
     // Stage 3 — opt-in event-name allowlist. When `strict_schema` is true, ingest rejects
     // events whose name is not in `allowed_events` (JSON array). Bounded blast radius for
     // a publishable API key. See docs/security/publishable-api-key.md.
@@ -75,7 +80,9 @@ object Events : Table("events") {
     val platform = varchar("platform", 20).nullable()
     val sdkVersion = varchar("sdk_version", 20).nullable()
     val receivedAt = datetime("received_at").clientDefault { LocalDateTime.now() }
-    val anonymousId = varchar("anonymous_id", 128).nullable()
+    // Per-project analytics-salt hash of the install id. Never the raw `anonymousId` — see
+    // docs/security/publishable-api-key.md — Privacy note.
+    val installHash = varchar("install_hash", 64).nullable()
     val city = varchar("city", 100).nullable()
     val region = varchar("region", 100).nullable()
     val browser = varchar("browser", 50).nullable()
@@ -93,8 +100,11 @@ object Events : Table("events") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(true, projectId, ts)
+        // Non-unique: multiple events legitimately share (project_id, ts). This index only
+        // matched V1__init.sql's non-unique index by coincidence until fixed here.
+        index(false, projectId, ts)
         index(false, projectId, eventName, ts)
+        index(false, projectId, installHash)
     }
 }
 
@@ -175,12 +185,49 @@ object IngestAudit : Table("ingest_audit") {
     init { index(false, projectId, auditedAt) }
 }
 
+object Funnels : Table("funnels") {
+    val id = long("id").autoIncrement()
+    val projectId = long("project_id").references(Projects.id)
+    // Slug, unique per project — the SDK's upsert key for auto-registration.
+    val funnelKey = varchar("funnel_key", 64)
+    val name = varchar("name", 255)
+    val description = varchar("description", 1000).nullable()
+    // JSON array of step objects: [{key, event, name?, screen?, props?}, ...]. Order is
+    // positional — no separate ordinal column.
+    val steps = text("steps")
+    val windowSeconds = long("window_seconds").default(FunnelValidation.DEFAULT_WINDOW_SECONDS)
+    // 'sdk' | 'dashboard'. A dashboard edit sets locked=true, after which SDK
+    // auto-registration skips the row rather than silently overwriting an analyst's edit.
+    val definitionSource = varchar("source", 16).default("dashboard")
+    val locked = bool("locked").default(false)
+    val countMode = varchar("count_mode", 16).default("actor")
+    val identityScope = varchar("identity_scope", 32).default("install_or_session")
+    val correlationProperty = varchar("correlation_property", 128).nullable()
+    val archivedAt = datetime("archived_at").nullable()
+    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
+    val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(projectId, funnelKey)
+    }
+}
+
+/** Last accepted revision for each code-owned funnel manifest. */
+object FunnelManifests : Table("funnel_manifests") {
+    val projectId = long("project_id").references(Projects.id)
+    val namespace = varchar("namespace", 128)
+    val revision = long("revision")
+    val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
+
+    override val primaryKey = PrimaryKey(projectId, namespace)
+}
+
 object Sessions : Table("sessions") {
     val id = long("id").autoIncrement()
     val projectId = long("project_id").references(Projects.id)
     val sessionId = varchar("session_id", 128)
-    val anonymousId = varchar("anonymous_id", 128).nullable()
-    val userId = varchar("user_id", 128).nullable()
     val startedAt = datetime("started_at").clientDefault { LocalDateTime.now() }
     val endedAt = datetime("ended_at").nullable()
     val durationSec = integer("duration_sec").nullable()
@@ -205,6 +252,5 @@ object Sessions : Table("sessions") {
     init {
         index(false, projectId, sessionId)
         index(false, projectId, startedAt)
-        index(false, anonymousId)
     }
 }

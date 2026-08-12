@@ -60,4 +60,22 @@ class JsFacadeTest {
         setCookieConsent(false)
         assertFalse(isTrackingAllowed())
     }
+
+    @Test
+    fun defineFunnel_stepReturnsResolvingPromise(): Promise<Unit> {
+        init(offlineOptions("qm_facade_funnel_"))
+        val stepOptions: FunnelStepOptions = js("({ key: 'submit', event: 'signup_submitted' })")
+        val funnelOptions: FunnelOptions = js("({ key: 'signup', name: 'Signup', steps: [stepOptions] })")
+        val handle = defineFunnel(funnelOptions)
+        return handle.step("submit")
+    }
+
+    @Test
+    fun init_acceptsFunnelsWithoutThrowing() {
+        val stepOptions: FunnelStepOptions = js("({ key: 'view', event: 'screen_view', screen: 'signup' })")
+        val funnelOptions: FunnelOptions = js("({ key: 'signup', name: 'Signup', steps: [stepOptions] })")
+        val options: QuietMetrixInitOptions = js("({ storageKeyPrefix: 'qm_facade_init_funnels_', trackingEndpoint: null, funnels: [funnelOptions] })")
+        init(options)
+        assertTrue(QuietMetrix.isInitialized)
+    }
 }

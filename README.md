@@ -12,7 +12,6 @@ Everything is MIT-licensed. No vendor lock-in.
 - [Quick Starts](#quick-starts)
   - [SDK (5 minutes)](#sdk-5-minutes)
   - [Docker backend (5 minutes)](#docker-backend-5-minutes)
-  - [PHP backend, Docker (10 minutes)](#php-backend-docker-10-minutes)
   - [PHP backend, IONOS / shared hosting (10 minutes)](#php-backend-ionos--shared-hosting-10-minutes)
 - [Project Structure](#project-structure)
 - [Architecture](#architecture)
@@ -27,7 +26,7 @@ Everything is MIT-licensed. No vendor lock-in.
   - [Configuration](#configuration)
   - [Tracking Events](#tracking-events)
   - [Consent & Privacy Controls](#consent--privacy-controls)
-  - [User Identification](#user-identification)
+  - [Funnels](#funnels)
   - [Offline & Queue Management](#offline--queue-management)
   - [Device Context](#device-context)
 - [API Reference](#api-reference)
@@ -36,6 +35,7 @@ Everything is MIT-licensed. No vendor lock-in.
   - [Admin Endpoints](#admin-endpoints)
   - [Project Management](#project-management)
   - [Members & Teams](#members--teams)
+  - [Funnels](#funnels-1)
 - [Multi-Project Support](#multi-project-support)
   - [Creating Projects](#creating-projects)
   - [Team Members & Roles](#team-members--roles)
@@ -87,7 +87,7 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 // 1. Add dependency (KMP project, build.gradle.kts)
 implementation(project(":quietmetrix-sdk"))
 // or from Maven Central when published:
-// implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
+// implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
 
 // 2. Initialize once at app startup
 import com.quietmetrix.analytics.*
@@ -110,10 +110,11 @@ setAnalyticsEnabled(true)
 
 // 5. Force flush (e.g., before app goes to background)
 suspend fun onPause() { QuietMetrix.flush() }
-
-// 6. Identify a user
-QuietMetrix.identify("user_123")
 ```
+
+Want to track conversion through a multi-step flow (signup, checkout, onboarding)? See
+[Funnels](#funnels) below — declare the steps once and the dashboard analyzes drop-off,
+breakdown, and time-to-convert automatically.
 
 ### Docker backend (5 minutes)
 
@@ -145,7 +146,7 @@ SSH required. Drop-in flat layout that bundles a static dashboard.
 
 # 3. Open https://your-domain.com/api/v1/health in a browser.
 #    The first request creates the schema and the admin user automatically.
-#    Expected: {"ok":true,"version":"0.2.0","db":"connected"}
+#    Expected: {"ok":true,"version":"0.4.0","db":"connected"}
 
 # 4. Visit https://your-domain.com/dashboard/ → sign in with the
 #    ADMIN_EMAIL / ADMIN_PASSWORD from config.php → create a project →
@@ -154,34 +155,6 @@ SSH required. Drop-in flat layout that bundles a static dashboard.
 
 Full IONOS-specific instructions (panel screenshots, mod_rewrite checks,
 demo-mode walkthrough, troubleshooting): [`php-hosting/SETUP.md`](php-hosting/SETUP.md).
-
-### PHP backend, Docker (10 minutes)
-
-The Slim 4 + Composer + Phinx variant in `servers/php/`, used when you want
-to run the PHP server in a container or on infrastructure where you control
-the runtime.
-
-```bash
-# 1. Upload servers/php/ to your web host
-#    - public/ → your web root (public_html/)
-#    - src/, bin/, migrations/, vendor/ → ABOVE web root
-
-# 2. Install dependencies
-cd /path/above/webroot
-cp .env.example .env
-# Edit .env with your MySQL credentials + JWT secret
-composer install --no-dev
-
-# 3. Run Phinx migrations
-vendor/bin/phinx migrate
-
-# 4. Create first admin user (direct DB insert — see detailed setup)
-
-# 5. Add cron worker (processes events every minute)
-#    * * * * * php /path/to/bin/qm-worker.php
-
-# 6. Login via POST /api/v1/auth/login and create a project
-```
 
 ## Project Structure
 
@@ -201,32 +174,19 @@ QuietMetrix/
 │       └── wasmJsMain/            # Web / Wasm
 │
 ├── servers/
-│   ├── ktor/                      # Ktor + PostgreSQL server
-│   │   ├── build.gradle.kts
-│   │   ├── Dockerfile
-│   │   ├── migrations/            # Flyway SQL migrations
-│   │   └── src/main/kotlin/.../
-│   │       ├── Application.kt     # Entry point
-│   │       ├── config/            # AppConfig, DiModule (Koin)
-│   │       ├── domain/            # Event, Project, User, Plan, ProjectMember
-│   │       ├── ingest/            # EventValidator, EventNormalizer, IngestChannel
-│   │       ├── persistence/       # Exposed tables + repositories
-│   │       ├── plugins/           # CORS, Monitoring, Security, RateLimiting
-│   │       ├── ratelimit/         # RateLimiter, QuotaEnforcer (unlimited self-host)
-│   │       └── routes/            # Track, Auth, Project, Dashboard
-│   │
-│   └── php/                       # PHP + MySQL server (Docker / Slim 4 variant)
-│       ├── composer.json
-│       ├── .env.example
-│       ├── public/index.php       # Web root entry
-│       ├── bin/qm-worker.php      # Cron job for inbox processing
-│       ├── migrations/            # Phinx migrations
-│       └── src/
-│           ├── Config/
-│           ├── Controller/
-│           ├── Domain/
-│           ├── Http/              # App router, Middleware
-│           └── Persistence/       # PDO repositories
+│   └── ktor/                      # Ktor + PostgreSQL server
+│       ├── build.gradle.kts
+│       ├── Dockerfile
+│       ├── migrations/            # Flyway SQL migrations
+│       └── src/main/kotlin/.../
+│           ├── Application.kt     # Entry point
+│           ├── config/            # AppConfig, DiModule (Koin)
+│           ├── domain/            # Event, Project, User, Plan, ProjectMember
+│           ├── ingest/            # EventValidator, EventNormalizer, IngestChannel
+│           ├── persistence/       # Exposed tables + repositories
+│           ├── plugins/           # CORS, Monitoring, Security, RateLimiting
+│           ├── ratelimit/         # RateLimiter, QuotaEnforcer (unlimited self-host)
+│           └── routes/            # Track, Auth, Project, Dashboard, Funnels
 │
 ├── php-hosting/                  # PHP + MySQL server (flat IONOS / shared-host variant)
 │   ├── index.php                 # Front controller
@@ -240,8 +200,9 @@ QuietMetrix/
 │   │   ├── db.php
 │   │   ├── jwt.php               # Pure-PHP HS256 JWT
 │   │   ├── auth.php              # Bearer + api-key validators
-│   │   ├── bootstrap.php         # First-run schema + admin auto-create
-│   │   └── routes/               # auth, projects, track, dashboard, demo
+│   │   ├── bootstrap.php         # First-run schema + admin auto-create, in-place upgrades
+│   │   └── routes/               # auth, projects, track, dashboard, demo, funnels
+│   ├── tests/                     # Plain PHP assertion scripts, run individually (no framework)
 │   └── dashboard/                # Static HTML+JS+CSS dashboard (no build step)
 │       ├── index.html
 │       ├── css/style.css
@@ -307,11 +268,11 @@ QuietMetrix/
 │ • Offline buffer │                                          │ same API contract
 │ • Consent gate   │                                          ▼
 │ • Auto-flush     │                               ┌──────────────────────────┐
-│ • Backoff retry  │                               │  PHP Server              │
+│ • Backoff retry  │                               │  PHP Server (php-hosting)│
 └──────────────────┘                               │  • Same routes & schemas │
                                                    │  • MySQL 8               │
-                                                   │  • Phinx migrations      │
-                                                   │  • Cron event processor  │
+                                                   │  • schema.sql auto-apply │
+                                                   │  • Synchronous inserts   │
                                                    └──────────────────────────┘
 ```
 
@@ -319,8 +280,10 @@ QuietMetrix/
 1. SDK enqueues event → local `EventQueue` (memory + connectivity check)
 2. `FlushManager` fires every `flushIntervalMs` (default 30s) or when connectivity returns
 3. Event batch POSTed to `/api/v1/track` or `/api/v1/track/batch`
-4. Server validates API key → validates schema → enqueues to `events_inbox`
-5. Background worker processes inbox → inserts to `events` table → updates `event_counts_daily`
+4. Server validates API key → validates schema
+5. **Ktor:** enqueues to an in-process `events_inbox` channel; a background worker processes
+   it → inserts to `events` → updates `event_counts_daily`.
+   **php-hosting:** inserts directly to `events` within the request — no inbox, no worker.
 6. Dashboard queries read from `events`, `event_counts_daily`, `usage_counters`
 
 ---
@@ -350,7 +313,7 @@ docker compose up --build
 
 # Check health
 curl http://localhost:8080/api/v1/health
-# → {"ok":true,"version":"0.2.0"}
+# → {"ok":true,"version":"0.4.0"}
 
 # Create admin user (bcrypt hash cost 12)
 # Generate hash: python3 -c "import bcrypt; print(bcrypt.hashpw(b'password', bcrypt.gensalt(12)).decode())"
@@ -398,53 +361,51 @@ curl -X POST http://localhost:8080/api/v1/track \
 
 ### PHP + MySQL (Shared Hosting)
 
+The flat, no-framework variant in `php-hosting/` — no Composer, no Docker, no shell access
+required. Everything (API + static dashboard) uploads as one directory to your web root.
+
 #### Requirements
 - PHP 8.2 or 8.3 with extensions: `pdo_mysql`, `json`, `mbstring`, `ctype`
 - MySQL 8.0+ (or MariaDB 10.11+)
 - Apache with `mod_rewrite` (or Nginx with equivalent config)
-- Composer (local or server-side)
 
 #### Step-by-step
 
 ```bash
-# 1. Prepare files locally
-cd servers/php
-cp .env.example .env
-# Edit .env:
-#   QM_DB_HOST=localhost
-#   QM_DB_NAME=quietmetrix
-#   QM_DB_USER=your_db_user
-#   QM_DB_PASSWORD=your_db_password
-#   QM_JWT_SECRET=<generate a random 64-char string>
-composer install --no-dev
+# 1. Configure locally
+cp php-hosting/config.example.php php-hosting/config.php
+# Edit config.php (plain PHP define()s, not env vars):
+#   DB_HOST, DB_NAME, DB_USER, DB_PASS
+#   ADMIN_EMAIL, ADMIN_PASSWORD   — creates the first admin user automatically
+#   JWT_SECRET                    — generate with: openssl rand -hex 32
+# Keep DEBUG=false in production.
 
-# 2. Upload to server
-#    public/     → public_html/ or your web root
-#    src/        → /home/user/quietmetrix/src/
-#    bin/        → /home/user/quietmetrix/bin/
-#    migrations/ → /home/user/quietmetrix/migrations/
-#    vendor/     → /home/user/quietmetrix/vendor/
-#    .env        → /home/user/quietmetrix/.env
+# 2. Upload the entire contents of php-hosting/ to your web root
+#    (FTP/SFTP/File Manager — whatever your host provides). config.php,
+#    schema.sql, and *.md are blocked from direct web access by .htaccess.
 
-# 3. Run Phinx migrations
-vendor/bin/phinx migrate
+# 3. Open https://your-domain.com/api/v1/health in a browser.
+#    The first request applies schema.sql and creates the admin user —
+#    no migration tool, no cron step, no manual SQL required.
 
-# 4. Create first admin user (insert into MySQL with bcrypt hash)
-#    Generate hash: python3 -c "import bcrypt; print(bcrypt.hashpw(b'password', bcrypt.gensalt(12)).decode())"
-mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2a$12$HASH');
-
-# 4. Add cron
-#    * * * * * php /home/user/quietmetrix/bin/qm-worker.php >> /home/user/quietmetrix/logs/worker.log 2>&1
-
-# 5. Secure the installation
-#    - Ensure src/, bin/, migrations/, vendor/ are not web-accessible
-#    - Set restrictive file permissions (640 for .env, 755 for directories)
+# 4. Visit https://your-domain.com/dashboard/ and sign in with
+#    ADMIN_EMAIL / ADMIN_PASSWORD from config.php, then create a project.
 ```
 
+Upgrading later is the same: re-upload the changed files. `schema.sql` is idempotent, and
+`bootstrap.php`'s `addColumnIfMissing`/`createTableIfMissing` apply any new columns/tables to
+an already-installed database automatically on the next request — no migration command to run.
+
 #### Security
-- The `src/`, `bin/`, `migrations/`, and `vendor/` directories **must not be web-accessible**.
-- The `.env` file contains secrets — ensure it's above the web root.
-- Use HTTPS. Let's Encrypt with certbot or your hosting panel's SSL.
+- `config.php`, `schema.sql`, and `*.md` are denied direct web access via `.htaccess` — verify
+  this is in effect on your host after upload (`curl https://your-domain.com/config.php` should
+  403/404, not return PHP source).
+- Keep `DEBUG=false` in production — this disables the `/api/v1/_demo/*` endpoints and the
+  dashboard's "Use demo data" toggle.
+- Use HTTPS. Let's Encrypt via certbot or your hosting panel's SSL.
+
+Full IONOS-specific instructions (panel screenshots, mod_rewrite checks, troubleshooting):
+[`php-hosting/SETUP.md`](php-hosting/SETUP.md).
 
 ### Environment Reference
 
@@ -475,25 +436,27 @@ mysql> INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2
 | `QM_INGEST_INSTALL_RAMP_EVENTS` | `500` | Auto-revoke an install that sends this many events in the ramp window |
 | `QM_INGEST_INSTALL_RAMP_MINUTES` | `10` | Ramp-up window length (minutes) |
 
-#### PHP server
+#### PHP server (`php-hosting/config.php`)
 
-| Variable | Default | Description |
+Not environment variables — plain PHP `define()` constants in `config.php` (copied from
+`config.example.php`, gitignored, blocked from direct web access):
+
+| Constant | Default | Description |
 |----------|---------|-------------|
-| `QM_PROFILE` | `selfhost` | `selfhost` or `cloud` |
-| `QM_DB_HOST` | `127.0.0.1` | MySQL host |
-| `QM_DB_PORT` | `3306` | MySQL port |
-| `QM_DB_NAME` | `quietmetrix` | Database name |
-| `QM_DB_USER` | `quietmetrix` | Database user |
-| `QM_DB_PASSWORD` | `quietmetrix` | Database password |
-| `QM_JWT_SECRET` | `change-me...` | HMAC256 signing secret |
-| `QM_JWT_ISSUER` | `quietmetrix` | JWT issuer |
-| `QM_JWT_AUDIENCE` | `quietmetrix-api` | JWT audience |
-| `QM_SESSION_TTL_HOURS` | `2` | Access token lifetime |
-| `JWT_REFRESH_EXPIRY_DAYS` | `2` | Refresh token lifetime |
+| `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASS` | `localhost` / `quietmetrix` / — / — | MySQL connection |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | First admin user, auto-created on first request; no effect once it already exists |
+| `JWT_SECRET` | — | HMAC256 signing secret — generate with `openssl rand -hex 32` |
+| `JWT_EXPIRY_HOURS` | `2` | Access token lifetime |
+| `JWT_REFRESH_EXPIRY_DAYS` | `2` | Refresh token lifetime — must match the Ktor backend |
+| `ALLOWED_ORIGIN` | `*` | CORS origin allowed to call the API from a browser |
 | `CSP_CONNECT_SRC` | `'self'` | CSP `connect-src` directive |
-| `QM_RATE_LIMIT_ENABLED` | `false` | Enable rate limiting |
-| `QM_RATE_LIMIT_RPS` | `10` | Requests per second |
-| `QM_RATE_LIMIT_BURST` | `60` | Burst per minute |
+| `DEBUG` | `false` | `true` enables verbose errors + demo-data endpoints; always `false` in production |
+| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `true` / `10` / `60` | Per-API-key rate limiting on `/track*` |
+| `INGEST_IP_ENABLED` / `INGEST_IP_RPS` / `INGEST_IP_BURST` | `true` / `5` / `60` | Per-IP ingest throttling (abuse defense) |
+| `INGEST_INSTALL_ENABLED` / `INGEST_INSTALL_RPS` / `INGEST_INSTALL_BURST` | `true` / `1` / `30` | Per-install ingest throttling |
+| `TRUSTED_PROXIES` | `[]` | IPs whose `X-Forwarded-For` is trusted |
+
+See `php-hosting/config.example.php` for the full, commented list.
 
 ### Database Migrations
 
@@ -512,30 +475,26 @@ cd servers/ktor
 ./gradlew flywayMigrate
 ```
 
-#### PHP (Phinx)
+#### PHP (schema.sql, auto-applied)
 
-Run the Phinx migrations:
-```bash
-cd servers/php
-vendor/bin/phinx migrate
-```
+No migration tool: `schema.sql` runs automatically on the first request after install (via
+`src/bootstrap.php`), and is idempotent — safe to leave in place on every request. Later schema
+changes (new columns/tables) are applied the same way via `addColumnIfMissing`/
+`createTableIfMissing` in `bootstrap.php`, so upgrading is just re-uploading changed files.
 
 ### First-time Setup (Admin & Projects)
 
-After starting either backend:
-
-1. **Create admin user** — Insert directly into the `users` table with a bcrypt hash:
-   ```sql
-   -- Postgres (Ktor)
-   INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2a$12$...');
-   
-   -- MySQL (PHP)
-   INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2a$12$...');
-   ```
-   Generate a bcrypt hash (cost 12) using:
-   ```bash
-   python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(12)).decode())"
-   ```
+1. **Create the admin user:**
+   - **Ktor:** insert directly into the `users` table with a bcrypt hash:
+     ```sql
+     INSERT INTO users (email, password_hash) VALUES ('admin@example.com', '$2a$12$...');
+     ```
+     Generate a bcrypt hash (cost 12) using:
+     ```bash
+     python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(12)).decode())"
+     ```
+   - **php-hosting:** set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `config.php` before the first
+     request — the admin user is created automatically; no SQL needed.
 
 2. **Login** — `POST /api/v1/auth/login` with email/password to get a JWT token
 
@@ -559,7 +518,7 @@ repositories { mavenCentral() }
 
 // module build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
 }
 ```
 
@@ -584,7 +543,7 @@ QuietMetrix.shared.trackEvent(event: "page_view", screen: "home")
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.2.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
 }
 ```
 
@@ -604,15 +563,15 @@ fun main() {
 
 #### Web (JavaScript / TypeScript)
 
-Published to npm as `@quietmetrix/sdk` — framework-agnostic (Vue, React, Svelte, plain JS),
+Published to npm as `@sobuumedia/quietmetrix-sdk` — framework-agnostic (Vue, React, Svelte, plain JS),
 with bundled TypeScript types. See [docs/sdk/web.md](docs/sdk/web.md) for the full guide.
 
 ```bash
-npm install @quietmetrix/sdk
+npm install @sobuumedia/quietmetrix-sdk
 ```
 
 ```javascript
-import { init, trackEvent } from "@quietmetrix/sdk";
+import { init, trackEvent } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
@@ -646,8 +605,9 @@ data class QuietMetrixConfig(
     val flushIntervalMs: Long = 30_000L,    // Auto-flush interval (ms)
     val maxQueueSize: Int = 1000,           // Max buffered events (oldest dropped when full)
     val autoTrackInitialPageView: Boolean = true, // Fire page_view on init?
-    val trackingAllowedByDefault: Boolean = true, // Track before consent?
+    val trackingAllowedByDefault: Boolean = false, // Track before consent?
     val userAgent: String? = null,          // Custom User-Agent header
+    val funnels: List<Funnel> = emptyList(), // Auto-registered funnel definitions
 )
 ```
 
@@ -702,17 +662,38 @@ val allowed = isTrackingAllowed()
 - `isAnalyticsEnabled == false` → Blocks regardless of consent
 - All three gates are checked by `Gate.shouldTrack()` before any event is enqueued
 
-### User Identification
+### Funnels
+
+Declare an ordered list of steps — each one an event you already track — and QuietMetrix
+analyzes drop-off, breakdown, and time-to-convert automatically, with no dashboard setup:
 
 ```kotlin
-// Identify a user (stored locally, sent as uid field in events)
-QuietMetrix.identify("user_123")
+val signupFunnel = Funnel(
+    key = "signup",
+    name = "Signup",
+    steps = listOf(
+        FunnelStep(key = "view", event = "screen_view", screen = "signup"),
+        FunnelStep(key = "submit", event = "signup_submitted"),
+    ),
+    windowSeconds = 7L * 24 * 3600, // default: 7 days
+)
 
-// Clear identity
-QuietMetrix.identify(null)
+QuietMetrix.init(QuietMetrixConfig(
+    storageKeyPrefix = "myapp_",
+    trackingEndpoint = "https://your-server.com/api/v1/track",
+    apiKey = "qm_ak_your_api_key",
+    funnels = listOf(signupFunnel),
+))
 ```
 
-The `uid` is included in the `TrackEventRequest` payload and added to all subsequent events in the flush batch. It persists across app restarts (stored in `InMemoryStore` with the project's `storageKeyPrefix`).
+The SDK auto-registers the funnel with the server on `init` (fingerprint-gated, so a
+launch registers nothing when the definition hasn't changed) and matches it against
+your existing event stream — no code change needed at tracking call sites. Funnels are
+counted per **install** (a per-project, salted, non-reversible hash of a device-local id)
+— never by user ID, matching QuietMetrix's no-PII design.
+
+See the [Funnels developer guide](docs/sdk/funnels.md) for matching rules, the dashboard
+editing/locking workflow, and a worked example of the results payload.
 
 ### Offline & Queue Management
 
@@ -790,8 +771,7 @@ Auth: API key
   "sid": "abc123def456",
   "ts": "2026-04-30T12:34:56Z",
   "was_offline": false,
-  "uid": "hashed_user_id",
-  "sdk": { "platform": "android", "version": "0.2.0" },
+  "sdk": { "platform": "android", "version": "0.4.0" },
   "ctx": {
     "language": "en",
     "ua": "Mozilla/5.0 ...",
@@ -939,6 +919,18 @@ Role must be `viewer` or `admin` (not `owner`). Returns `201 Created`.
 
 Auth: Bearer Token, must be owner or admin. Cannot remove self if last admin.
 
+### Funnels
+
+See the [Funnels developer guide](docs/sdk/funnels.md) for concepts, matching rules, and a
+worked example of the results payload.
+
+- `GET /api/v1/projects/:id/funnels` — Bearer auth. List active funnels.
+- `POST /api/v1/projects/:id/funnels` — Bearer auth, admin/developer role. Create a funnel.
+- `PATCH /api/v1/projects/:id/funnels/:funnelKey` — Bearer auth, admin/developer role. Update a funnel; locks it against further SDK auto-registration.
+- `DELETE /api/v1/projects/:id/funnels/:funnelKey` — Bearer auth, admin/developer role. Archive a funnel; unlocks the key for SDK re-registration.
+- `GET /api/v1/projects/:id/funnels/:funnelKey/results` — Bearer auth. Query params: `range` (seconds, default 7 days), `breakdown` (`country`\|`platform`\|`device_class`\|`language`), `trend` (`1` to include a daily trend series).
+- `POST /api/v1/funnels/register` — API key auth. Upserts funnel definitions declared by the SDK; a no-op for any funnel already locked by a dashboard edit.
+
 ---
 
 ## Multi-Project Support
@@ -991,7 +983,7 @@ Projects are soft-deleted — `deleted_at` is set, events are preserved. The pro
 - Gradle 8.11+ (the project includes `gradlew`)
 - Android SDK (for SDK Android target compilation) — `ANDROID_HOME` set
 - Docker (for running the Ktor backend locally)
-- PHP 8.2+ and Composer (for the PHP backend)
+- PHP 8.2+ (for the PHP backend — no Composer or other dependencies needed)
 - Node.js + Newman (`npm install -g newman`) for contract tests
 
 ### Building the SDK
@@ -1033,24 +1025,20 @@ The server starts on `http://localhost:8080`. Flyway migrations run automaticall
 ### Running the PHP Server Locally
 
 ```bash
-cd servers/php
+cd php-hosting
 
 # Start MySQL (or use Docker)
 docker run -d --name qm-mysql \
   -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=quietmetrix \
   -p 3306:3306 mysql:8.0
 
-# Install dependencies
-composer install
+# Configure
+cp config.example.php config.php
+# Edit config.php: DB_HOST/DB_NAME/DB_USER/DB_PASS, ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET
 
-# Run migrations
-vendor/bin/phinx migrate
-
-# Start PHP built-in server
-php -S localhost:8081 -t public/
-
-# Run cron worker manually (for testing)
-php bin/qm-worker.php
+# Start PHP's built-in server — schema.sql and the admin user are applied
+# automatically on the first request, no separate migration step
+php -S localhost:8081
 ```
 
 ### Running Tests
@@ -1066,9 +1054,11 @@ php bin/qm-worker.php
 ./gradlew :servers:ktor:test --tests "*RouteIntegrationTest*"
 ./gradlew :servers:ktor:test --tests "*ProjectRoutesIntegrationTest*"
 
-# PHP tests
-cd servers/php
-vendor/bin/phpunit
+# PHP tests — plain scripts, no framework; each is self-contained and exits
+# 0 (pass) or 1 (fail)
+cd php-hosting
+php -l index.php && php -l src/*.php && php -l src/routes/*.php  # syntax check
+for f in tests/*.php; do php "$f" || echo "FAILED: $f"; done
 ```
 
 ---
@@ -1094,10 +1084,10 @@ For production TLS, put the Ktor service behind the reverse proxy in
 ```bash
 # Ktor server
 docker build -f servers/ktor/Dockerfile -t quietmetrix-ktor:latest .
-
-# PHP server
-docker build -f servers/php/Dockerfile -t quietmetrix-php:latest .
 ```
+
+`php-hosting/` has no Dockerfile — it's designed for shared hosting (upload the directory as
+static files + PHP), not a container. See [PHP backend, IONOS / shared hosting](#php-backend-ionos--shared-hosting-10-minutes) above.
 
 ---
 
@@ -1109,7 +1099,7 @@ docker build -f servers/php/Dockerfile -t quietmetrix-php:latest .
 |--------|-----------|-------|----------|
 | SDK | kotlin.test | 20+ | `quietmetrix-sdk/src/commonTest/` |
 | Ktor server | Kotest + JUnit 5 | 36 | `servers/ktor/src/test/` |
-| PHP server | PHPUnit 11 | 5+ | `servers/php/tests/` |
+| PHP server (php-hosting) | Plain PHP assertion scripts, no framework | 6 | `php-hosting/tests/`, run via `php <file>.php` |
 
 ### Integration Tests
 
@@ -1158,10 +1148,13 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Trigger | Actions |
 |----------|---------|---------|
-| `ci.yml` | Push to main, PRs | SDK JVM tests, Ktor tests, PHP tests |
-| `docker.yml` | Tags (`v*`) | Build & push Ktor + PHP Docker images to GHCR |
+| `ci.yml` | Push to main, PRs | Repo-hygiene check, SDK tests (iOS simulator target), Ktor tests, PHP syntax lint + health-check smoke test (`php-hosting/`) |
+| `docker.yml` | Tags (`v*`) | Build & push the Ktor Docker image to GHCR |
 | `publish-sdk.yml` | Tags (`v*`) | Publish SDK to Maven Local/Central, create GitHub Release |
 | `docs.yml` | Push to main | Build and deploy MkDocs site |
+
+`docker.yml` currently also has a `build-php` job targeting `servers/php/Dockerfile`, which no
+longer exists in the repo — that job is broken (see [Project Structure](#project-structure)).
 
 ---
 
@@ -1171,7 +1164,7 @@ GitHub Actions workflows in `.github/workflows/`:
 - **GDPR compliance:** Built-in consent gates, data export/delete-friendly design. See `docs/operations/gdpr.md`.
 - **Security:** API keys are bcrypt-hashed. JWT secrets must be strong. See `docs/operations/security.md`.
 - **Backups:** `pg_dump` for Postgres, `mysqldump` for MySQL. See `docs/self-hosting/backup.md`.
-- **Upgrading:** `docker compose pull && up -d` or `git pull && vendor/bin/phinx migrate`. See `docs/self-hosting/upgrade.md`.
+- **Upgrading:** `docker compose pull && up -d` (Ktor), or re-upload changed files to `php-hosting/` — `schema.sql` and in-place column/table additions apply automatically on the next request, no migration command needed. See `docs/self-hosting/upgrade.md`.
 
 ---
 

@@ -1,6 +1,6 @@
 # SDK: Web (JavaScript / TypeScript)
 
-The web SDK is published to npm as `@quietmetrix/sdk`. It is framework-agnostic — the same API
+The web SDK is published to npm as `@sobuumedia/quietmetrix-sdk`. It is framework-agnostic — the same API
 works in Vue, React, Svelte, or plain JavaScript. TypeScript definitions are bundled.
 
 It is compiled from the shared Kotlin Multiplatform core, so the browser behaves identically to
@@ -11,11 +11,11 @@ not throw — tracking simply becomes a no-op until it runs in the browser.
 ## Installation
 
 ```bash
-npm install @quietmetrix/sdk
+npm install @sobuumedia/quietmetrix-sdk
 ```
 
 ```javascript
-import { init, trackEvent } from "@quietmetrix/sdk";
+import { init, trackEvent } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
@@ -27,7 +27,7 @@ init({
 You can also import the whole namespace:
 
 ```javascript
-import * as QuietMetrix from "@quietmetrix/sdk";
+import * as QuietMetrix from "@sobuumedia/quietmetrix-sdk";
 QuietMetrix.init({ /* ... */ });
 ```
 
@@ -65,6 +65,49 @@ trackEvent("signup_complete", { screen: "onboarding" });
 
 `trackEvent` returns a `Promise`; you can `await` it if you need to know the event was queued.
 
+## Funnels
+
+Pass funnels to `init` and they auto-register with the server — no dashboard setup required.
+See the [Funnels guide](funnels.md) for the full concept, matching rules, and worked example.
+
+```typescript
+import { init } from "@sobuumedia/quietmetrix-sdk";
+
+init({
+    storageKeyPrefix: "myapp_",
+    trackingEndpoint: "https://your-server.com/api/v1/track",
+    apiKey: "qm_ak_your_api_key",
+    funnels: [
+        {
+            key: "signup",
+            name: "Signup",
+            steps: [
+                { key: "view", event: "screen_view", screen: "signup" },
+                { key: "submit", event: "signup_submitted" },
+            ],
+        },
+    ],
+});
+```
+
+If you'd rather reference a step by key instead of calling `trackEvent` directly, use
+`defineFunnel` to get a handle back:
+
+```typescript
+import { defineFunnel } from "@sobuumedia/quietmetrix-sdk";
+
+const signupFunnel = defineFunnel({
+    key: "signup",
+    name: "Signup",
+    steps: [
+        { key: "view", event: "screen_view", screen: "signup" },
+        { key: "submit", event: "signup_submitted" },
+    ],
+});
+
+await signupFunnel.step("submit", { plan: "pro" });
+```
+
 ## Using it in Vue
 
 Initialize once in your entry file, then track route changes with the router:
@@ -72,7 +115,7 @@ Initialize once in your entry file, then track route changes with the router:
 ```ts
 // main.ts
 import { createApp } from "vue";
-import { init } from "@quietmetrix/sdk";
+import { init } from "@sobuumedia/quietmetrix-sdk";
 import App from "./App.vue";
 import router from "./router";
 
@@ -87,7 +130,7 @@ createApp(App).use(router).mount("#app");
 
 ```ts
 // router.ts — track page views on navigation
-import { trackEvent } from "@quietmetrix/sdk";
+import { trackEvent } from "@sobuumedia/quietmetrix-sdk";
 
 router.afterEach((to) => {
     trackEvent("page_view", { screen: to.path });
@@ -100,7 +143,7 @@ Identical package, identical calls — just wire them into your app entry and ro
 
 ```tsx
 // index.tsx
-import { init } from "@quietmetrix/sdk";
+import { init } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
@@ -113,7 +156,7 @@ init({
 // track page views on route change (react-router)
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { trackEvent } from "@quietmetrix/sdk";
+import { trackEvent } from "@sobuumedia/quietmetrix-sdk";
 
 export function usePageViews() {
     const location = useLocation();
@@ -126,7 +169,7 @@ export function usePageViews() {
 ## Consent
 
 ```javascript
-import { setCookieConsent, setAnalyticsEnabled, isTrackingAllowed } from "@quietmetrix/sdk";
+import { setCookieConsent, setAnalyticsEnabled, isTrackingAllowed } from "@sobuumedia/quietmetrix-sdk";
 
 // After the user accepts cookies via your consent banner
 setCookieConsent(true);
@@ -142,21 +185,10 @@ if (isTrackingAllowed()) {
 
 Consent state is persisted in `localStorage` under the configured `storageKeyPrefix`.
 
-## Identify
-
-`identify` hashes the user id before it is sent to the server:
-
-```javascript
-import { identify } from "@quietmetrix/sdk";
-
-identify("user_123");
-identify(null); // clear
-```
-
 ## Force Flush
 
 ```javascript
-import { flush } from "@quietmetrix/sdk";
+import { flush } from "@sobuumedia/quietmetrix-sdk";
 
 await flush();
 ```
@@ -182,7 +214,7 @@ included in `quietmetrix-sdk`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.sobuumedia:quietmetrix-sdk:0.3.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.4.0")
 }
 ```
 

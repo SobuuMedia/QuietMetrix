@@ -2,7 +2,7 @@ package com.quietmetrix.analytics.internal
 
 import com.quietmetrix.analytics.QuietMetrixConfig
 
-internal const val SDK_VERSION = "0.1.0"
+internal const val SDK_VERSION = "0.4.0"
 
 internal object ConfigHolder {
     private var _config: QuietMetrixConfig? = null

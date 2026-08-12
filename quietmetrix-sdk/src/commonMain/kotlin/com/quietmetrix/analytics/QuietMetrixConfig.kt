@@ -13,6 +13,17 @@ package com.quietmetrix.analytics
  * @param trackingAllowedByDefault If the user has not yet made a consent choice, should
  *   events fire? Default true preserves the privacy posture of "anonymous analytics until
  *   declined". Set to false for stricter opt-in semantics.
+ * @param funnels Legacy unversioned funnels. Prefer [funnelManifest] for new integrations.
+ * @param funnelManifest Versioned, code-owned funnels. Auto-registered with the server once per
+ *   meaningful change (see [com.quietmetrix.analytics.internal.funnels.FunnelRegistrar]) —
+ *   they then appear in the dashboard with no further setup. Declaring a funnel emits no
+ *   events by itself.
+ * @param collectAnonymousId Whether to generate and send a persistent per-install pseudonymous
+ *   id (`ctx.anonymous_id`, salt-hashed server-side into a never-rotated `install_hash`). This
+ *   id is what lets funnels and retention be counted per-install rather than per-session —
+ *   without it, funnels spanning more than one app session under-report. Default `true`. Set
+ *   `false` for a stricter anonymous posture with no persistent identifier of any kind; no id is
+ *   generated or written to storage, and `ctx.anonymous_id` is omitted from every event.
  */
 data class QuietMetrixConfig(
     val storageKeyPrefix: String,
@@ -25,4 +36,8 @@ data class QuietMetrixConfig(
     val userAgent: String? = null,
     val applicationContext: Any? = null,
     val debug: Boolean = false,
+    @Deprecated("Use funnelManifest so older app releases cannot overwrite newer definitions")
+    val funnels: List<Funnel> = emptyList(),
+    val funnelManifest: FunnelManifest? = null,
+    val collectAnonymousId: Boolean = true,
 )

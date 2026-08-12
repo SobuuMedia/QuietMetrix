@@ -16,7 +16,7 @@ Privacy-respecting analytics for every platform. Open-source, self-hostable, GDP
 === "Shared hosting (PHP + MySQL)"
 
     ```bash
-    # 1. Upload servers/php/ contents to your public_html/
+    # 1. Upload php-hosting/ contents to your public_html/
     # 2. Upload everything else above the webroot
     # 3. composer install --no-dev
     # 4. Copy .env.example → .env, set DB creds
@@ -31,6 +31,7 @@ Privacy-respecting analytics for every platform. Open-source, self-hostable, GDP
 ## Features
 
 - **Multi-platform SDK**: Android, iOS, macOS, Windows, Linux, Web, JVM
+- **Funnels**: declare a step sequence in code, get drop-off, breakdown, and time-to-convert in the dashboard automatically
 - **Consent-first**: Cookie consent and analytics kill switch built-in
 - **Two interchangeable backends**: PHP+MySQL or Kotlin+Ktor+PostgreSQL
 - **Offline support**: Events buffered locally, sent when connectivity returns
@@ -57,10 +58,10 @@ setAnalyticsEnabled(true)     // master kill switch
 
 // Force flush pending events
 suspend fun onSave() { QuietMetrix.flush() }
-
-// Identify user (hashed before sending)
-QuietMetrix.identify("user_123")
 ```
+
+See [Funnels](sdk/funnels.md) for how to declare a step sequence and get it analyzed
+automatically.
 
 ### iOS (Swift)
 

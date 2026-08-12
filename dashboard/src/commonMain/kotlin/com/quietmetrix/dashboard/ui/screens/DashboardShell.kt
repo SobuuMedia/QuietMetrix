@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,15 +35,14 @@ import com.quietmetrix.dashboard.nav.SideRail
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.resources.Res
-import com.quietmetrix.dashboard.resources.action_dismiss
 import com.quietmetrix.dashboard.resources.action_refresh
 import com.quietmetrix.dashboard.resources.action_signout
 import com.quietmetrix.dashboard.resources.brand
-import com.quietmetrix.dashboard.resources.ic_close
 import com.quietmetrix.dashboard.resources.ic_menu
 import com.quietmetrix.dashboard.resources.ic_refresh
 import com.quietmetrix.dashboard.resources.ic_signout
 import com.quietmetrix.dashboard.resources.nav_menu_cd
+import com.quietmetrix.dashboard.ui.components.ErrorBanner
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
@@ -72,7 +69,7 @@ fun DashboardShell(
                 snackbarHost = { SnackbarHost(hostState = snackbarState) },
             ) { padding ->
                 Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                    ErrorBar(state.error, onDismiss = { viewModel.clearError() })
+                    state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
                     Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                         if (state.refreshing) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -171,32 +168,5 @@ private fun DashboardTopBar(
             Spacer(Modifier.width(8.dp))
         },
     )
-}
-
-@Composable
-private fun ErrorBar(error: String?, onDismiss: () -> Unit) {    error ?: return
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    painter = painterResource(Res.drawable.ic_close),
-                    contentDescription = stringResource(Res.string.action_dismiss),
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
 }
 

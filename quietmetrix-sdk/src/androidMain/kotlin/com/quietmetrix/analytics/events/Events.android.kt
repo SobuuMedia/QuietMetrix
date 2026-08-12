@@ -37,6 +37,7 @@ actual suspend fun trackEvent(event: String, screen: String?, props: Map<String,
                 language = device.language,
                 ua = device.userAgent,
                 country = device.country,
+                anonymousId = device.anonymousId,
             ),
         )
     )

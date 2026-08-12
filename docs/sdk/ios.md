@@ -14,7 +14,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.2.0"),
+    .package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.4.0"),
 ],
 targets: [
     .target(name: "YourApp", dependencies: ["QuietMetrix"]),
@@ -70,12 +70,29 @@ QuietMetrix.shared.trackEvent(event: "page_view", screen: "home", props: ["tab":
 [[QuietMetrix shared] trackEventWithEvent:@"page_view" screen:@"home" props:@{@"tab": @"featured"}];
 ```
 
-## Identify
+## Funnels
 
-The `identify` call hashes the user ID before sending it to the server:
+Declare funnels when building your config and they auto-register with the server — no
+dashboard setup required. See the [Funnels guide](funnels.md) for the full concept, matching
+rules, and worked example.
 
 ```swift
-QuietMetrix.shared.identify(userId: "user_123")
+let signupFunnel = Funnel(
+    key: "signup",
+    name: "Signup",
+    steps: [
+        FunnelStep(key: "view", event: "screen_view", screen: "signup"),
+        FunnelStep(key: "submit", event: "signup_submitted"),
+    ]
+)
+
+let config = QuietMetrixConfig(
+    storageKeyPrefix: "myapp_",
+    trackingEndpoint: "https://your-server.com/api/v1/track",
+    apiKey: "qm_ak_your_api_key",
+    funnels: [signupFunnel]
+)
+QuietMetrix.shared.initialize(config: config)
 ```
 
 ## Consent

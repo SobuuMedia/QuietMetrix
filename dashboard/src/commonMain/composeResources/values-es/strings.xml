@@ -24,6 +24,7 @@
     <string name="tab_info_settings">Activa datos de demostración para pruebas en modo depuración. El interruptor solo aparece cuando el servidor corre en configuración de depuración; las implementaciones de producción lo ocultan por defecto.</string>
     <string name="tab_info_flow">Las transiciones de pantalla muestran cómo navegan los usuarios tu app. Cada fila es una ruta común de una pantalla a la siguiente, agrupada por sesión. Una caída alta en un paso puede indicar fricción: investiga por qué los usuarios abandonan ahí.</string>
     <string name="tab_info_live">Eventos entrantes en tiempo real. Este feed se actualiza cada pocos segundos para mostrar los eventos más recientes. Útil al integrar el SDK: observa los eventos aparecer segundos después de dispararse en tu app.</string>
+    <string name="tab_info_funnels">Un embudo es una lista ordenada de eventos que ya registras, más una ventana de tiempo. Los pasos referencian eventos existentes, así que un embudo se analiza de forma retroactiva, sin cambios en la app. Pulsa "Nuevo embudo" arriba para crear uno, o decláralo en la configuración del SDK de tu app y aparecerá aquí automáticamente. Editar un embudo aquí lo bloquea para que la app no pueda sobrescribir tus cambios.</string>
 
     <!-- UI elements -->
     <string name="tab_info_content_description">Información</string>
@@ -40,6 +41,7 @@
     <string name="nav_flow">Flujo</string>
     <string name="nav_live">En vivo</string>
     <string name="nav_projects">Proyectos</string>
+    <string name="nav_funnels">Embudos</string>
     <string name="nav_users">Usuarios</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_menu_cd">Abrir menú de navegación</string>
@@ -124,6 +126,11 @@
     <string name="col_device">Dispositivo</string>
     <string name="col_session">Sesión</string>
     <string name="col_duration">Tiempo en pantalla</string>
+    <string name="col_step">Paso</string>
+    <string name="col_conversion_from_entry">% de entrada</string>
+    <string name="col_conversion_from_previous">% del anterior</string>
+    <string name="col_dropped">Abandonos</string>
+    <string name="col_median_time">Tiempo mediano</string>
     <string name="page_prev">Anterior</string>
     <string name="page_next">Siguiente</string>
     <string name="page_info">Página %1$d de %2$d</string>
@@ -205,6 +212,50 @@
     <string name="access_empty">Ningún usuario asignado a este proyecto.</string>
     <string name="access_hint">Asigna desarrolladores y revisores a los proyectos que deben ver.</string>
 
+    <!-- Embudos -->
+    <string name="funnels_title">Embudos</string>
+    <string name="funnel_create_action">Nuevo embudo</string>
+    <string name="funnel_empty">Aún no hay embudos: crea uno, o declara uno en tu app y aparecerá aquí.</string>
+    <string name="funnel_tutorial_title">Primeros pasos con los embudos</string>
+    <string name="funnel_tutorial_intro">Un embudo muestra cuántas personas completan una secuencia de pasos —como ver tu pantalla de registro y luego enviarla— y exactamente dónde abandona el resto.</string>
+    <string name="funnel_tutorial_step1">Los pasos referencian eventos que ya registras (p. ej. screen_view, button_click). No hace falta código de seguimiento nuevo: los embudos analizan datos que ya tienes.</string>
+    <string name="funnel_tutorial_step2">Pulsa el botón de abajo, dale al embudo entre 2 y 10 pasos ordenados y una ventana de conversión: cuánto tiempo tiene alguien para completarlos todos.</string>
+    <string name="funnel_tutorial_step3">O decláralo una vez en la configuración del SDK de tu app: se registrará aquí automáticamente, sin configuración en el panel.</string>
+    <string name="funnel_tutorial_cta">Crea tu primer embudo</string>
+    <string name="funnel_none_selected">Selecciona un embudo para ver sus resultados.</string>
+    <string name="funnel_pick_funnel">Selecciona un embudo</string>
+    <string name="funnel_select_breakdown">Elige una dimensión arriba para dividir este embudo por país, plataforma, dispositivo o idioma.</string>
+    <string name="funnel_truncated_warning">Este período tiene más eventos coincidentes de los que se pueden analizar a la vez; los resultados pueden estar incompletos. Prueba con un período más corto.</string>
+    <string name="funnel_badge_sdk">Desde la app</string>
+    <string name="funnel_badge_locked">Bloqueado</string>
+    <string name="funnel_edit">Editar</string>
+    <string name="funnel_delete">Eliminar</string>
+    <string name="funnel_kpi_entered">Entraron</string>
+    <string name="funnel_kpi_converted">Convirtieron</string>
+    <string name="funnel_kpi_overall_conversion">Conversión total</string>
+    <string name="funnel_kpi_median_time">Tiempo mediano de conversión</string>
+    <string name="funnel_card_steps">Pasos</string>
+    <string name="funnel_card_breakdown">Desglose</string>
+    <string name="funnel_card_trend">Tendencia</string>
+    <string name="funnel_breakdown_none">Sin desglose</string>
+    <string name="funnel_breakdown_country">País</string>
+    <string name="funnel_breakdown_platform">Plataforma</string>
+    <string name="funnel_breakdown_device">Dispositivo</string>
+    <string name="funnel_breakdown_language">Idioma</string>
+    <string name="funnel_delete_confirm_title">Eliminar embudo</string>
+    <string name="funnel_delete_confirm_body">¿Eliminar "%1$s"? Esto no se puede deshacer.</string>
+    <string name="funnel_editor_title_create">Nuevo embudo</string>
+    <string name="funnel_editor_title_edit">Editar embudo</string>
+    <string name="funnel_editor_key_label">Clave (usada por tu app para referenciar este embudo)</string>
+    <string name="funnel_editor_name_label">Nombre</string>
+    <string name="funnel_editor_window_label">Ventana de conversión</string>
+    <string name="funnel_editor_step_event_label">Nombre del evento del paso %1$d</string>
+    <string name="funnel_editor_step_screen_label">Pantalla (opcional)</string>
+    <string name="funnel_editor_remove_step">Quitar paso</string>
+    <string name="funnel_editor_step_add">Añadir paso</string>
+    <string name="funnel_editor_save">Guardar</string>
+    <string name="funnel_editor_cancel">Cancelar</string>
+
     <!-- Pantalla de aceptación de invitación -->
     <string name="invite_accept_title">Acepta tu invitación</string>
     <string name="invite_accept_subtitle">Establece una contraseña para %1$s y termina de crear tu cuenta.</string>
@@ -216,4 +267,20 @@
     <string name="invite_submit">Crear cuenta e iniciar sesión</string>
     <string name="invite_back_to_login">Volver a iniciar sesión</string>
     <string name="invite_loading">Comprobando tu invitación…</string>
+
+    <!-- Error handling: friendly, on-screen sentences for each ErrorKind. The technical
+         detail is never shown — only copied via action_copy_error_details. -->
+    <string name="error_kind_network">No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="error_kind_session_expired">Tu sesión ha caducado. Vuelve a iniciar sesión.</string>
+    <string name="error_kind_forbidden">No tienes permiso para hacer eso.</string>
+    <string name="error_kind_not_found">No se encontró ese elemento. Puede que haya sido eliminado.</string>
+    <string name="error_kind_conflict">Ese cambio entra en conflicto con algo que ya existe.</string>
+    <string name="error_kind_rate_limited">Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.</string>
+    <string name="error_kind_invalid">El servidor rechazó esa solicitud. Comprueba los datos introducidos.</string>
+    <string name="error_kind_server">El servidor tuvo un problema. Inténtalo de nuevo en un momento.</string>
+    <string name="error_kind_incompatible">No se pudieron cargar algunos datos porque este panel y el servidor no están sincronizados. Intenta actualizar; si persiste, puede que el servidor necesite una actualización.</string>
+    <string name="error_kind_unknown">Algo salió mal. Inténtalo de nuevo.</string>
+    <string name="action_copy_error_details">Copiar detalles del error</string>
+    <string name="snackbar_error_details_copied">Detalles del error copiados al portapapeles</string>
+    <string name="action_retry">Reintentar</string>
 </resources>

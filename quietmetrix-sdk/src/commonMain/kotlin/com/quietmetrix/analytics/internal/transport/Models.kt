@@ -15,11 +15,9 @@ internal data class EnqueuedEvent(
     val sid: String? = null,
     @Contextual val ts: Instant,
     val wasOffline: Boolean = false,
-    val userId: String? = null,
     val sdk: SdkInfo? = null,
     val ctx: EventContext? = null,
     @Contextual val enqueuedAt: Instant = Clock.System.now(),
-    val anonymousId: String? = null,
     val osName: String? = null,
     val osVersion: String? = null,
     val browserName: String? = null,
@@ -45,6 +43,12 @@ internal data class EventContext(
     val ua: String? = null,
     val viewport: String? = null,
     val country: String? = null,
+    /**
+     * Per-install pseudonymous id from [com.quietmetrix.analytics.internal.context.DeviceContext].
+     * Sent raw; both servers immediately salt-hash it per project and never store the raw value.
+     * It belongs in `ctx` — a top-level field is silently dropped by both ingests.
+     */
+    val anonymousId: String? = null,
 )
 
 internal data class SendResult(

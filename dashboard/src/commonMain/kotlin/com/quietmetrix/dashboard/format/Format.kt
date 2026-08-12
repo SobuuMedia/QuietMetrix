@@ -58,6 +58,16 @@ fun formatBucketLabel(raw: String, hourly: Boolean): String {
     return "$hour:00"
 }
 
+/**
+ * A 0..1 fraction -> "67%" (or "66.7%" with decimals > 0). Clamped to [0, 1] first so a
+ * division-derived fraction that drifts slightly outside that range (e.g. 1.004 from a
+ * rounding artifact) never renders as "-1%" or "101%".
+ */
+fun formatPercent(fraction: Double, decimals: Int = 0): String {
+    val clamped = fraction.coerceIn(0.0, 1.0)
+    return "${formatFloat((clamped * 100).toFloat(), decimals)}%"
+}
+
 /** ISO date prefix -> "Jan 15, 2024". Falls back to the raw date part on failure. */
 fun formatDateOnly(iso: String?): String {
     if (iso.isNullOrBlank()) return ""

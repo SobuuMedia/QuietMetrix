@@ -4,12 +4,14 @@ import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.ic_events
 import com.quietmetrix.dashboard.resources.ic_flow
+import com.quietmetrix.dashboard.resources.ic_funnel
 import com.quietmetrix.dashboard.resources.ic_live
 import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.ic_projects
 import com.quietmetrix.dashboard.resources.ic_settings
 import com.quietmetrix.dashboard.resources.nav_events
 import com.quietmetrix.dashboard.resources.nav_flow
+import com.quietmetrix.dashboard.resources.nav_funnels
 import com.quietmetrix.dashboard.resources.nav_live
 import com.quietmetrix.dashboard.resources.nav_overview
 import com.quietmetrix.dashboard.resources.nav_projects
@@ -22,9 +24,9 @@ import kotlin.test.assertTrue
 class NavDestinationTest {
 
     @Test
-    fun hasSevenDestinationsInExpectedOrder() {
+    fun hasEightDestinationsInExpectedOrder() {
         assertEquals(
-            listOf("Overview", "Events", "Flow", "Live", "Projects", "Users", "Settings"),
+            listOf("Overview", "Events", "Flow", "Live", "Projects", "Funnels", "Users", "Settings"),
             NavDestination.entries.map { it.name },
         )
     }
@@ -38,6 +40,7 @@ class NavDestinationTest {
         assertFalse(NavDestination.visibleFor(null).contains(NavDestination.Users))
         // Non-admin-only destinations are always present.
         assertTrue(NavDestination.visibleFor(UserRole.REVIEWER).contains(NavDestination.Projects))
+        assertTrue(NavDestination.visibleFor(UserRole.REVIEWER).contains(NavDestination.Funnels))
     }
 
     @Test
@@ -49,6 +52,7 @@ class NavDestinationTest {
         assertEquals(Res.drawable.ic_flow, NavDestination.Flow.icon)
         assertEquals(Res.drawable.ic_live, NavDestination.Live.icon)
         assertEquals(Res.drawable.ic_projects, NavDestination.Projects.icon)
+        assertEquals(Res.drawable.ic_funnel, NavDestination.Funnels.icon)
         assertEquals(Res.drawable.ic_settings, NavDestination.Settings.icon)
 
         assertEquals(Res.string.nav_overview, NavDestination.Overview.labelRes)
@@ -56,6 +60,7 @@ class NavDestinationTest {
         assertEquals(Res.string.nav_flow, NavDestination.Flow.labelRes)
         assertEquals(Res.string.nav_live, NavDestination.Live.labelRes)
         assertEquals(Res.string.nav_projects, NavDestination.Projects.labelRes)
+        assertEquals(Res.string.nav_funnels, NavDestination.Funnels.labelRes)
         assertEquals(Res.string.nav_settings, NavDestination.Settings.labelRes)
     }
 }

@@ -79,4 +79,26 @@ class FormatTest {
     fun formatDateOnlyFallsBackToRawDatePart() {
         assertEquals("garbage", formatDateOnly("garbage"))
     }
+
+    @Test
+    fun formatPercentRoundsToWholeNumberByDefault() {
+        assertEquals("0%", formatPercent(0.0))
+        assertEquals("50%", formatPercent(0.5))
+        assertEquals("100%", formatPercent(1.0))
+        assertEquals("67%", formatPercent(0.6666666666666666))
+        assertEquals("1%", formatPercent(0.006))
+    }
+
+    @Test
+    fun formatPercentSupportsDecimals() {
+        assertEquals("66.7%", formatPercent(0.6666666666666666, decimals = 1))
+        assertEquals("0.0%", formatPercent(0.0, decimals = 1))
+    }
+
+    @Test
+    fun formatPercentClampsOutOfRangeFractions() {
+        // Small negative/over-1 rounding artifacts from division must not render as -1%/101%.
+        assertEquals("0%", formatPercent(-0.001))
+        assertEquals("100%", formatPercent(1.004))
+    }
 }

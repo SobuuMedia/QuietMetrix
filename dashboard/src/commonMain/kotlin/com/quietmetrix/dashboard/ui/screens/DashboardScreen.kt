@@ -171,6 +171,7 @@ import com.quietmetrix.dashboard.resources.summary_types
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.tab_info_events
 import com.quietmetrix.dashboard.resources.tab_info_flow
+import com.quietmetrix.dashboard.resources.tab_info_funnels
 import com.quietmetrix.dashboard.resources.tab_info_live
 import com.quietmetrix.dashboard.resources.tab_info_overview
 import com.quietmetrix.dashboard.resources.tab_info_projects
@@ -183,6 +184,7 @@ import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.ThemeMode
 import com.quietmetrix.dashboard.ui.components.ContentState
 import com.quietmetrix.dashboard.ui.components.EmptyState
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
@@ -203,6 +205,7 @@ import com.quietmetrix.dashboard.ui.components.table.paginate
 import com.quietmetrix.dashboard.ui.components.table.screenLabel
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.DataSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -228,6 +231,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
             AppTab.Flow     -> FlowTab(viewModel, state, sizeClass)
             AppTab.Live     -> LiveTab(viewModel, state)
             AppTab.Projects -> ProjectsTab(viewModel, state, sizeClass)
+            AppTab.Funnels  -> FunnelsTab(viewModel, state, sizeClass)
             AppTab.Users    -> UsersTab(viewModel, state, sizeClass)
             AppTab.Settings -> SettingsTab(viewModel, state)
         }
@@ -382,6 +386,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
             AppTab.Flow     -> stringResource(Res.string.tab_info_flow)
             AppTab.Live     -> stringResource(Res.string.tab_info_live)
             AppTab.Projects -> stringResource(Res.string.tab_info_projects)
+            AppTab.Funnels  -> stringResource(Res.string.tab_info_funnels)
             AppTab.Users    -> stringResource(Res.string.tab_info_users)
             AppTab.Settings -> stringResource(Res.string.tab_info_settings)
         }
@@ -430,6 +435,13 @@ private fun OverviewTab(viewModel: DashboardViewModel, state: DashboardState, si
                         modifier = Modifier.size(20.dp),
                     )
                 }
+            }
+
+            state.sectionErrors[DataSection.Aggregates]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
+            }
+            state.sectionErrors[DataSection.Sessions]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
             val agg = state.aggregates
@@ -630,6 +642,10 @@ private fun EventsTab(viewModel: DashboardViewModel, state: DashboardState, size
                 Spacer(Modifier.weight(1f))
                 Text(stringResource(Res.string.events_live), style = MaterialTheme.typography.labelLarge)
                 Switch(checked = live, onCheckedChange = { live = it }, modifier = Modifier.handCursor())
+            }
+
+            state.sectionErrors[DataSection.Events]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
             // --- Summary header: stats derived from the loaded events ---
@@ -983,6 +999,10 @@ private fun FlowTab(viewModel: DashboardViewModel, state: DashboardState, sizeCl
                         modifier = Modifier.size(20.dp),
                     )
                 }
+            }
+
+            state.sectionErrors[DataSection.Transitions]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
             val transitions = state.transitions?.transitions ?: emptyList()
@@ -1479,7 +1499,7 @@ private fun SettingsTab(viewModel: DashboardViewModel, state: DashboardState) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ProjectPicker(
+internal fun ProjectPicker(
     projects: List<ApiProject>,
     currentId: String?,
     onSelect: (String) -> Unit,
@@ -1507,7 +1527,7 @@ private fun ProjectPicker(
 }
 
 @Composable
-private fun WindowPicker(range: TimeRange, onSelect: (TimeRange) -> Unit) {
+internal fun WindowPicker(range: TimeRange, onSelect: (TimeRange) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     OutlinedButton(
         onClick = { expanded = true },

@@ -1,9 +1,14 @@
 package com.quietmetrix.server.persistence
 
 import com.quietmetrix.server.domain.Event
+import com.quietmetrix.server.funnels.FunnelActorRow
+import com.quietmetrix.server.funnels.actorKey
 import com.quietmetrix.server.persistence.tables.Events
 import com.quietmetrix.server.persistence.tables.EventsInbox
 import com.quietmetrix.server.persistence.tables.Sessions
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
@@ -51,7 +56,7 @@ class EventRepository(private val database: Database) {
                     event.receivedAt?.toJavaInstant() ?: java.time.Instant.now(),
                     ZoneOffset.UTC
                 )
-                it[anonymousId] = event.anonymousId
+                it[installHash] = event.installHash
                 it[city] = event.city
                 it[region] = event.region
                 it[browser] = event.browser
@@ -101,6 +106,56 @@ class EventRepository(private val database: Database) {
                 .orderBy(Events.ts, SortOrder.DESC)
                 .limit(limit).offset(offset.toLong())
                 .map { rowToEvent(it) }
+        }
+    }
+
+    /**
+     * Rows relevant to matching a funnel: events named after one of [eventNames] (i.e. any
+     * step's event), within `[from, to)` — the caller widens `to` by the funnel's window so
+     * a completion just after the requested range is still counted for an actor who entered
+     * inside it. Ordered by ts so the [limit] cap is deterministic; capped size means the
+     * caller must treat an exactly-full result as [truncated].
+     */
+    fun findFunnelEvents(projectId: Long, eventNames: Set<String>, from: Instant, to: Instant, limit: Int): List<FunnelActorRow> {
+        if (eventNames.isEmpty()) return emptyList()
+        return transaction(database) {
+            Events
+                .selectAll()
+                .where {
+                    (Events.projectId eq projectId) and
+                    (Events.eventName inList eventNames) and
+                    (Events.ts greaterEq LocalDateTime.ofInstant(from, ZoneOffset.UTC)) and
+                    (Events.ts less LocalDateTime.ofInstant(to, ZoneOffset.UTC))
+                }
+                .orderBy(Events.ts, SortOrder.ASC)
+                .limit(limit)
+                .mapNotNull { row ->
+                    val actor = actorKey(row[Events.installHash], row[Events.sessionId]) ?: return@mapNotNull null
+                    FunnelActorRow(
+                        actorKey = actor,
+                        installHash = row[Events.installHash],
+                        sessionId = row[Events.sessionId],
+                        eventName = row[Events.eventName],
+                        ts = row[Events.ts].atZone(ZoneOffset.UTC).toInstant().toKotlinInstant(),
+                        screen = row[Events.screen],
+                        props = decodeFunnelProps(row[Events.props]),
+                        country = row[Events.country],
+                        platform = row[Events.platform],
+                        deviceClass = row[Events.deviceClass],
+                        language = row[Events.language],
+                    )
+                }
+        }
+    }
+
+    private fun decodeFunnelProps(raw: String?): Map<String, String> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            Json.decodeFromString(JsonObject.serializer(), raw).mapValues { (_, v) ->
+                (v as? JsonPrimitive)?.content ?: v.toString()
+            }
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
 
@@ -211,7 +266,7 @@ class EventRepository(private val database: Database) {
         sdkVersion = row[Events.sdkVersion],
         receivedAt = row[Events.receivedAt]
             .atZone(ZoneOffset.UTC).toInstant().toKotlinInstant(),
-        anonymousId = row[Events.anonymousId],
+        installHash = row[Events.installHash],
         city = row[Events.city],
         region = row[Events.region],
         browser = row[Events.browser],
@@ -388,14 +443,12 @@ class EventRepository(private val database: Database) {
         }
     }
 
-    fun startSession(sessionId: String, projectId: Long, anonymousId: String?, userId: String?, 
+    fun startSession(sessionId: String, projectId: Long,
                       geoInfo: Map<String, String?>, deviceInfo: Map<String, String?>): Long {
         return transaction(database) {
             Sessions.insert {
                 it[this.sessionId] = sessionId
                 it[this.projectId] = projectId
-                it[this.anonymousId] = anonymousId
-                it[this.userId] = userId
                 it[startedAt] = LocalDateTime.now(ZoneOffset.UTC)
                 it[country] = geoInfo["country"]
                 it[city] = geoInfo["city"]

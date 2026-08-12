@@ -21,6 +21,7 @@ class RestoreQueueTest {
                 ua = "test-agent",
                 viewport = "800x600",
                 country = "US",
+                anonymous_id = "qm_aid_beef",
             ),
         )
 
@@ -31,6 +32,7 @@ class RestoreQueueTest {
         assertEquals("en", restored.ctx?.language)
         assertEquals("https://ref", restored.ctx?.referrer)
         assertEquals("800x600", restored.ctx?.viewport)
+        assertEquals("qm_aid_beef", restored.ctx?.anonymousId)
     }
 
     @Test
@@ -41,7 +43,6 @@ class RestoreQueueTest {
             sid = "s1",
             ts = "2026-07-03T00:00:00Z",
             was_offline = true,
-            uid = "u1",
             sdk = SdkInfoDto("android", "0.2.0"),
         )
 
@@ -51,7 +52,6 @@ class RestoreQueueTest {
         assertEquals("home", restored.screen)
         assertEquals("s1", restored.sid)
         assertEquals(true, restored.wasOffline)
-        assertEquals("u1", restored.userId)
         assertEquals("android", restored.sdk?.platform)
     }
 }

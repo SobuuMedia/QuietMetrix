@@ -5,12 +5,12 @@ import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.security.MessageDigest
@@ -45,6 +45,7 @@ class ProjectRepository(private val database: Database) {
                 it[this.apiKeySha256] = apiKeySha256
                 it[this.apiKeyLast4] = apiKey.takeLast(4)
                 it[this.installSalt] = randomHex(32)
+                it[this.analyticsSalt] = randomHex(32)
             }
         }
         return apiKey
@@ -91,6 +92,35 @@ class ProjectRepository(private val database: Database) {
                 .map { it[Projects.installSalt] }
                 .singleOrNull()
         }
+    }
+
+    /** Per-project funnel/analytics-identity salt. Never rotated on key regeneration. */
+    fun getAnalyticsSalt(id: Long): String? {
+        return transaction(database) {
+            Projects.selectAll()
+                .where { (Projects.id eq id) and (Projects.deletedAt.isNull()) }
+                .limit(1)
+                .map { it[Projects.analyticsSalt] }
+                .singleOrNull()
+        }
+    }
+
+    /**
+     * Lazily generates and persists the analytics salt for projects created before it existed.
+     * Unlike [getInstallSalt] / key regeneration, this salt is never rotated — funnel and
+     * retention history must survive an API-key rotation. See
+     * docs/security/publishable-api-key.md — Privacy note.
+     */
+    fun ensureAnalyticsSalt(id: Long): String? {
+        getAnalyticsSalt(id)?.let { return it }
+        val newSalt = randomHex(32)
+        return transaction(database) {
+            val updated = Projects.update(
+                where = { (Projects.id eq id) and (Projects.deletedAt.isNull()) and (Projects.analyticsSalt.isNull()) },
+                body = { it[this.analyticsSalt] = newSalt },
+            )
+            if (updated > 0) newSalt else null
+        } ?: getAnalyticsSalt(id)
     }
 
     data class StrictSchemaConfig(val enabled: Boolean, val allowedEvents: Set<String>)

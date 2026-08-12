@@ -1,68 +1,74 @@
 # Self-hosting: Shared Hosting (PHP + MySQL)
 
+`php-hosting/` is a flat, no-framework PHP backend built for shared hosting (IONOS, Plesk, any
+cPanel host) — no Composer, no Docker, no shell access required. The entire directory (API +
+static dashboard) uploads as one unit to your web root.
+
 ## Prerequisites
 
-- PHP 8.2+ with PDO MySQL extension
-- MySQL 8.0+
-- Apache with `mod_rewrite` or Nginx
-- Composer (on the server or upload `vendor/` from local)
+- PHP 8.2+ with the `pdo_mysql`, `json`, `mbstring`, and `ctype` extensions
+- MySQL 8.0+ (or MariaDB 10.11+)
+- Apache with `mod_rewrite` (or Nginx with equivalent rewrite rules)
 
 ## Installation Steps
 
-### 1. Upload files
+### 1. Configure
 
-Upload the contents of `servers/php/public/` to your web root (e.g., `public_html/`). Upload everything else (`src/`, `bin/`, `migrations/`, `composer.json`) to a directory **above** the web root.
+Copy `php-hosting/config.example.php` to `php-hosting/config.php` and fill in your values —
+these are plain PHP `define()` constants, not a `.env` file:
 
-### 2. Install dependencies
+```php
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'quietmetrix');
+define('DB_USER', 'your_db_user');
+define('DB_PASS', 'your_db_password');
 
-```bash
-cd /path/above/webroot
-composer install --no-dev
+define('ADMIN_EMAIL', 'admin@example.com');
+define('ADMIN_PASSWORD', 'change_me');   // creates the first admin user automatically
+
+define('JWT_SECRET', 'change_me_to_a_long_random_string_at_least_32_chars');
+
+define('DEBUG', false);   // always false in production
 ```
 
-If your host doesn't have SSH access, run `composer install` locally and upload the `vendor/` directory.
+Generate `JWT_SECRET` with `openssl rand -hex 32`. See `php-hosting/config.example.php` for
+the full, commented list of settings (rate limiting, CORS, invitations, etc.).
 
-### 3. Configure environment
+### 2. Upload
 
-Copy `.env.example` to `.env` and fill in your database credentials:
+Upload the entire contents of `php-hosting/` to your web root (FTP/SFTP/File Manager — no
+build step, no `vendor/` directory to generate). `config.php`, `schema.sql`, and `*.md` are
+denied direct web access by the bundled `.htaccess`.
 
-```
-QM_DB_HOST=localhost
-QM_DB_NAME=quietmetrix
-QM_DB_USER=your_db_user
-QM_DB_PASSWORD=your_db_password
-```
+### 3. First request creates the schema
 
-### 4. Run the setup wizard
+Visit `https://yourdomain.com/api/v1/health` in a browser. The first request applies
+`schema.sql` and creates the admin user from `config.php` automatically — there is no setup
+wizard to visit and no migration command to run.
 
-Visit `https://yourdomain.com/setup` — this runs database migrations and creates the first admin user.
+### 4. Sign in
 
-### 5. Set up the cron worker
-
-Add to your crontab:
-
-```
-* * * * * php /path/to/bin/qm-worker.php
-```
-
-This processes the event inbox and builds daily rollups every minute.
+Visit `https://yourdomain.com/dashboard/` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+from `config.php`, then create a project to get an API key.
 
 ## File Structure
 
 ```
-your-host/
-├── public/           ← web root (index.php lives here)
-├── src/              ← application code (above webroot)
-├── bin/
-│   └── qm-worker.php
-├── migrations/
-├── vendor/
-├── .env
-└── composer.json
+php-hosting/
+├── index.php            ← front controller (web root)
+├── .htaccess             ← rewrites + denies config.php/schema.sql/*.md
+├── config.php             ← your local config (gitignored, not web-accessible)
+├── schema.sql             ← applied automatically on first request
+├── src/
+│   ├── bootstrap.php      ← first-run schema + admin auto-create, in-place upgrades
+│   └── routes/
+└── dashboard/             ← static HTML+JS+CSS dashboard, no build step
 ```
 
 ## Security Notes
 
-- The `src/`, `bin/`, `migrations/`, and `vendor/` directories must not be accessible via the web.
+- `config.php`, `schema.sql`, and `*.md` are blocked from direct web access by `.htaccess` —
+  verify this holds on your host (`curl https://yourdomain.com/config.php` should 403/404, not
+  return PHP source).
 - API keys are stored as bcrypt hashes in the database.
 - Always use HTTPS.

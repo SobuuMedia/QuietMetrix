@@ -1,17 +1,19 @@
 package com.quietmetrix.server.config
 
+import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.ingest.EventNormalizer
 import com.quietmetrix.server.ingest.EventValidator
 import com.quietmetrix.server.ingest.IngestChannel
 import com.quietmetrix.server.persistence.EventRepository
+import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.IngestAuditRepository
 import com.quietmetrix.server.persistence.InstallRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
-import com.quietmetrix.server.persistence.QuarantineRepository
 import com.quietmetrix.server.persistence.ProjectRepository
+import com.quietmetrix.server.persistence.QuarantineRepository
 import com.quietmetrix.server.persistence.UserRepository
-import com.quietmetrix.server.ratelimit.IpRateLimiter
 import com.quietmetrix.server.ratelimit.InstallRateLimiter
+import com.quietmetrix.server.ratelimit.IpRateLimiter
 import com.quietmetrix.server.ratelimit.QuotaEnforcer
 import com.quietmetrix.server.ratelimit.RateLimiter
 import com.zaxxer.hikari.HikariConfig
@@ -42,6 +44,8 @@ fun appModule(config: AppConfig) = module {
     single { ProjectRepository(get()) }
     single { UserRepository(get()) }
     single { ProjectMemberRepository(get()) }
+    single { FunnelRepository(get()) }
+    single { FunnelRegistrationService(get()) }
 
     single { EventValidator() }
     single { EventNormalizer() }

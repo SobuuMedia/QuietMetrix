@@ -129,3 +129,50 @@ fun yTicks(maxValue: Float): List<Float> {
     val m = max(maxValue, 0f)
     return listOf(0f, 0.25f * m, 0.5f * m, 0.75f * m, m)
 }
+
+data class FunnelBar(
+    val index: Int,
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    /** count / entry count (step 0), i.e. conversion_from_entry — NOT relative to the
+     * previous step. Always in [0, 1]; 0 when the entry count is 0. */
+    val fraction: Float,
+)
+
+/**
+ * Lays out one horizontal bar per funnel step, stacked top-to-bottom and centered on a shared
+ * vertical axis — the classic tapering funnel silhouette. Each bar's width is proportional to
+ * [counts]\[i\] relative to the entry count ([counts]\[0\]), never to the previous step, so the
+ * chart reads as "share of everyone who entered", matching `conversion_from_entry`.
+ */
+fun funnelBars(
+    counts: List<Int>,
+    areaX: Float,
+    areaY: Float,
+    areaWidth: Float,
+    areaHeight: Float,
+    gapFraction: Float = 0.15f,
+): List<FunnelBar> {
+    if (counts.isEmpty()) return emptyList()
+    val entry = counts[0].toFloat()
+    val n = counts.size
+    // Gap sits only BETWEEN rows (n-1 gaps), not around the first/last — so the stack fills
+    // the full area height edge-to-edge, matching how barRects fills the full area width.
+    val totalGap = if (n > 1) areaHeight * gapFraction else 0f
+    val gapPerRow = if (n > 1) totalGap / (n - 1) else 0f
+    val barHeight = (areaHeight - totalGap) / n
+    return counts.mapIndexed { i, count ->
+        val fraction = if (entry <= 0f) 0f else (count / entry).coerceIn(0f, 1f)
+        val width = areaWidth * fraction
+        FunnelBar(
+            index = i,
+            x = areaX + (areaWidth - width) / 2f,
+            y = areaY + i * (barHeight + gapPerRow),
+            width = width,
+            height = barHeight,
+            fraction = fraction,
+        )
+    }
+}

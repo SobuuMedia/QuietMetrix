@@ -220,4 +220,24 @@ class EventNormalizerTest {
         val event = normalizer.normalize(request, "1", null)
         assertEquals(10, event.language!!.length)
     }
+
+    @Test
+    fun `normalize stores the pre-computed install hash, never the raw ctx anonymous id`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "view",
+            ctx = com.quietmetrix.server.domain.EventContext(anonymousId = "qm_aid_raw_value"),
+        )
+        val event = normalizer.normalize(request, "1", null, installHash = "deadbeef".repeat(8))
+        assertEquals("deadbeef".repeat(8), event.installHash)
+    }
+
+    @Test
+    fun `normalize leaves installHash null when none was computed`() {
+        val request = com.quietmetrix.server.domain.TrackEventRequest(
+            event = "view",
+            ctx = com.quietmetrix.server.domain.EventContext(anonymousId = "qm_aid_raw_value"),
+        )
+        val event = normalizer.normalize(request, "1", null)
+        assertEquals(null, event.installHash)
+    }
 }

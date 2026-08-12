@@ -24,6 +24,7 @@
     <string name="tab_info_settings">Toggle demo data for testing in debug mode. The demo switch only appears when the server runs in debug configuration. Production deployments hide this by default.</string>
     <string name="tab_info_flow">Screen transitions show how users navigate your app. Each row represents one common path from one screen to the next, grouped by session. High drop-off at a step may indicate UX friction — investigate why users leave at that point.</string>
     <string name="tab_info_live">Incoming events in real time. This feed auto-refreshes every few seconds to show the most recent events. Useful while integrating the SDK — watch events appear seconds after they fire in your app.</string>
+    <string name="tab_info_funnels">A funnel is an ordered list of events you already track, plus a time window. Steps reference existing events, so a funnel analyzes retroactively — no app changes needed. Click "New funnel" above to create one, or declare it in your app's SDK config and it appears here automatically. Editing a funnel here locks it so the app can't overwrite your changes.</string>
 
     <!-- UI elements -->
     <string name="tab_info_content_description">Information</string>
@@ -40,6 +41,7 @@
     <string name="nav_flow">Flow</string>
     <string name="nav_live">Live</string>
     <string name="nav_projects">Projects</string>
+    <string name="nav_funnels">Funnels</string>
     <string name="nav_users">Users</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_menu_cd">Open navigation menu</string>
@@ -124,6 +126,11 @@
     <string name="col_device">Device</string>
     <string name="col_session">Session</string>
     <string name="col_duration">Time on screen</string>
+    <string name="col_step">Step</string>
+    <string name="col_conversion_from_entry">% of entry</string>
+    <string name="col_conversion_from_previous">% of previous</string>
+    <string name="col_dropped">Dropped</string>
+    <string name="col_median_time">Median time</string>
     <string name="page_prev">Previous</string>
     <string name="page_next">Next</string>
     <string name="page_info">Page %1$d of %2$d</string>
@@ -205,6 +212,50 @@
     <string name="access_empty">No users assigned to this project.</string>
     <string name="access_hint">Assign developers and reviewers to the projects they should see.</string>
 
+    <!-- Funnels -->
+    <string name="funnels_title">Funnels</string>
+    <string name="funnel_create_action">New funnel</string>
+    <string name="funnel_empty">No funnels yet — create one, or declare one in your app and it will appear here.</string>
+    <string name="funnel_tutorial_title">Get started with funnels</string>
+    <string name="funnel_tutorial_intro">A funnel shows how many people complete a sequence of steps — like viewing your signup screen, then submitting it — and exactly where the rest drop off.</string>
+    <string name="funnel_tutorial_step1">Steps reference events you already track (e.g. screen_view, button_click). No new tracking code needed — funnels analyze data you already have.</string>
+    <string name="funnel_tutorial_step2">Click the button below, give the funnel 2–10 ordered steps, and a conversion window: how long someone has to finish them all.</string>
+    <string name="funnel_tutorial_step3">Or declare it once in your app's SDK config — it registers itself here automatically, no dashboard setup required.</string>
+    <string name="funnel_tutorial_cta">Create your first funnel</string>
+    <string name="funnel_none_selected">Select a funnel to see its results.</string>
+    <string name="funnel_pick_funnel">Select a funnel</string>
+    <string name="funnel_select_breakdown">Choose a dimension above to split this funnel by country, platform, device, or language.</string>
+    <string name="funnel_truncated_warning">This range has more matching events than can be analyzed at once — results may be incomplete. Try a shorter time range.</string>
+    <string name="funnel_badge_sdk">From app</string>
+    <string name="funnel_badge_locked">Locked</string>
+    <string name="funnel_edit">Edit</string>
+    <string name="funnel_delete">Delete</string>
+    <string name="funnel_kpi_entered">Entered</string>
+    <string name="funnel_kpi_converted">Converted</string>
+    <string name="funnel_kpi_overall_conversion">Overall conversion</string>
+    <string name="funnel_kpi_median_time">Median time to convert</string>
+    <string name="funnel_card_steps">Steps</string>
+    <string name="funnel_card_breakdown">Breakdown</string>
+    <string name="funnel_card_trend">Trend</string>
+    <string name="funnel_breakdown_none">No breakdown</string>
+    <string name="funnel_breakdown_country">Country</string>
+    <string name="funnel_breakdown_platform">Platform</string>
+    <string name="funnel_breakdown_device">Device</string>
+    <string name="funnel_breakdown_language">Language</string>
+    <string name="funnel_delete_confirm_title">Delete funnel</string>
+    <string name="funnel_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
+    <string name="funnel_editor_title_create">New funnel</string>
+    <string name="funnel_editor_title_edit">Edit funnel</string>
+    <string name="funnel_editor_key_label">Key (used by your app to reference this funnel)</string>
+    <string name="funnel_editor_name_label">Name</string>
+    <string name="funnel_editor_window_label">Conversion window</string>
+    <string name="funnel_editor_step_event_label">Step %1$d event name</string>
+    <string name="funnel_editor_step_screen_label">Screen (optional)</string>
+    <string name="funnel_editor_remove_step">Remove step</string>
+    <string name="funnel_editor_step_add">Add step</string>
+    <string name="funnel_editor_save">Save</string>
+    <string name="funnel_editor_cancel">Cancel</string>
+
     <!-- Invitation acceptance screen -->
     <string name="invite_accept_title">Accept your invitation</string>
     <string name="invite_accept_subtitle">Set a password for %1$s to finish creating your account.</string>
@@ -216,4 +267,20 @@
     <string name="invite_submit">Create account &amp; sign in</string>
     <string name="invite_back_to_login">Back to sign in</string>
     <string name="invite_loading">Checking your invitation…</string>
+
+    <!-- Error handling: friendly, on-screen sentences for each ErrorKind. The technical
+         detail is never shown — only copied via action_copy_error_details. -->
+    <string name="error_kind_network">Could not reach the server. Check your connection and try again.</string>
+    <string name="error_kind_session_expired">Your session has expired. Please sign in again.</string>
+    <string name="error_kind_forbidden">You do not have permission to do that.</string>
+    <string name="error_kind_not_found">That item could not be found. It may have been deleted.</string>
+    <string name="error_kind_conflict">That change conflicts with something that already exists.</string>
+    <string name="error_kind_rate_limited">Too many requests. Please wait a moment and try again.</string>
+    <string name="error_kind_invalid">The server rejected that request. Please check your input.</string>
+    <string name="error_kind_server">The server ran into a problem. Please try again in a moment.</string>
+    <string name="error_kind_incompatible">Some data couldn\'t be loaded because this dashboard and the server are out of step. Try refreshing; if it persists, the server may need updating.</string>
+    <string name="error_kind_unknown">Something went wrong. Please try again.</string>
+    <string name="action_copy_error_details">Copy error details</string>
+    <string name="snackbar_error_details_copied">Error details copied to clipboard</string>
+    <string name="action_retry">Retry</string>
 </resources>

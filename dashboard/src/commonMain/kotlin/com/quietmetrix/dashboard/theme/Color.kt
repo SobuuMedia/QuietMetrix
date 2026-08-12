@@ -115,6 +115,9 @@ data class ExtendedColors(
     val chartAxis: Color,
     val chartGrid: Color,
     val chartSeries: List<Color>,
+    /** Drop-off bar/wedge in the funnel chart — deliberately not part of [chartSeries] so a
+     * project's series colors never accidentally collide with the "someone left here" signal. */
+    val chartDropoff: Color,
 )
 
 val DarkExtendedColors = ExtendedColors(
@@ -130,6 +133,7 @@ val DarkExtendedColors = ExtendedColors(
         Color(0xFFA371F7),
         Color(0xFFF85149),
     ),
+    chartDropoff = Color(0xFFF85149),
 )
 
 val LightExtendedColors = ExtendedColors(
@@ -145,6 +149,7 @@ val LightExtendedColors = ExtendedColors(
         Color(0xFFDB61A4),
         Color(0xFFCF222E),
     ),
+    chartDropoff = Color(0xFFCF222E),
 )
 
 val LocalExtendedColors = staticCompositionLocalOf<ExtendedColors> {

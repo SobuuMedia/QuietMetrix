@@ -4,7 +4,6 @@ internal object StorageKeys {
     fun cookieConsent(prefix: String): String = "${prefix}cookie_consent"
     fun bannerDismissed(prefix: String): String = "${prefix}banner_dismissed"
     fun analyticsEnabled(prefix: String): String = "${prefix}analytics_enabled"
-    fun identifiedUser(prefix: String): String = "${prefix}identified_user"
     fun sessionId(prefix: String): String = "${prefix}session_id"
     fun anonymousId(prefix: String): String = "${prefix}anonymous_id"
     fun sessionNumber(prefix: String): String = "${prefix}session_number"

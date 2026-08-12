@@ -19,7 +19,8 @@ data class Event(
     val platform: String? = null,
     val sdkVersion: String? = null,
     val receivedAt: Instant? = null,
-    val anonymousId: String? = null,
+    /** Per-project analytics-salt hash of the install id. Never the raw value — see A2. */
+    val installHash: String? = null,
     val city: String? = null,
     val region: String? = null,
     val browser: String? = null,

@@ -115,4 +115,68 @@ class ChartLogicTest {
         assertTrue(approx(200f, pts[0].y), "value 0 -> bottom")
         assertTrue(approx(0f, pts[1].y), "max value -> top")
     }
+
+    // -- funnelBars ------------------------------------------------------------
+
+    @Test
+    fun funnelBarsEmptyInput() {
+        assertTrue(funnelBars(emptyList(), 0f, 0f, 300f, 200f).isEmpty())
+    }
+
+    @Test
+    fun funnelBarsSingleStepIsFullWidth() {
+        val r = funnelBars(listOf(100), 0f, 0f, 300f, 100f)
+        assertEquals(1, r.size)
+        assertTrue(approx(300f, r[0].width), "the only step is 100% of entry")
+        assertTrue(approx(1f, r[0].fraction))
+    }
+
+    @Test
+    fun funnelBarsAllZeroDoesNotCrash() {
+        val r = funnelBars(listOf(0, 0, 0), 0f, 0f, 300f, 200f)
+        assertEquals(3, r.size)
+        assertTrue(r.all { it.width == 0f && it.fraction == 0f })
+    }
+
+    @Test
+    fun funnelBarsWidthsAreMonotonicallyNonIncreasing() {
+        val r = funnelBars(listOf(100, 60, 60, 20), 0f, 0f, 400f, 200f)
+        for (i in 1 until r.size) {
+            assertTrue(r[i].width <= r[i - 1].width + 0.01f, "step ${i} must not be wider than step ${i - 1}")
+        }
+    }
+
+    @Test
+    fun funnelBarsFractionIsRelativeToEntryNotPreviousStep() {
+        val r = funnelBars(listOf(100, 50, 25), 0f, 0f, 400f, 200f)
+        assertTrue(approx(1f, r[0].fraction))
+        assertTrue(approx(0.5f, r[1].fraction))
+        assertTrue(approx(0.25f, r[2].fraction))
+    }
+
+    @Test
+    fun funnelBarsAreHorizontallyCentered() {
+        val r = funnelBars(listOf(100, 50), 0f, 0f, 400f, 200f)
+        val entryCenter = r[0].x + r[0].width / 2f
+        val secondCenter = r[1].x + r[1].width / 2f
+        assertTrue(approx(entryCenter, secondCenter), "bars must share a horizontal center line")
+        assertTrue(approx(200f, entryCenter), "centered within the 400px area")
+    }
+
+    @Test
+    fun funnelBarsStackVerticallyWithinTheArea() {
+        val r = funnelBars(listOf(100, 50, 25), 0f, 10f, 400f, 210f)
+        assertTrue(approx(10f, r[0].y), "first bar starts at the area top")
+        assertTrue(r[2].y + r[2].height <= 10f + 210f + 0.5f, "last bar stays within the area")
+        // rows do not overlap
+        assertTrue(r[1].y >= r[0].y + r[0].height - 0.5f)
+        assertTrue(r[2].y >= r[1].y + r[1].height - 0.5f)
+    }
+
+    @Test
+    fun funnelBarsHandlesAZeroEntryWithoutDivisionByZero() {
+        val r = funnelBars(listOf(0, 5), 0f, 0f, 300f, 200f)
+        assertEquals(2, r.size)
+        assertTrue(r.all { it.fraction == 0f && it.width == 0f })
+    }
 }

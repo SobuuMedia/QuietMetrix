@@ -46,34 +46,29 @@ docker compose up -d
 
 ## Shared Hosting (PHP + MySQL)
 
+`php-hosting/` has no Composer, no git-based deploy, and no separate migration command — you
+upgrade by re-uploading files, and the schema catches up on the next request.
+
 ```bash
 # 1. Back up the database
 mysqldump -u your_db_user -p quietmetrix > backup_$(date +%Y%m%d).sql
 
-# 2. Back up the .env file
-cp .env .env.backup
+# 2. Back up config.php (it is not in version control)
+cp config.php config.php.backup
 
-# 3. Pull the latest code
-cd /path/above/webroot
-git pull origin main
-composer install --no-dev
+# 3. Re-upload the changed files from php-hosting/ (re-upload everything if in doubt)
+#    — via FTP/SFTP/File Manager, same as the initial install
 
-# 4. Run migrations
-php bin/qm-migrate.php
+# 4. Load any page once — schema.sql is idempotent, and bootstrap.php's
+#    addColumnIfMissing/createTableIfMissing apply any new columns or tables
+#    to the existing database automatically. No migration command to run.
 
 # 5. Verify
 curl -s https://yourdomain.com/api/v1/health | jq .
 ```
 
-### Manual Migration
-
-If `qm-migrate.php` is not available, run the SQL files in order:
-
-```bash
-for f in migrations/*.sql; do
-    mysql -u your_db_user -p quietmetrix < "$f"
-done
-```
+If you'd rather apply a specific new column by hand instead of loading a page, `SETUP.md`
+documents the equivalent `ALTER TABLE` statements for recent additions.
 
 ## Version Compatibility
 

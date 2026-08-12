@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.3.0"
+version = "0.4.0-SNAPSHOT"
 
 kotlin {
     compilerOptions {
@@ -121,7 +121,7 @@ val javadocJar by tasks.registering(Jar::class) {
 // defaults to the Gradle module name, so rewrite it to the scoped public name, then run
 // `npm publish` from that directory. This keeps the release repeatable without pulling in a
 // third-party Gradle plugin.
-val npmPackageName = "@quietmetrix/sdk"
+val npmPackageName = "@sobuumedia/quietmetrix-sdk"
 val npmDistDir = layout.buildDirectory.dir("dist/js/productionLibrary")
 
 val prepareNpmPackage by tasks.registering {

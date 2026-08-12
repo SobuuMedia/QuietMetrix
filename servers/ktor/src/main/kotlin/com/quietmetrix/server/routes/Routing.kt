@@ -8,6 +8,7 @@ fun Routing.configureAllRoutes(config: AppConfig) {
     configureAuthRoutes(config)
     configureUserRoutes(config)
     configureProjectRoutes()
+    configureFunnelRoutes()
     configureDashboardRoutes()
     configureStaticDashboardRoutes()
 }

@@ -43,6 +43,9 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'projects', 'api_key_last4', 'CHAR(4) NULL');
     // Abuse-defense Stage 2: per-project install-id salt (backfilled for existing projects).
     addColumnIfMissing($db, 'projects', 'install_salt', 'CHAR(64) NULL');
+    // Funnel/analytics identity: a separate salt from install_salt, never rotated on key
+    // regeneration. See docs/security/publishable-api-key.md — Privacy note.
+    addColumnIfMissing($db, 'projects', 'analytics_salt', 'CHAR(64) NULL');
     // Stage 3: event-name allowlist
     addColumnIfMissing($db, 'projects', 'strict_schema', "TINYINT(1) NOT NULL DEFAULT 0");
     addColumnIfMissing($db, 'projects', 'allowed_events', 'JSON NULL');
@@ -53,6 +56,93 @@ function ensureInstalled(): void {
     // fail and every tracked event 500s (silently dropping duration_ms/device_class).
     addColumnIfMissing($db, 'events', 'device_class', 'VARCHAR(20) NULL');
     addColumnIfMissing($db, 'events', 'duration_ms', 'BIGINT NULL');
+    addColumnIfMissing($db, 'events', 'install_hash', 'CHAR(64) NULL');
+
+    // 1c. New tables for installs created before they existed. schema.sql (step 1 above) only
+    // runs when `users` is missing, so every later table needs its own guarded CREATE. In
+    // particular, tracking writes ingest_audit on every accepted event; omitting it here made
+    // an upgraded installation return HTTP 500 for every track request after the event insert.
+    createTableIfMissing($db, 'install_meta', "
+        CREATE TABLE install_meta (
+            id BIGINT NOT NULL AUTO_INCREMENT,
+            project_id VARCHAR(36) NOT NULL,
+            anonymous_id_hash CHAR(64) NOT NULL,
+            first_seen_at VARCHAR(32) NOT NULL,
+            last_seen_at VARCHAR(32) NOT NULL,
+            event_count BIGINT NOT NULL DEFAULT 0,
+            revoked TINYINT(1) NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_install_meta_project_install (project_id, anonymous_id_hash),
+            KEY idx_install_meta_project_revoked (project_id, revoked),
+            CONSTRAINT fk_install_meta_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    createTableIfMissing($db, 'events_quarantine', "
+        CREATE TABLE events_quarantine (
+            id BIGINT NOT NULL AUTO_INCREMENT,
+            project_id VARCHAR(36) NOT NULL,
+            payload TEXT NOT NULL,
+            quarantine_reason VARCHAR(50) NOT NULL,
+            quarantine_detail TEXT,
+            client_ip VARCHAR(45),
+            anonymous_id_hash CHAR(64),
+            quarantined_at VARCHAR(32) NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_quarantine_project_time (project_id, quarantined_at),
+            CONSTRAINT fk_q_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    createTableIfMissing($db, 'ingest_audit', "
+        CREATE TABLE ingest_audit (
+            id BIGINT NOT NULL AUTO_INCREMENT,
+            project_id VARCHAR(36) NOT NULL,
+            api_key_last4 CHAR(4),
+            client_ip VARCHAR(45),
+            anonymous_id_hash CHAR(64),
+            event_name VARCHAR(255) NOT NULL,
+            disposition VARCHAR(20) NOT NULL,
+            reason TEXT,
+            audited_at VARCHAR(32) NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_audit_project_time (project_id, audited_at),
+            CONSTRAINT fk_audit_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    createTableIfMissing($db, 'funnels', "
+        CREATE TABLE funnels (
+            id              VARCHAR(36)   NOT NULL,
+            project_id      VARCHAR(36)   NOT NULL,
+            funnel_key      VARCHAR(64)   NOT NULL,
+            name            VARCHAR(255)  NOT NULL,
+            description     VARCHAR(1000) NULL,
+            steps           JSON          NOT NULL,
+            window_seconds  BIGINT        NOT NULL DEFAULT 604800,
+            source          VARCHAR(16)   NOT NULL DEFAULT 'dashboard',
+            locked          TINYINT(1)    NOT NULL DEFAULT 0,
+            count_mode      VARCHAR(16)   NOT NULL DEFAULT 'actor',
+            identity_scope  VARCHAR(32)   NOT NULL DEFAULT 'install_or_session',
+            correlation_property VARCHAR(128) NULL,
+            archived_at     VARCHAR(32)   NULL,
+            created_at      VARCHAR(32)   NOT NULL,
+            updated_at      VARCHAR(32)   NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_funnels_project_key (project_id, funnel_key),
+            CONSTRAINT fk_funnels_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    addColumnIfMissing($db, 'funnels', 'count_mode', "VARCHAR(16) NOT NULL DEFAULT 'actor'");
+    addColumnIfMissing($db, 'funnels', 'identity_scope', "VARCHAR(32) NOT NULL DEFAULT 'install_or_session'");
+    addColumnIfMissing($db, 'funnels', 'correlation_property', 'VARCHAR(128) NULL');
+    createTableIfMissing($db, 'funnel_manifests', "
+        CREATE TABLE funnel_manifests (
+            project_id VARCHAR(36) NOT NULL,
+            namespace VARCHAR(128) NOT NULL,
+            revision BIGINT NOT NULL,
+            updated_at VARCHAR(32) NOT NULL,
+            PRIMARY KEY (project_id, namespace),
+            CONSTRAINT fk_funnel_manifests_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 
     // 2. First admin user
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
@@ -83,6 +173,18 @@ function addColumnIfMissing(PDO $db, string $table, string $column, string $defi
     if ($stmt->fetchColumn() === false) {
         // Identifiers are hard-coded constants from this file, not user input.
         $db->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+    }
+}
+
+/**
+ * Creates `$table` from `$createSql` if it does not already exist. Sibling to
+ * addColumnIfMissing() for whole tables introduced after a project shipped: schema.sql
+ * alone never runs against an existing install (it only executes when `users` is missing),
+ * so a new table needs its own guarded CREATE here.
+ */
+function createTableIfMissing(PDO $db, string $table, string $createSql): void {
+    if (!tableExists($db, $table)) {
+        $db->exec($createSql);
     }
 }
 

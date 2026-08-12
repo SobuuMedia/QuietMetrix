@@ -3,7 +3,6 @@ package com.quietmetrix.analytics.internal.transport
 import com.quietmetrix.analytics.QuietMetrixConfig
 import com.quietmetrix.analytics.internal.ConfigHolder
 import com.quietmetrix.analytics.internal.InMemoryStore
-import com.quietmetrix.analytics.internal.StorageKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,20 +73,18 @@ internal object FlushManager {
         }
         if (deduped.isEmpty()) return
 
-        val enrichedBatch = deduped.map { enrichWithUserId(it, config) }
-
         try {
-            val result = HttpTransport.send(endpoint, apiKey, enrichedBatch)
+            val result = HttpTransport.send(endpoint, apiKey, deduped)
             if (result.success) {
                 consecutiveFailures = 0
-                log("Flush succeeded: ${enrichedBatch.size} events")
+                log("Flush succeeded: ${deduped.size} events")
             } else if (result.retryable) {
                 EventQueue.reEnqueue(batch)
                 consecutiveFailures++
                 log("Flush failed (retryable), re-enqueued ${batch.size} events (failure #$consecutiveFailures)")
             } else {
                 consecutiveFailures = 0
-                log("Flush failed (non-retryable): ${enrichedBatch.size} events dropped")
+                log("Flush failed (non-retryable): ${deduped.size} events dropped")
             }
         } catch (_: Exception) {
             EventQueue.reEnqueue(batch)
@@ -116,16 +113,6 @@ internal object FlushManager {
             }
         } catch (_: Exception) {
             isOnline = true
-        }
-    }
-
-    private fun enrichWithUserId(event: EnqueuedEvent, config: QuietMetrixConfig): EnqueuedEvent {
-        val key = StorageKeys.identifiedUser(config.storageKeyPrefix)
-        val userId = InMemoryStore.get(key)
-        return if (userId != null && event.userId == null) {
-            event.copy(userId = userId)
-        } else {
-            event
         }
     }
 
@@ -187,7 +174,16 @@ internal fun TrackEventRequestDto.toEnqueued(): EnqueuedEvent = EnqueuedEvent(
     sid = sid,
     ts = Instant.parse(ts),
     wasOffline = was_offline,
-    userId = uid,
     sdk = sdk?.let { SdkInfo(it.platform, it.version) },
-    ctx = ctx?.let { EventContext(it.referrer, it.language, it.ua, it.viewport, it.country) },
+    // Named arguments deliberately: a positional call here previously dropped `country` silently.
+    ctx = ctx?.let {
+        EventContext(
+            referrer = it.referrer,
+            language = it.language,
+            ua = it.ua,
+            viewport = it.viewport,
+            country = it.country,
+            anonymousId = it.anonymous_id,
+        )
+    },
 )

@@ -21,6 +21,10 @@ require_once __DIR__ . '/src/auth.php';
 require_once __DIR__ . '/src/rateLimit.php';
 require_once __DIR__ . '/src/installs.php';
 require_once __DIR__ . '/src/quarantine.php';
+require_once __DIR__ . '/src/funnelValidation.php';
+require_once __DIR__ . '/src/funnelActor.php';
+require_once __DIR__ . '/src/funnelMatch.php';
+require_once __DIR__ . '/src/funnelSteps.php';
 require_once __DIR__ . '/src/bootstrap.php';
 
 // ---------------------------------------------------------------------------
@@ -186,6 +190,11 @@ if ($method === 'POST' && $uri === '/api/v1/track/batch') {
     handleTrackBatch();
     exit;
 }
+if ($method === 'POST' && $uri === '/api/v1/funnels/register') {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelsRegister();
+    exit;
+}
 
 // ---- Projects (session auth) ----
 
@@ -225,6 +234,34 @@ if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/members$#', $ur
 if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)/members/([^/]+)$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/projects.php';
     handleProjectMemberRemove($m[1], $m[2]);
+    exit;
+}
+
+// ---- Funnels (session auth) ----
+
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/funnels/([^/]+)/results$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelResults($m[1], $m[2]);
+    exit;
+}
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/funnels$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelsList($m[1]);
+    exit;
+}
+if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/funnels$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelsCreate($m[1]);
+    exit;
+}
+if ($method === 'PATCH' && preg_match('#^/api/v1/projects/([^/]+)/funnels/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelUpdate($m[1], $m[2]);
+    exit;
+}
+if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)/funnels/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelDelete($m[1], $m[2]);
     exit;
 }
 

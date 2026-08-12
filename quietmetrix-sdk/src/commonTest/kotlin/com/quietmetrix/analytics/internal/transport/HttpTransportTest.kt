@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.time.Clock
 
 class HttpTransportTest {
@@ -88,25 +89,67 @@ class HttpTransportTest {
     }
 
     @Test
-    fun `single event serialization includes uid field when userId is set`() {
+    fun `serialized event never carries a uid field`() {
         val event = EnqueuedEvent(
-            event = "identify",
+            event = "purchase",
             screen = null,
             props = emptyMap(),
             sid = null,
             ts = Clock.System.now(),
             wasOffline = false,
-            userId = "user-42",
             sdk = null,
-            ctx = null,
+            ctx = EventContext(anonymousId = "qm_aid_deadbeef"),
         )
 
         val result = HttpTransport.serializeBatch(listOf(event))
         val obj = json.parseToJsonElement(result).jsonObject
 
-        val uidField = obj["uid"]
-        assertNotNull(uidField)
-        assertEquals("user-42", uidField.jsonPrimitive.content)
+        assertNull(obj["uid"], "the wire format must not expose a user id")
+    }
+
+    @Test
+    fun `anonymous id is nested under ctx not at the top level`() {
+        val event = EnqueuedEvent(
+            event = "page_view",
+            ts = Clock.System.now(),
+            ctx = EventContext(anonymousId = "qm_aid_deadbeef"),
+        )
+
+        val result = HttpTransport.serializeBatch(listOf(event))
+        val obj = json.parseToJsonElement(result).jsonObject
+
+        // Both servers read the install id from ctx.anonymous_id — a top-level field is dropped.
+        assertNull(obj["anonymous_id"], "anonymous_id must not sit at the top level")
+        val ctx = obj["ctx"]?.jsonObject
+        assertNotNull(ctx)
+        assertEquals("qm_aid_deadbeef", ctx["anonymous_id"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `toRequest carries the anonymous id into the wire context`() {
+        val event = EnqueuedEvent(
+            event = "page_view",
+            ts = Clock.System.now(),
+            ctx = EventContext(language = "en", anonymousId = "qm_aid_cafe"),
+        )
+
+        val request = event.toRequest()
+        assertEquals("qm_aid_cafe", request.ctx?.anonymous_id)
+    }
+
+    @Test
+    fun `toRequest maps a blank anonymous id to null on the wire`() {
+        // DeviceContext.anonymousId is "" (not null) when the app has disabled collection via
+        // QuietMetrixConfig.collectAnonymousId=false — this boundary is where that becomes a real
+        // absence on the wire, rather than shipping a constant empty-string id to every consumer.
+        val event = EnqueuedEvent(
+            event = "page_view",
+            ts = Clock.System.now(),
+            ctx = EventContext(language = "en", anonymousId = ""),
+        )
+
+        val request = event.toRequest()
+        assertNull(request.ctx?.anonymous_id)
     }
 
     @Test
@@ -168,9 +211,8 @@ class HttpTransportTest {
             sid = "s1",
             ts = Clock.System.now(),
             wasOffline = false,
-            userId = "u1",
             sdk = SdkInfo("jvm", "2.0.0"),
-            ctx = EventContext(language = "fr", ua = "test-agent"),
+            ctx = EventContext(language = "fr", ua = "test-agent", anonymousId = "qm_aid_1"),
         )
 
         val result = HttpTransport.serializeBatch(listOf(event))
@@ -180,6 +222,6 @@ class HttpTransportTest {
         assertEquals("splash", parsed.screen)
         assertEquals("1200", parsed.props?.get("duration")?.jsonPrimitive?.content)
         assertEquals("s1", parsed.sid)
-        assertEquals("u1", parsed.uid)
+        assertEquals("qm_aid_1", parsed.ctx?.anonymous_id)
     }
 }

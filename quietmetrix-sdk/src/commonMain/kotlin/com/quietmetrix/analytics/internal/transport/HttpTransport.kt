@@ -36,8 +36,6 @@ data class TrackEventRequestDto(
     val sid: String? = null,
     val ts: String,
     val was_offline: Boolean = false,
-    val uid: String? = null,
-    val anonymous_id: String? = null,
     val os: String? = null,
     val os_version: String? = null,
     val browser: String? = null,
@@ -70,6 +68,8 @@ data class EventContextDto(
     val ua: String? = null,
     val viewport: String? = null,
     val country: String? = null,
+    /** Per-install pseudonymous id. Salt-hashed server-side on arrival; never stored raw. */
+    val anonymous_id: String? = null,
 )
 
 @OptIn(ExperimentalTime::class)
@@ -93,8 +93,6 @@ internal fun EnqueuedEvent.toRequest() = TrackEventRequestDto(
     sid = sid,
     ts = ts.toString(),
     was_offline = wasOffline,
-    uid = userId,
-    anonymous_id = anonymousId,
     os = osName,
     os_version = osVersion,
     browser = browserName,
@@ -106,7 +104,20 @@ internal fun EnqueuedEvent.toRequest() = TrackEventRequestDto(
     is_session_start = isSessionStart,
     is_session_end = isSessionEnd,
     sdk = sdk?.let { SdkInfoDto(it.platform, it.version) },
-    ctx = ctx?.let { EventContextDto(it.referrer, it.language, it.ua, it.viewport, it.country) },
+    // Named arguments deliberately: a positional call here previously dropped `country` silently.
+    ctx = ctx?.let {
+        EventContextDto(
+            referrer = it.referrer,
+            language = it.language,
+            ua = it.ua,
+            viewport = it.viewport,
+            country = it.country,
+            // DeviceContext.anonymousId is "" (not null) when the app disabled collection via
+            // QuietMetrixConfig.collectAnonymousId=false — blank becomes a real absence on the
+            // wire here, rather than shipping a constant empty-string id to every consumer.
+            anonymous_id = it.anonymousId?.takeIf { id -> id.isNotBlank() },
+        )
+    },
 )
 
 internal expect suspend fun platformSend(endpoint: String, apiKey: String, events: List<EnqueuedEvent>): SendResult

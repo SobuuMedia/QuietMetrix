@@ -32,7 +32,12 @@ data class EventContext(
     val language: String? = null,
     val ua: String? = null,
     val viewport: String? = null,
-    val anonymousId: String? = null,
+    // The SDK's wire DTO (EventContextDto) declares this field literally as `anonymous_id`
+    // (snake_case), so kotlinx.serialization emits that exact key with no @SerialName of its
+    // own. Without this annotation here, the two field names silently mismatch — the SDK's
+    // `anonymous_id` is dropped by `ignoreUnknownKeys`, `anonymousId` here is always null, and
+    // every event falls back to session-level funnel/analytics identity. See A2/funnels.
+    @SerialName("anonymous_id") val anonymousId: String? = null,
     val country: String? = null,
     val sessionNumber: Int? = null,
     val isSessionStart: Boolean? = null,

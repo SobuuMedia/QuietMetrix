@@ -195,6 +195,116 @@ data class EventsResponse(
 )
 
 @Serializable
+data class FunnelStepDto(
+    val key: String,
+    val event: String,
+    val name: String? = null,
+    val screen: String? = null,
+    @Serializable(with = LenientStringMapSerializer::class)
+    val props: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class FunnelDto(
+    @SerialName("funnel_key") val funnelKey: String,
+    val name: String,
+    val description: String? = null,
+    val steps: List<FunnelStepDto> = emptyList(),
+    @SerialName("window_seconds") val windowSeconds: Long = 604_800,
+    val source: String = "dashboard",
+    val locked: Boolean = false,
+    @SerialName("count_mode") val countMode: String = "actor",
+    @SerialName("identity_scope") val identityScope: String = "install_or_session",
+    @SerialName("correlation_property") val correlationProperty: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
+)
+
+@Serializable
+data class FunnelsResponse(val funnels: List<FunnelDto> = emptyList())
+
+@Serializable
+data class CreateFunnelRequest(
+    @SerialName("funnel_key") val funnelKey: String,
+    val name: String,
+    val description: String? = null,
+    val steps: List<FunnelStepDto> = emptyList(),
+    @SerialName("window_seconds") val windowSeconds: Long = 604_800,
+)
+
+@Serializable
+data class UpdateFunnelRequest(
+    val name: String? = null,
+    val description: String? = null,
+    val steps: List<FunnelStepDto>? = null,
+    @SerialName("window_seconds") val windowSeconds: Long? = null,
+)
+
+@Serializable
+data class FunnelStepResultDto(
+    val key: String,
+    val name: String? = null,
+    val count: Int = 0,
+    @SerialName("conversion_from_entry") val conversionFromEntry: Double = 0.0,
+    @SerialName("conversion_from_previous") val conversionFromPrevious: Double = 0.0,
+    val dropped: Int = 0,
+    @SerialName("drop_rate") val dropRate: Double = 0.0,
+    @SerialName("median_ms_from_previous") val medianMsFromPrevious: Long? = null,
+    @SerialName("p90_ms_from_previous") val p90MsFromPrevious: Long? = null,
+)
+
+@Serializable
+data class FunnelBreakdownValueDto(
+    val value: String,
+    val entered: Int = 0,
+    @SerialName("overall_conversion") val overallConversion: Double = 0.0,
+    val steps: List<FunnelStepResultDto> = emptyList(),
+)
+
+@Serializable
+data class FunnelBreakdownDto(
+    val dimension: String,
+    val values: List<FunnelBreakdownValueDto> = emptyList(),
+)
+
+@Serializable
+data class FunnelTrendPointDto(
+    val bucket: String,
+    val entered: Int = 0,
+    val converted: Int = 0,
+    val conversion: Double = 0.0,
+)
+
+@Serializable
+data class FunnelSummaryDto(
+    @SerialName("funnel_key") val funnelKey: String,
+    val name: String,
+    @SerialName("window_seconds") val windowSeconds: Long = 604_800,
+    val steps: List<FunnelStepDto> = emptyList(),
+    @SerialName("count_mode") val countMode: String = "actor",
+    @SerialName("identity_scope") val identityScope: String = "install_or_session",
+    @SerialName("correlation_property") val correlationProperty: String? = null,
+)
+
+@Serializable
+data class FunnelRangeDto(val from: String = "", val to: String = "")
+
+@Serializable
+data class FunnelResultsResponse(
+    val funnel: FunnelSummaryDto,
+    val range: FunnelRangeDto = FunnelRangeDto(),
+    @SerialName("counted_by") val countedBy: String = "install",
+    val entered: Int = 0,
+    val converted: Int = 0,
+    @SerialName("overall_conversion") val overallConversion: Double = 0.0,
+    @SerialName("median_total_ms") val medianTotalMs: Long? = null,
+    val steps: List<FunnelStepResultDto> = emptyList(),
+    val breakdown: FunnelBreakdownDto? = null,
+    val trend: List<FunnelTrendPointDto>? = null,
+    val truncated: Boolean = false,
+)
+
+@Serializable
 data class EventRow(
     val id: Long? = null,
     @SerialName("event_name")   val eventName:   String  = "",

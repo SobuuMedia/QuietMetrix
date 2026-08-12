@@ -18,7 +18,7 @@ class IconInventoryTest {
         val expected = listOf(
             // navigation
             "ic_overview", "ic_events", "ic_flow", "ic_live",
-            "ic_projects", "ic_settings",
+            "ic_projects", "ic_funnel", "ic_settings",
             // actions
             "ic_signout", "ic_close", "ic_refresh", "ic_delete",
             "ic_search", "ic_menu", "ic_chevron_down", "ic_plus",

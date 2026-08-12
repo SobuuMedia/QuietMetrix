@@ -5,7 +5,12 @@ import com.quietmetrix.analytics.internal.EventValidator
 import com.quietmetrix.analytics.internal.Gate
 import com.quietmetrix.analytics.internal.SDK_VERSION
 import com.quietmetrix.analytics.internal.ScreenTracker
-import com.quietmetrix.analytics.internal.transport.*
+import com.quietmetrix.analytics.internal.context.DeviceContext
+import com.quietmetrix.analytics.internal.transport.ConnectivityMonitor
+import com.quietmetrix.analytics.internal.transport.EnqueuedEvent
+import com.quietmetrix.analytics.internal.transport.EventContext
+import com.quietmetrix.analytics.internal.transport.EventQueue
+import com.quietmetrix.analytics.internal.transport.SdkInfo
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -55,6 +60,7 @@ actual suspend fun trackEvent(event: String, screen: String?, props: Map<String,
                 language = getNavigatorLanguage(),
                 ua = getNavigatorUserAgent(),
                 viewport = getWindowViewport(),
+                anonymousId = DeviceContext().anonymousId,
             ),
         )
     )

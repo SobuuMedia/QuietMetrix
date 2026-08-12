@@ -33,7 +33,7 @@ class IngestChannel(
         consumerJob = scope.launch(Dispatchers.IO) {
             for (item in channel) {
                 try {
-                    val event = eventNormalizer.normalize(item.request, item.projectId, item.clientIp)
+                    val event = eventNormalizer.normalize(item.request, item.projectId, item.clientIp, item.installHash)
                     eventRepository.insert(event)
                 } catch (e: Exception) {
                     logger.error("Failed to process event for project ${item.projectId}", e)
@@ -54,12 +54,12 @@ class IngestChannel(
         channel.close()
     }
 
-    suspend fun enqueue(projectId: String, request: TrackEventRequest, clientIp: String? = null) {
-        channel.send(IngestItem(projectId, request, clientIp, false))
+    suspend fun enqueue(projectId: String, request: TrackEventRequest, clientIp: String? = null, installHash: String? = null) {
+        channel.send(IngestItem(projectId, request, clientIp, false, installHash))
     }
 
-    suspend fun enqueueBatch(projectId: String, request: TrackEventRequest, clientIp: String? = null) {
-        channel.send(IngestItem(projectId, request, clientIp, true))
+    suspend fun enqueueBatch(projectId: String, request: TrackEventRequest, clientIp: String? = null, installHash: String? = null) {
+        channel.send(IngestItem(projectId, request, clientIp, true, installHash))
     }
 
     private suspend fun processInbox() = withContext(Dispatchers.IO) {
@@ -102,4 +102,5 @@ data class IngestItem(
     val request: TrackEventRequest,
     val clientIp: String?,
     val batch: Boolean,
+    val installHash: String? = null,
 )

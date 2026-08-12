@@ -24,6 +24,34 @@ function hashInstallId(string $salt, string $anonymousId): string {
 }
 
 /**
+ * Per-project funnel/analytics-identity salt (events.install_hash). Deliberately a SEPARATE
+ * column and hash namespace from install_salt/install_meta: install_salt is rotated on API-key
+ * regeneration (an abuse-response action), but funnel and retention history must survive a
+ * rotation, so this salt never is. See docs/security/publishable-api-key.md — Privacy note.
+ */
+function getAnalyticsSalt(string $projectId): ?string {
+    $stmt = getDb()->prepare('SELECT analytics_salt FROM projects WHERE id = ? LIMIT 1');
+    $stmt->execute([$projectId]);
+    $row = $stmt->fetch();
+    return is_array($row) && !empty($row['analytics_salt']) ? $row['analytics_salt'] : null;
+}
+
+/**
+ * Lazily generates and persists the analytics salt for projects created before it existed.
+ * Never called from API-key regeneration — see getAnalyticsSalt().
+ */
+function ensureAnalyticsSalt(string $projectId): ?string {
+    $existing = getAnalyticsSalt($projectId);
+    if ($existing !== null) return $existing;
+    $salt = bin2hex(random_bytes(32));
+    $stmt = getDb()->prepare(
+        'UPDATE projects SET analytics_salt = ? WHERE id = ? AND analytics_salt IS NULL'
+    );
+    $stmt->execute([$salt, $projectId]);
+    return $stmt->rowCount() > 0 ? $salt : getAnalyticsSalt($projectId);
+}
+
+/**
  * Insert-or-increment an install by its hashed id. Auto-revokes when [delta] events
  * push the install over the ramp threshold within the ramp window. Returns
  * ['revoked' => bool, 'event_count' => int].

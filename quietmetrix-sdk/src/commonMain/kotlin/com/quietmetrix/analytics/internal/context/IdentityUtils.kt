@@ -7,6 +7,7 @@ import com.quietmetrix.analytics.internal.createPersistentStore
 
 internal fun generateAnonymousId(): String {
     val config = ConfigHolder.configOrNull ?: return ""
+    if (!config.collectAnonymousId) return ""
     val key = StorageKeys.anonymousId(config.storageKeyPrefix)
 
     // Check in-memory cache first

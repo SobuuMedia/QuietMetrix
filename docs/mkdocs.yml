@@ -19,6 +19,7 @@ nav:
       - Desktop (macOS/Windows/Linux): sdk/desktop.md
       - Web (Wasm): sdk/web.md
       - JVM: sdk/jvm.md
+      - Funnels: sdk/funnels.md
   - Self-hosting:
       - Shared hosting (PHP): self-hosting/shared-hosting-php.md
       - Docker: self-hosting/docker.md
@@ -31,6 +32,6 @@ nav:
 
 markdown_extensions:
   - admonition
-  - code Hilite
+  - codehilite
   - toc:
       permalink: true

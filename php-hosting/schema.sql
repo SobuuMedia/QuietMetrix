@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS projects (
     api_key_hash    CHAR(64)     NOT NULL,    -- SHA-256 hex of the random api token
     api_key_last4   CHAR(4)      NULL,         -- non-sensitive, for masked display
     install_salt    CHAR(64)     NULL,         -- per-project salt for hashing install ids (Stage 2)
+    -- Separate salt for funnel/analytics identity (events.install_hash). Unlike install_salt,
+    -- this is NEVER rotated on API-key regeneration, so funnel/retention history survives a
+    -- key rotation. See docs/security/publishable-api-key.md — Privacy note.
+    analytics_salt  CHAR(64)     NULL,
     -- Stage 3 — opt-in event-name allowlist. When strict_schema=1, only events whose name
     -- is in the allowed_events JSON array are accepted. Bounded blast radius for
     -- publishable API keys (F-Droid etc.).
@@ -65,9 +69,13 @@ CREATE TABLE IF NOT EXISTS events (
     platform     VARCHAR(20)  NULL,
     sdk_version  VARCHAR(20)  NULL,
     duration_ms  BIGINT       NULL,    -- time-on-screen (ms), promoted from screen_view props
+    -- Analytics-salt hash of the install id (projects.analytics_salt). Never the raw value —
+    -- see docs/security/publishable-api-key.md — Privacy note.
+    install_hash CHAR(64)     NULL,
     PRIMARY KEY (id),
     KEY idx_events_project_ts          (project_id, ts),
     KEY idx_events_project_name_ts     (project_id, event_name, ts),
+    KEY idx_events_install_hash        (project_id, install_hash),
     CONSTRAINT fk_events_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -86,6 +94,42 @@ CREATE TABLE IF NOT EXISTS usage_counters (
     events_count BIGINT      NOT NULL DEFAULT 0,
     PRIMARY KEY (project_id, period),
     CONSTRAINT fk_uc_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Funnel definitions. Steps are a JSON array (order is positional): [{key, event, name?,
+-- screen?, props?}, ...]. A funnel emits no new events — steps reference event names the
+-- app already sends. `source`/`locked` prevent SDK auto-registration from silently
+-- overwriting a definition an analyst has edited in the dashboard.
+CREATE TABLE IF NOT EXISTS funnels (
+    id              VARCHAR(36)   NOT NULL,
+    project_id      VARCHAR(36)   NOT NULL,
+    funnel_key      VARCHAR(64)   NOT NULL,
+    name            VARCHAR(255)  NOT NULL,
+    description     VARCHAR(1000) NULL,
+    steps           JSON          NOT NULL,
+    window_seconds  BIGINT        NOT NULL DEFAULT 604800,
+    source          VARCHAR(16)   NOT NULL DEFAULT 'dashboard',
+    locked          TINYINT(1)    NOT NULL DEFAULT 0,
+    count_mode      VARCHAR(16)   NOT NULL DEFAULT 'actor',
+    identity_scope  VARCHAR(32)   NOT NULL DEFAULT 'install_or_session',
+    correlation_property VARCHAR(128) NULL,
+    archived_at     VARCHAR(32)   NULL,
+    created_at      VARCHAR(32)   NOT NULL,
+    updated_at      VARCHAR(32)   NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_funnels_project_key (project_id, funnel_key),
+    CONSTRAINT fk_funnels_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Last accepted revision per code-owned manifest. Older app releases cannot overwrite a
+-- newer funnel definition during a staged rollout.
+CREATE TABLE IF NOT EXISTS funnel_manifests (
+    project_id VARCHAR(36)  NOT NULL,
+    namespace  VARCHAR(128) NOT NULL,
+    revision   BIGINT       NOT NULL,
+    updated_at VARCHAR(32)  NOT NULL,
+    PRIMARY KEY (project_id, namespace),
+    CONSTRAINT fk_funnel_manifests_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Abuse-defense Stage 2: per-install tracking. The SDK's anonymousId is salt-hashed

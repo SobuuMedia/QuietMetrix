@@ -244,4 +244,60 @@ class ApiClient(private val baseUrl: String) {
         ensureSuccess(res)
         return res.body()
     }
+
+    // ---- Funnels ----
+
+    suspend fun listFunnels(projectId: String): FunnelsResponse {
+        val res = client.get(url("/projects/$projectId/funnels")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun createFunnel(projectId: String, request: CreateFunnelRequest): FunnelDto {
+        val res = client.post(url("/projects/$projectId/funnels")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(request)
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun updateFunnel(projectId: String, funnelKey: String, request: UpdateFunnelRequest): FunnelDto {
+        val res = client.patch(url("/projects/$projectId/funnels/$funnelKey")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(request)
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun deleteFunnel(projectId: String, funnelKey: String) {
+        val res = client.delete(url("/projects/$projectId/funnels/$funnelKey")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+    }
+
+    suspend fun funnelResults(
+        projectId: String,
+        funnelKey: String,
+        range: TimeRange,
+        breakdown: String? = null,
+        trend: Boolean = false,
+    ): FunnelResultsResponse {
+        val query = buildString {
+            append("?range=${range.token}")
+            breakdown?.let { append("&breakdown=$it") }
+            if (trend) append("&trend=1")
+        }
+        val res = client.get(url("/projects/$projectId/funnels/$funnelKey/results$query")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
 }

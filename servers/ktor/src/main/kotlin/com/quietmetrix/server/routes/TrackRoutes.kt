@@ -161,7 +161,14 @@ fun Routing.configureTrackRoutes() {
                 }
             }
 
-            ingestChannel.enqueue(projectId.toString(), request, clientIp)
+            // Separate from the abuse-defense `installHash` above: this hash is keyed by the
+            // project's analyticsSalt, which is never rotated on key regeneration, so funnel and
+            // retention history survive a rotation even though install_meta rows do not.
+            val analyticsInstallHash = anonymousId?.takeIf { it.isNotBlank() }?.let { id ->
+                projectRepo.ensureAnalyticsSalt(projectId)?.let { salt -> InstallIdHasher.hash(salt, id) }
+            }
+
+            ingestChannel.enqueue(projectId.toString(), request, clientIp, analyticsInstallHash)
 
             auditRepo.log(projectId, apiKey.takeLast(4), clientIp, installHash, request.event, "accepted", null)
 
@@ -294,8 +301,22 @@ fun Routing.configureTrackRoutes() {
                 }
             }
 
+            // Analytics-identity hash, separate from the abuse-defense hashes computed above:
+            // keyed by the never-rotated analyticsSalt so funnel history survives key rotation.
+            val distinctAnonymousIds = batchRequest.events
+                .mapNotNull { it.ctx?.anonymousId?.takeIf { id -> id.isNotBlank() } }
+                .toSet()
+            val analyticsHashByAnonymousId = if (distinctAnonymousIds.isEmpty()) {
+                emptyMap()
+            } else {
+                projectRepo.ensureAnalyticsSalt(projectId)?.let { analyticsSalt ->
+                    distinctAnonymousIds.associateWith { InstallIdHasher.hash(analyticsSalt, it) }
+                } ?: emptyMap()
+            }
+
             for (event in batchRequest.events) {
-                ingestChannel.enqueueBatch(projectId.toString(), event, clientIp)
+                val analyticsInstallHash = event.ctx?.anonymousId?.let { analyticsHashByAnonymousId[it] }
+                ingestChannel.enqueueBatch(projectId.toString(), event, clientIp, analyticsInstallHash)
             }
 
             auditRepo.log(projectId, apiKey.takeLast(4), clientIp, null, "batch(${batchRequest.events.size})", "accepted", null)

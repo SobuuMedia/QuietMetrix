@@ -33,7 +33,12 @@ class EventNormalizer {
         "linux" to Regex("(?i)linux"),
     )
 
-    fun normalize(request: TrackEventRequest, projectId: String, clientIp: String?): Event {
+    /**
+     * [installHash] is the analytics-salt hash pre-computed by the caller (TrackRoutes /
+     * IngestChannel) from `request.ctx.anonymousId`. The raw id is never read here and never
+     * lands in [Event] — only the hash does. See docs/security/publishable-api-key.md.
+     */
+    fun normalize(request: TrackEventRequest, projectId: String, clientIp: String?, installHash: String? = null): Event {
         val now = Instant.fromEpochMilliseconds(java.time.Instant.now().toEpochMilli())
 
         val eventTs = request.ts?.let { parseTimestamp(it) } ?: now
@@ -60,7 +65,7 @@ class EventNormalizer {
             platform = request.sdk?.platform,
             sdkVersion = request.sdk?.version,
             receivedAt = now,
-            anonymousId = request.ctx?.anonymousId,
+            installHash = installHash,
             browser = browser,
             browserVersion = browserVer,
             os = os,

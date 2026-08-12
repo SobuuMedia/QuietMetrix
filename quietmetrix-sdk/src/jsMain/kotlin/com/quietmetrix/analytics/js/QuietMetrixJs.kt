@@ -1,17 +1,19 @@
 package com.quietmetrix.analytics.js
 
+import com.quietmetrix.analytics.Funnel
+import com.quietmetrix.analytics.FunnelStep
 import com.quietmetrix.analytics.QuietMetrix
 import com.quietmetrix.analytics.QuietMetrixConfig
-import com.quietmetrix.analytics.hasCookieConsent as coreHasCookieConsent
-import com.quietmetrix.analytics.isTrackingAllowed as coreIsTrackingAllowed
-import com.quietmetrix.analytics.setCookieConsent as coreSetCookieConsent
-import com.quietmetrix.analytics.trackEvent as coreTrackEvent
-import com.quietmetrix.analytics.trackScreen as coreTrackScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.promise
 import kotlin.js.Promise
+import com.quietmetrix.analytics.hasCookieConsent as coreHasCookieConsent
+import com.quietmetrix.analytics.isTrackingAllowed as coreIsTrackingAllowed
+import com.quietmetrix.analytics.setCookieConsent as coreSetCookieConsent
+import com.quietmetrix.analytics.trackEvent as coreTrackEvent
+import com.quietmetrix.analytics.trackScreen as coreTrackScreen
 
 /**
  * JavaScript/TypeScript entry point for the QuietMetrix SDK.
@@ -36,6 +38,27 @@ external interface QuietMetrixInitOptions {
     var trackingAllowedByDefault: Boolean?
     var userAgent: String?
     var debug: Boolean?
+    var funnels: Array<FunnelOptions>?
+}
+
+/** One step of a [FunnelOptions]. Mirrors the Kotlin `FunnelStep`. */
+@JsExport
+external interface FunnelStepOptions {
+    var key: String
+    var event: String
+    var name: String?
+    var screen: String?
+    var props: Any?
+}
+
+/** A funnel declared from JS/TypeScript. Pass via `QuietMetrixInitOptions.funnels` or [defineFunnel]. */
+@JsExport
+external interface FunnelOptions {
+    var key: String
+    var name: String
+    var description: String?
+    var steps: Array<FunnelStepOptions>
+    var windowSeconds: Int?
 }
 
 /** Optional second argument to [trackEvent]. */
@@ -59,9 +82,44 @@ fun init(options: QuietMetrixInitOptions) {
             trackingAllowedByDefault = options.trackingAllowedByDefault ?: false,
             userAgent = options.userAgent,
             debug = options.debug ?: false,
+            funnels = (options.funnels ?: emptyArray()).map { toFunnel(it) },
         )
     )
 }
+
+/**
+ * Declares a funnel and returns a handle whose [FunnelHandle.step] emits a step's event.
+ * Prefer passing funnels via `QuietMetrixInitOptions.funnels` so they are auto-registered on
+ * [init] — this is for apps that want a handle to call `.step()` without re-declaring the
+ * funnel at every call site.
+ */
+@JsExport
+fun defineFunnel(options: FunnelOptions): FunnelHandle = FunnelHandle(toFunnel(options))
+
+/** Returned by [defineFunnel]. Not constructed directly. */
+@JsExport
+class FunnelHandle internal constructor(private val funnel: Funnel) {
+    /** Emits [funnel]'s declared event for [stepKey], merging in [props]. No-op for an undeclared key. */
+    fun step(stepKey: String, props: Any? = null): Promise<Unit> = facadeScope.promise {
+        funnel.step(stepKey, jsObjectToMap(props))
+    }
+}
+
+private fun toFunnel(options: FunnelOptions): Funnel = Funnel(
+    key = options.key,
+    name = options.name,
+    description = options.description,
+    windowSeconds = (options.windowSeconds ?: (7 * 24 * 3600)).toLong(),
+    steps = options.steps.map { s ->
+        FunnelStep(
+            key = s.key,
+            event = s.event,
+            name = s.name,
+            screen = s.screen,
+            props = jsObjectToMap(s.props).mapValues { it.value?.toString() ?: "" },
+        )
+    },
+)
 
 /** Track a named event. `options` may carry a `screen` and a plain `props` object. */
 @JsExport
@@ -73,12 +131,6 @@ fun trackEvent(event: String, options: TrackOptions? = null): Promise<Unit> = fa
 @JsExport
 fun trackScreen(screen: String, props: Any? = null): Promise<Unit> = facadeScope.promise {
     coreTrackScreen(screen, jsObjectToMap(props))
-}
-
-/** Associate subsequent events with a user id (hashed before it leaves the device). Pass null to clear. */
-@JsExport
-fun identify(userId: String?) {
-    QuietMetrix.identify(userId)
 }
 
 /** Flush any queued events now. Useful on `beforeunload`. */
