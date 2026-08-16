@@ -10,6 +10,7 @@ import com.quietmetrix.server.domain.ProjectMemberResponse
 import com.quietmetrix.server.domain.ProjectResponse
 import com.quietmetrix.server.domain.RegenerateKeyResponse
 import com.quietmetrix.server.domain.UpdateProjectRequest
+import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
@@ -33,98 +34,139 @@ fun Routing.configureProjectRoutes() {
     val projectRepo by inject<ProjectRepository>()
     val userRepo by inject<UserRepository>()
     val memberRepo by inject<ProjectMemberRepository>()
+    val accessTokenRepo by inject<AccessTokenRepository>()
     val config by inject<AppConfig>()
     val quotaEnforcer: QuotaEnforcer? = getKoin().getOrNull()
 
     route("/api/v1/projects") {
-        authenticate("auth-jwt") {
-            post {
-                val principal = call.principal<JWTPrincipal>() ?: return@post
-                val userId = principal.payload.getClaim("userId").asString()
+        // Create and list accept either a dashboard JWT or a scoped `qm_pat_…` personal
+        // access token, so an agent/CLI can provision a project without a user's password —
+        // see docs/agents/setup.md. Deliberately NOT inside authenticate("auth-jwt"): that
+        // provider's JWT verifier would reject a PAT before this code ever runs.
+        post {
+            val principal = resolveApiPrincipal(call, config, accessTokenRepo) ?: run {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    ErrorResponse("unauthorized", "Missing or invalid Authorization header")
+                )
+                return@post
+            }
 
-                if (principal.roleClaim() != "admin") {
+            if (!principal.canCreateProjects()) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ErrorResponse("forbidden", "Only admins can create projects")
+                )
+                return@post
+            }
+            val userId = principal.userId
+
+            if (quotaEnforcer != null) {
+                val user = userRepo.findById(userId)
+                val planId = user?.get("planId") as? String
+                val projectCount = projectRepo.countByOwnerId(userId)
+                if (!quotaEnforcer.checkProjectLimit(planId, projectCount)) {
                     call.respond(
                         HttpStatusCode.Forbidden,
-                        ErrorResponse("forbidden", "Only admins can create projects")
+                        ErrorResponse("project_limit_reached", "You have reached the maximum number of projects allowed for your plan.")
                     )
                     return@post
                 }
-
-                if (quotaEnforcer != null) {
-                    val user = userRepo.findById(userId.toLong())
-                    val planId = user?.get("planId") as? String
-                    val projectCount = projectRepo.countByOwnerId(userId.toLong())
-                    if (!quotaEnforcer.checkProjectLimit(planId, projectCount)) {
-                        call.respond(
-                            HttpStatusCode.Forbidden,
-                            ErrorResponse("project_limit_reached", "You have reached the maximum number of projects allowed for your plan.")
-                        )
-                        return@post
-                    }
-                }
-
-                val request = try {
-                    call.receive<CreateProjectRequest>()
-                } catch (_: Exception) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorResponse("invalid_json", "Request body is not valid JSON")
-                    )
-                    return@post
-                }
-
-                if (request.name.isBlank()) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorResponse("schema_violation", "Field 'name' is required and must be a non-empty string")
-                    )
-                    return@post
-                }
-
-                val apiKey = projectRepo.create(request.name, request.description, userId.toLong())
-
-                call.respond(HttpStatusCode.Created, mapOf(
-                    "api_key" to apiKey,
-                    "api_key_last4" to apiKey.takeLast(4),
-                    "message" to "Project created. Store this key securely — it will not be shown again."
-                ))
             }
 
-            get {
-                val principal = call.principal<JWTPrincipal>() ?: return@get
-                val userId = principal.payload.getClaim("userId").asString()
-                val limit = call.parameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 50
-                val offset = call.parameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-                val ownerOnly = call.parameters["owner_only"]?.toBoolean() ?: false
-                val isAdmin = principal.roleClaim() == "admin"
-
-                val projects = when {
-                    isAdmin -> projectRepo.findAll(limit, offset)
-                    ownerOnly -> projectRepo.findByOwnerId(userId.toLong(), limit, offset)
-                    else -> projectRepo.findAccessibleByUserId(userId.toLong(), limit, offset)
-                }
-                val total = when {
-                    isAdmin -> projectRepo.countAll()
-                    ownerOnly -> projectRepo.countByOwnerId(userId.toLong())
-                    else -> projectRepo.countAccessibleByUserId(userId.toLong())
-                }
-
-                call.respond(ProjectListResponse(
-                    projects = projects.map {
-                        ProjectResponse(
-                            id = "proj_${it["id"]}",
-                            name = it["name"] as String,
-                            description = it["description"] as? String,
-                            apiKey = "***",
-                            apiKeyLast4 = it["apiKeyLast4"] as? String,
-                            planId = it["planId"] as? String,
-                            createdAt = it["createdAt"].toString(),
-                        )
-                    },
-                    total = total.toInt(),
-                ))
+            val request = try {
+                call.receive<CreateProjectRequest>()
+            } catch (_: Exception) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("invalid_json", "Request body is not valid JSON")
+                )
+                return@post
             }
 
+            if (request.name.isBlank()) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("schema_violation", "Field 'name' is required and must be a non-empty string")
+                )
+                return@post
+            }
+
+            // A retried request (e.g. an agent that never saw the first response) must not
+            // mint a second project/key. The plaintext key is never stored, so a replay
+            // cannot re-show it — it returns the earlier project's public info instead.
+            val idempotencyKey = call.request.headers["Idempotency-Key"]?.trim()?.takeIf { it.isNotEmpty() }
+            if (idempotencyKey != null) {
+                val existing = projectRepo.findByOwnerAndIdempotencyKey(userId, idempotencyKey)
+                if (existing != null) {
+                    call.respond(HttpStatusCode.OK, mapOf(
+                        "id" to "proj_${existing["id"]}",
+                        "name" to existing["name"],
+                        "api_key_last4" to existing["apiKeyLast4"],
+                        "message" to "A project already exists for this Idempotency-Key. Its API key was shown once, at creation, and cannot be retrieved again — use POST /projects/{id}/regenerate-key for a new one."
+                    ))
+                    return@post
+                }
+            }
+
+            val apiKey = projectRepo.create(request.name, request.description, userId, idempotencyKey)
+
+            call.respond(HttpStatusCode.Created, mapOf(
+                "api_key" to apiKey,
+                "api_key_last4" to apiKey.takeLast(4),
+                "message" to "Project created. Store this key securely — it will not be shown again."
+            ))
+        }
+
+        get {
+            val principal = resolveApiPrincipal(call, config, accessTokenRepo) ?: run {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    ErrorResponse("unauthorized", "Missing or invalid Authorization header")
+                )
+                return@get
+            }
+            if (!principal.canReadProjects()) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ErrorResponse("forbidden", "This token cannot list projects")
+                )
+                return@get
+            }
+            val userId = principal.userId
+            val limit = call.parameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 50
+            val offset = call.parameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            val ownerOnly = call.parameters["owner_only"]?.toBoolean() ?: false
+            val isAdmin = principal.isAdmin()
+
+            val projects = when {
+                isAdmin -> projectRepo.findAll(limit, offset)
+                ownerOnly -> projectRepo.findByOwnerId(userId, limit, offset)
+                else -> projectRepo.findAccessibleByUserId(userId, limit, offset)
+            }
+            val total = when {
+                isAdmin -> projectRepo.countAll()
+                ownerOnly -> projectRepo.countByOwnerId(userId)
+                else -> projectRepo.countAccessibleByUserId(userId)
+            }
+
+            call.respond(ProjectListResponse(
+                projects = projects.map {
+                    ProjectResponse(
+                        id = "proj_${it["id"]}",
+                        name = it["name"] as String,
+                        description = it["description"] as? String,
+                        apiKey = "***",
+                        apiKeyLast4 = it["apiKeyLast4"] as? String,
+                        planId = it["planId"] as? String,
+                        createdAt = it["createdAt"].toString(),
+                    )
+                },
+                total = total.toInt(),
+            ))
+        }
+
+        authenticate("auth-jwt") {
             post("/{projectId}/regenerate-key") {
                 val projectIdStr = call.parameters["projectId"] ?: run {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Missing projectId"))

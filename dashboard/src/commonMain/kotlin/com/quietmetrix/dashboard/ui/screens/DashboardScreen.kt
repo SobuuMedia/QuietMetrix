@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.api.AccessTokenDto
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.EventRow
 import com.quietmetrix.dashboard.api.ScreenDuration
@@ -158,6 +159,7 @@ import com.quietmetrix.dashboard.resources.settings_theme_system
 import com.quietmetrix.dashboard.resources.settings_title
 import com.quietmetrix.dashboard.resources.snackbar_api_key_copied
 import com.quietmetrix.dashboard.resources.snackbar_invite_link_copied
+import com.quietmetrix.dashboard.resources.snackbar_token_copied
 import com.quietmetrix.dashboard.resources.state_no_data
 import com.quietmetrix.dashboard.resources.state_no_events
 import com.quietmetrix.dashboard.resources.state_no_projects
@@ -177,6 +179,22 @@ import com.quietmetrix.dashboard.resources.tab_info_overview
 import com.quietmetrix.dashboard.resources.tab_info_projects
 import com.quietmetrix.dashboard.resources.tab_info_settings
 import com.quietmetrix.dashboard.resources.tab_info_users
+import com.quietmetrix.dashboard.resources.tokens_cancel_action
+import com.quietmetrix.dashboard.resources.tokens_create_action
+import com.quietmetrix.dashboard.resources.tokens_created_at_label
+import com.quietmetrix.dashboard.resources.tokens_created_title
+import com.quietmetrix.dashboard.resources.tokens_created_warning
+import com.quietmetrix.dashboard.resources.tokens_empty
+import com.quietmetrix.dashboard.resources.tokens_hint
+import com.quietmetrix.dashboard.resources.tokens_last_used_label
+import com.quietmetrix.dashboard.resources.tokens_name_and_last4
+import com.quietmetrix.dashboard.resources.tokens_name_label
+import com.quietmetrix.dashboard.resources.tokens_name_placeholder
+import com.quietmetrix.dashboard.resources.tokens_never_used
+import com.quietmetrix.dashboard.resources.tokens_new_action
+import com.quietmetrix.dashboard.resources.tokens_revoke_action
+import com.quietmetrix.dashboard.resources.tokens_scope_label
+import com.quietmetrix.dashboard.resources.tokens_title
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.LocalThemeMode
@@ -362,6 +380,53 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
                         IconButton(
                             onClick = {
                                 clipboard.setText(AnnotatedString(link))
+                                scope.launch { snackbarState.showSnackbar(copiedMsg) }
+                            },
+                            modifier = Modifier.handCursor(),
+                        ) {
+                            Icon(
+                                painter = painterResource(Res.drawable.ic_copy),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    // One-time reveal of a freshly created personal access token, with a copy button.
+    state.newAccessToken?.let { plaintextToken ->
+        val clipboard = LocalClipboardManager.current
+        val copiedMsg = stringResource(Res.string.snackbar_token_copied)
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissNewAccessToken() },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.dismissNewAccessToken() },
+                    modifier = Modifier.handCursor(),
+                ) { Text(stringResource(Res.string.action_got_it)) }
+            },
+            title = { Text(stringResource(Res.string.tokens_created_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(Res.string.tokens_created_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f)) {
+                            Text(plaintextToken,
+                                 modifier = Modifier.padding(8.dp),
+                                 style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconButton(
+                            onClick = {
+                                clipboard.setText(AnnotatedString(plaintextToken))
                                 scope.launch { snackbarState.showSnackbar(copiedMsg) }
                             },
                             modifier = Modifier.handCursor(),
@@ -1467,6 +1532,10 @@ private fun SettingsTab(viewModel: DashboardViewModel, state: DashboardState) {
                 }
             }
 
+            if (state.isAdmin) {
+                AccessTokensCard(viewModel, state)
+            }
+
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     OutlinedButton(
@@ -1492,6 +1561,150 @@ private fun SettingsTab(viewModel: DashboardViewModel, state: DashboardState) {
             }
         }
     }
+}
+
+/**
+ * Personal access tokens (`qm_pat_…`) for agents/CLIs to create projects without a
+ * password — see docs/agents/setup.md. Admin-only, since only an admin session may mint
+ * a token with the projects:create scope.
+ */
+@Composable
+private fun AccessTokensCard(viewModel: DashboardViewModel, state: DashboardState) {
+    var showCreate by remember { mutableStateOf(false) }
+    var pendingRevoke by remember { mutableStateOf<AccessTokenDto?>(null) }
+
+    LaunchedEffect(Unit) { viewModel.loadTokens() }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(Res.string.tokens_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = { showCreate = true }, modifier = Modifier.handCursor()) {
+                    Icon(painterResource(Res.drawable.ic_plus), contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(Res.string.tokens_new_action))
+                }
+            }
+            Text(
+                stringResource(Res.string.tokens_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (state.accessTokens.isEmpty()) {
+                Text(
+                    stringResource(Res.string.tokens_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                state.accessTokens.forEach { tok ->
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                stringResource(Res.string.tokens_name_and_last4, tok.name, tok.last4),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                stringResource(Res.string.tokens_scope_label, tok.scopes.joinToString(", ")),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                stringResource(Res.string.tokens_created_at_label, formatDateOnly(tok.createdAt)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                if (tok.lastUsedAt != null) {
+                                    stringResource(Res.string.tokens_last_used_label, formatDateOnly(tok.lastUsedAt))
+                                } else {
+                                    stringResource(Res.string.tokens_never_used)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = { pendingRevoke = tok }, modifier = Modifier.handCursor()) {
+                            Text(stringResource(Res.string.tokens_revoke_action), color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreate) {
+        CreateTokenDialog(
+            onDismiss = { showCreate = false },
+            onCreate = { name ->
+                viewModel.createToken(name, listOf("projects:create"))
+                showCreate = false
+            },
+        )
+    }
+
+    pendingRevoke?.let { tok ->
+        AlertDialog(
+            onDismissRequest = { pendingRevoke = null },
+            title = { Text(stringResource(Res.string.tokens_revoke_action)) },
+            text = { Text(tok.name) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.revokeToken(tok.id)
+                        pendingRevoke = null
+                    },
+                    modifier = Modifier.handCursor(),
+                ) { Text(stringResource(Res.string.tokens_revoke_action), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRevoke = null }, modifier = Modifier.handCursor()) {
+                    Text(stringResource(Res.string.tokens_cancel_action))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CreateTokenDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.tokens_new_action)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(Res.string.tokens_name_label)) },
+                placeholder = { Text(stringResource(Res.string.tokens_name_placeholder)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onCreate(name.trim()) },
+                enabled = name.isNotBlank(),
+                modifier = Modifier.handCursor(),
+            ) { Text(stringResource(Res.string.tokens_create_action)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.handCursor()) {
+                Text(stringResource(Res.string.tokens_cancel_action))
+            }
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------

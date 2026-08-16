@@ -1,5 +1,8 @@
 # SDK: Android
 
+> Setting this up for the first time? An AI agent can create the project and fill in the
+> values below for you — see [Agent-driven setup](../agents/setup.md).
+
 ## Installation
 
 Add the QuietMetrix dependency to your module's `build.gradle.kts`:

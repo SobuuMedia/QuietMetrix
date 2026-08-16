@@ -49,10 +49,18 @@ object Projects : Table("projects") {
     val strictSchema = bool("strict_schema").default(false)
     val allowedEvents = text("allowed_events").nullable()
     val planId = varchar("plan_id", 50).nullable()
+    // Optional client-supplied dedup key for POST /projects. A retry of a timed-out create
+    // with the same (owner, key) finds the earlier project instead of minting a second one.
+    // Null for callers that don't opt in; multiple nulls per owner do not collide.
+    val idempotencyKey = varchar("idempotency_key", 128).nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val deletedAt = datetime("deleted_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(ownerUserId, idempotencyKey)
+    }
 }
 
 object EventsInbox : Table("events_inbox") {
@@ -222,6 +230,30 @@ object FunnelManifests : Table("funnel_manifests") {
     val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
 
     override val primaryKey = PrimaryKey(projectId, namespace)
+}
+
+/**
+ * Long-lived personal access tokens (`qm_pat_…`) used by agents/CLIs to call the API
+ * without a user's password. Scoped and revocable — see AccessTokenRepository.
+ */
+object AccessTokens : Table("access_tokens") {
+    val id = long("id").autoIncrement()
+    val userId = long("user_id").references(Users.id)
+    val name = varchar("name", 255)
+    val tokenSha256 = varchar("token_sha256", 64).uniqueIndex()
+    val tokenLast4 = varchar("token_last4", 4)
+    // Comma-separated scope slugs, e.g. "projects:create,projects:read".
+    val scopes = varchar("scopes", 500)
+    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
+    val expiresAt = datetime("expires_at").nullable()
+    val lastUsedAt = datetime("last_used_at").nullable()
+    val revokedAt = datetime("revoked_at").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, userId, revokedAt)
+    }
 }
 
 object Sessions : Table("sessions") {

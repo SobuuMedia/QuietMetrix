@@ -13,6 +13,9 @@ theme:
 nav:
   - Home: index.md
   - API Reference: api-reference.md
+  - Agents:
+      - Setup: agents/setup.md
+      - Claude Code skill: agents/wiring-skill.md
   - SDK:
       - Android: sdk/android.md
       - iOS: sdk/ios.md

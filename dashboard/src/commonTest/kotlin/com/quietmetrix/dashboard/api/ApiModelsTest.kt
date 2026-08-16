@@ -192,4 +192,43 @@ class ApiModelsTest {
         assertEquals("2026-01-01", r.trend?.get(0)?.bucket)
         assertEquals(true, r.truncated)
     }
+
+    // --- Access tokens (Task 6) --------------------------------------------------------------
+
+    @Test
+    fun accessTokenDtoDecodesScopesAndTimestamps() {
+        val t = json.decodeFromString<AccessTokenDto>(
+            """{"id":"1","name":"agent","last4":"a71b","scopes":["projects:create"],
+                "created_at":"2026-08-16T00:00:00","expires_at":null,"last_used_at":null}"""
+        )
+        assertEquals("agent", t.name)
+        assertEquals("a71b", t.last4)
+        assertEquals(listOf("projects:create"), t.scopes)
+        assertNull(t.expiresAt)
+    }
+
+    @Test
+    fun accessTokensResponseDefaultsToEmptyList() {
+        val r = json.decodeFromString<AccessTokensResponse>("""{}""")
+        assertEquals(0, r.tokens.size)
+    }
+
+    @Test
+    fun createTokenResponseDecodesPlaintextToken() {
+        val r = json.decodeFromString<CreateTokenResponse>(
+            """{"id":"1","name":"agent","token":"qm_pat_abc123","last4":"c123",
+                "scopes":["projects:create"],"created_at":"2026-08-16T00:00:00"}"""
+        )
+        assertEquals("qm_pat_abc123", r.token)
+        assertEquals("c123", r.last4)
+    }
+
+    @Test
+    fun createTokenRequestRoundTripsWithoutOptionalFields() {
+        val encoded = json.encodeToString(CreateTokenRequest.serializer(), CreateTokenRequest("agent"))
+        val decoded = json.decodeFromString<CreateTokenRequest>(encoded)
+        assertEquals("agent", decoded.name)
+        assertNull(decoded.scopes)
+        assertNull(decoded.expiresInDays)
+    }
 }

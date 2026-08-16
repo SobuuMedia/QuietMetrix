@@ -1,5 +1,8 @@
 # SDK: Web (JavaScript / TypeScript)
 
+> Setting this up for the first time? An AI agent can create the project and fill in the
+> values below for you — see [Agent-driven setup](../agents/setup.md).
+
 The web SDK is published to npm as `@sobuumedia/quietmetrix-sdk`. It is framework-agnostic — the same API
 works in Vue, React, Svelte, or plain JavaScript. TypeScript definitions are bundled.
 

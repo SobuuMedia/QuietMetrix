@@ -14,9 +14,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Wired up by an AI agent via `quietmetrix project create` — see
+        // docs/agents/setup.md. trackingEndpoint/apiKey are safe to commit: the qm_ak_ key
+        // is publishable and write-only (docs/security/publishable-api-key.md).
         QuietMetrix.init(
             QuietMetrixConfig(
                 storageKeyPrefix = "qmsample_",
+                trackingEndpoint = "https://your-server.com/api/v1/track",
+                apiKey = "qm_ak_your_api_key",
                 autoTrackInitialPageView = false
             )
         )

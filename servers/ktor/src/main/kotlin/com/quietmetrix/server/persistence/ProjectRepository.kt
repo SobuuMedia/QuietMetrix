@@ -6,10 +6,8 @@ import com.quietmetrix.server.persistence.tables.Projects
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
@@ -31,7 +29,7 @@ class ProjectRepository(private val database: Database) {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    fun create(name: String, description: String?, ownerUserId: Long): String {
+    fun create(name: String, description: String?, ownerUserId: Long, idempotencyKey: String? = null): String {
         val apiKey = "qm_ak_${UUID.randomUUID().toString().replace("-", "")}"
         val apiKeyHash = BCrypt.withDefaults().hashToString(12, apiKey.toCharArray())
         val apiKeySha256 = sha256(apiKey)
@@ -46,9 +44,30 @@ class ProjectRepository(private val database: Database) {
                 it[this.apiKeyLast4] = apiKey.takeLast(4)
                 it[this.installSalt] = randomHex(32)
                 it[this.analyticsSalt] = randomHex(32)
+                it[this.idempotencyKey] = idempotencyKey
             }
         }
         return apiKey
+    }
+
+    /**
+     * Finds a project previously created with [idempotencyKey] by [ownerUserId], if any.
+     * Used to make `POST /projects` retry-safe: a lost response should re-find the earlier
+     * project rather than mint a second one. Scoped per-owner so two callers can reuse the
+     * same key without colliding.
+     */
+    fun findByOwnerAndIdempotencyKey(ownerUserId: Long, idempotencyKey: String): Map<String, Any?>? {
+        return transaction(database) {
+            Projects.selectAll()
+                .where {
+                    (Projects.ownerUserId eq ownerUserId) and
+                    (Projects.idempotencyKey eq idempotencyKey) and
+                    (Projects.deletedAt.isNull())
+                }
+                .limit(1)
+                .map { rowToMap(it) }
+                .singleOrNull()
+        }
     }
 
     /**

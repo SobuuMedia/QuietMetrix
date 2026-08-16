@@ -3,13 +3,18 @@
 /**
  * GET /api/v1/projects → list projects the caller can see.
  * Admins see every project; developers and reviewers see only the projects they
- * own or are assigned to (project_members).
+ * own or are assigned to (project_members). Also accepts a personal access token
+ * with a projects:create or projects:read scope — see docs/agents/setup.md.
  */
 function handleProjectsList(): void {
-    $session = requireSession();
-    $userId  = $session['sub'];
+    $session = requireSessionOrToken();
+    if (!sessionCanReadProjects($session)) {
+        errorResponse(403, 'forbidden', 'This token cannot list projects');
+        return;
+    }
+    $userId = $session['sub'];
 
-    if (($session['role'] ?? '') === 'admin') {
+    if (sessionIsAdmin($session)) {
         $stmt = getDb()->prepare(
             'SELECT id, name, description, plan_id, api_key_last4, created_at
                FROM projects ORDER BY created_at DESC'
@@ -33,10 +38,17 @@ function handleProjectsList(): void {
  * POST /api/v1/projects { name, description? } → creates a project and returns the freshly
  * generated API key. The key is shown ONLY at this response — the server
  * stores hashes only and cannot recover it later.
+ *
+ * Accepts either an admin dashboard session or a personal access token carrying the
+ * projects:create scope, so an agent/CLI can provision a project without a user's
+ * password — see docs/agents/setup.md.
  */
 function handleProjectsCreate(): void {
-    $session = requireSession();
-    requireAdmin($session);   // only admins may create apps
+    $session = requireSessionOrToken();
+    if (!sessionCanCreateProjects($session)) {
+        errorResponse(403, 'forbidden', 'Only admins can create projects');
+        return;
+    }
     $body    = getJsonBody();
     $name    = trim((string)($body['name'] ?? ''));
     if ($name === '' || strlen($name) > 255) {
@@ -52,14 +64,36 @@ function handleProjectsCreate(): void {
         $description = null;
     }
 
+    // A retried request (e.g. an agent that never saw the first response) must not mint a
+    // second project/key. The plaintext key is never stored, so a replay cannot re-show it —
+    // it returns the earlier project's public info instead.
+    $idempotencyKey = trim((string)($_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? ''));
+    if ($idempotencyKey !== '') {
+        $stmt = getDb()->prepare(
+            'SELECT id, name, api_key_last4 FROM projects
+             WHERE owner_user_id = ? AND idempotency_key = ? LIMIT 1'
+        );
+        $stmt->execute([$session['sub'], $idempotencyKey]);
+        $existing = $stmt->fetch();
+        if ($existing !== false) {
+            jsonResponse(200, [
+                'id'            => $existing['id'],
+                'name'          => $existing['name'],
+                'api_key_last4' => $existing['api_key_last4'],
+                'message'       => 'A project already exists for this Idempotency-Key. Its API key was shown once, at creation, and cannot be retrieved again — use POST /projects/{id}/regenerate-key for a new one.',
+            ]);
+            return;
+        }
+    }
+
     $id      = uuid4();
     $apiKey  = randomToken();
     $installSalt = bin2hex(random_bytes(32));
 
     getDb()->prepare(
-        'INSERT INTO projects (id, name, description, owner_user_id, api_key_hash, api_key_last4, install_salt, plan_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)'
-    )->execute([$id, $name, $description, $session['sub'], tokenHash($apiKey), substr($apiKey, -4), $installSalt, now()]);
+        'INSERT INTO projects (id, name, description, owner_user_id, api_key_hash, api_key_last4, install_salt, plan_id, idempotency_key, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)'
+    )->execute([$id, $name, $description, $session['sub'], tokenHash($apiKey), substr($apiKey, -4), $installSalt, $idempotencyKey !== '' ? $idempotencyKey : null, now()]);
 
     jsonResponse(201, [
         'id'            => $id,

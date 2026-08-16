@@ -62,6 +62,13 @@ data class HealthResponse(
     val version: String,
 )
 
+/** Public, secret-free server flags — lets a client discover `debug` before doing anything else. */
+@Serializable
+data class MetaResponse(
+    val version: String = "0.2.0",
+    val debug: Boolean = false,
+)
+
 @Serializable
 data class LoginRequest(
     val email: String,
@@ -197,4 +204,38 @@ data class RetentionCohort(
     val day7: Double? = null,
     val day14: Double? = null,
     val day30: Double? = null,
+)
+
+@Serializable
+data class CreateTokenRequest(
+    val name: String,
+    val scopes: List<String>? = null,
+    @SerialName("expires_in_days") val expiresInDays: Long? = null,
+)
+
+@Serializable
+data class TokenSummary(
+    val id: String,
+    val name: String,
+    val last4: String,
+    val scopes: List<String>,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("last_used_at") val lastUsedAt: String? = null,
+)
+
+@Serializable
+data class CreateTokenResponse(
+    val id: String,
+    val name: String,
+    val token: String,
+    val last4: String,
+    val scopes: List<String>,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+@Serializable
+data class TokenListResponse(
+    val tokens: List<TokenSummary>,
 )

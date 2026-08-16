@@ -81,6 +81,40 @@ data class RegenerateKeyResponse(
 @Serializable
 data class MetaResponse(val version: String = "0.0.0", val debug: Boolean = false)
 
+/** A personal access token (`qm_pat_…`) for an agent/CLI — see docs/agents/setup.md. Never carries the plaintext token. */
+@Serializable
+data class AccessTokenDto(
+    val id: String,
+    val name: String,
+    val last4: String,
+    val scopes: List<String> = emptyList(),
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("last_used_at") val lastUsedAt: String? = null,
+)
+
+@Serializable
+data class AccessTokensResponse(val tokens: List<AccessTokenDto> = emptyList())
+
+@Serializable
+data class CreateTokenRequest(
+    val name: String,
+    val scopes: List<String>? = null,
+    @SerialName("expires_in_days") val expiresInDays: Long? = null,
+)
+
+/** Response to POST /tokens. Carries the plaintext token once — never shown again. */
+@Serializable
+data class CreateTokenResponse(
+    val id: String,
+    val name: String,
+    val token: String,
+    val last4: String,
+    val scopes: List<String> = emptyList(),
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
 @Serializable
 data class ProjectsResponse(val projects: List<ApiProject> = emptyList())
 

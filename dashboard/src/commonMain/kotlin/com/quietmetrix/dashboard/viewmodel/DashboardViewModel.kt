@@ -1,5 +1,6 @@
 package com.quietmetrix.dashboard.viewmodel
 
+import com.quietmetrix.dashboard.api.AccessTokenDto
 import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.ApiClient
 import com.quietmetrix.dashboard.api.ApiException
@@ -80,6 +81,10 @@ data class DashboardState(
     val inviteEmail: String? = null,
     val inviteTokenInvalid: Boolean = false,
     val inviteSubmitting: Boolean = false,
+    // Access tokens (agents/CLIs) — see docs/agents/setup.md
+    val accessTokens: List<AccessTokenDto> = emptyList(),
+    /** The plaintext token from the most recent create, shown once then dismissed. */
+    val newAccessToken: String? = null,
 ) {
     /** Global role of the signed-in user. */
     val role: String? get() = user?.role
@@ -409,6 +414,45 @@ class DashboardViewModel {
                 loadUsers()
             } catch (e: Throwable) {
                 _state.update { it.copy(error = e.toUiError("DELETE /users/{id}")) }
+            }
+        }
+    }
+
+    // ---- Access tokens (agents/CLIs) ----
+
+    fun loadTokens() {
+        scope.launch {
+            try {
+                _state.update { it.copy(accessTokens = api.listTokens().tokens) }
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("GET /tokens")) }
+            }
+        }
+    }
+
+    fun createToken(name: String, scopes: List<String>? = null) {
+        scope.launch {
+            try {
+                val res = api.createToken(name, scopes)
+                _state.update { it.copy(newAccessToken = res.token) }
+                loadTokens()
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("POST /tokens")) }
+            }
+        }
+    }
+
+    fun dismissNewAccessToken() {
+        _state.update { it.copy(newAccessToken = null) }
+    }
+
+    fun revokeToken(tokenId: String) {
+        scope.launch {
+            try {
+                api.revokeToken(tokenId)
+                loadTokens()
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("DELETE /tokens/{id}")) }
             }
         }
     }

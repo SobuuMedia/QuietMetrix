@@ -38,6 +38,7 @@ Everything is MIT-licensed. No vendor lock-in.
   - [Funnels](#funnels-1)
 - [Multi-Project Support](#multi-project-support)
   - [Creating Projects](#creating-projects)
+  - [Agent-Driven Setup](#agent-driven-setup)
   - [Team Members & Roles](#team-members--roles)
   - [Deleting Projects](#deleting-projects)
 - [Development](#development)
@@ -958,6 +959,14 @@ QuietMetrix.init(QuietMetrixConfig(
 ```
 
 Each project appears separately in the dashboard with its own events, aggregates, and members.
+
+### Agent-Driven Setup
+
+You can also have an AI coding agent do the above for you — tell it "create a QuietMetrix
+project at `https://your-server.com` and wire it into this app" and it creates the project via
+the CLI or MCP server and writes the key into your SDK config. Requires a one-time personal
+access token (`qm_pat_…`, **not** the publishable `qm_ak_…` API key above — see why they're
+handled so differently). Full walkthrough: [Agent-driven setup](docs/agents/setup.md).
 
 ### Team Members & Roles
 

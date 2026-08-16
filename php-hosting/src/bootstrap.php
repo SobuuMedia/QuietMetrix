@@ -143,6 +143,31 @@ function ensureInstalled(): void {
             CONSTRAINT fk_funnel_manifests_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    // Personal access tokens (agents/CLIs) — see docs/agents/setup.md.
+    createTableIfMissing($db, 'access_tokens', "
+        CREATE TABLE access_tokens (
+            id            VARCHAR(36)  NOT NULL,
+            user_id       VARCHAR(36)  NOT NULL,
+            name          VARCHAR(255) NOT NULL,
+            token_hash    CHAR(64)     NOT NULL,
+            token_last4   CHAR(4)      NOT NULL,
+            scopes        VARCHAR(500) NOT NULL,
+            created_at    VARCHAR(32)  NOT NULL,
+            expires_at    VARCHAR(32)  NULL,
+            last_used_at  VARCHAR(32)  NULL,
+            revoked_at    VARCHAR(32)  NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_access_tokens_hash (token_hash),
+            KEY idx_access_tokens_user (user_id, revoked_at),
+            CONSTRAINT fk_at_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    // Idempotent POST /projects (agents/CLIs retrying a lost response). The INSERT in
+    // handleProjectsCreate() always references this column, so an install missing it would
+    // fail to create ANY project, not just skip idempotency — this guard is load-bearing.
+    addColumnIfMissing($db, 'projects', 'idempotency_key', 'VARCHAR(128) NULL');
+    addIndexIfMissing($db, 'projects', 'idx_projects_owner_idempotency',
+        'UNIQUE KEY idx_projects_owner_idempotency (owner_user_id, idempotency_key)');
 
     // 2. First admin user
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
@@ -185,6 +210,23 @@ function addColumnIfMissing(PDO $db, string $table, string $column, string $defi
 function createTableIfMissing(PDO $db, string $table, string $createSql): void {
     if (!tableExists($db, $table)) {
         $db->exec($createSql);
+    }
+}
+
+/**
+ * Adds `$indexDefinition` (e.g. "UNIQUE KEY name (col1, col2)") to `$table` if an index of
+ * that name does not already exist. Sibling to addColumnIfMissing() — MySQL has no portable
+ * `CREATE INDEX IF NOT EXISTS` either, so this guards with the same information_schema check.
+ */
+function addIndexIfMissing(PDO $db, string $table, string $indexName, string $indexDefinition): void {
+    $stmt = $db->prepare(
+        'SELECT 1 FROM information_schema.statistics
+         WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1'
+    );
+    $stmt->execute([$table, $indexName]);
+    if ($stmt->fetchColumn() === false) {
+        // Identifiers are hard-coded constants from this file, not user input.
+        $db->exec("ALTER TABLE `$table` ADD $indexDefinition");
     }
 }
 

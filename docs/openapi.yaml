@@ -14,6 +14,11 @@ info:
       See docs/security/publishable-api-key.md for the full threat model and abuse-defense
       controls (per-IP, per-install, quarantine, schema allowlist).
     - **Admin/Dashboard endpoints** use session authentication obtained via `POST /api/v1/auth/login`.
+    - **Agents/CLIs** provisioning projects without a browser use a long-lived personal access
+      token (`qm_pat_…`, header `Authorization: Bearer <token>`) minted via `POST /api/v1/tokens`
+      (session-authenticated only — a token can never mint another token). `POST` and
+      `GET /api/v1/projects` accept either a session token or a scoped personal access token.
+      See docs/agents/setup.md.
 
     QuietMetrix is fully self-hosted and unlimited: all tracking and admin
     endpoints are available, with no quotas. Rate limiting is optional and
@@ -35,7 +40,9 @@ tags:
   - name: Auth
     description: Admin authentication
   - name: Projects
-    description: Project management (session auth)
+    description: Project management (session auth, or a scoped personal access token for create/list)
+  - name: Access Tokens
+    description: Personal access tokens for agents/CLIs (session auth only) — see docs/agents/setup.md
   - name: Dashboard
     description: Aggregated analytics data
   - name: Funnels
@@ -312,14 +319,120 @@ paths:
                 error: unauthorized
                 message: "Invalid email or password"
 
+  /api/v1/tokens:
+    post:
+      tags: [Access Tokens]
+      operationId: createToken
+      summary: Mint a personal access token
+      description: |
+        Session-authenticated only — a token can never mint another token. Requesting the
+        `projects:create` scope requires an admin session. See docs/agents/setup.md.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTokenRequest"
+            example:
+              name: "laptop-agent"
+              scopes: [projects:create]
+      responses:
+        "201":
+          description: Token created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateTokenResponse"
+        "400":
+          description: Invalid name, or an unknown scope was requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Requested projects:create without an admin session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags: [Access Tokens]
+      operationId: listTokens
+      summary: List your personal access tokens
+      description: Non-revoked tokens owned by the caller, newest first. Never includes plaintext.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenListResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tokens/{tokenId}:
+    delete:
+      tags: [Access Tokens]
+      operationId: revokeToken
+      summary: Revoke a personal access token
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The token's id, as returned by POST/GET /tokens
+      responses:
+        "200":
+          description: Token revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked:
+                    type: boolean
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Token not found, already revoked, or not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/projects:
     get:
       tags: [Projects]
       operationId: listProjects
       summary: List all projects
-      description: Returns all projects owned by the authenticated user.
+      description: |
+        Returns all projects owned by the authenticated user. Accepts a session token
+        (any role) or a personal access token carrying `projects:create` or `projects:read`.
       security:
         - BearerAuth: []
+        - PersonalAccessToken: []
       parameters:
         - name: limit
           in: query
@@ -362,9 +475,22 @@ paths:
       summary: Create a new project
       description: |
         Creates a project and returns the API key. The API key is safe to
-        embed in client code.
+        embed in client code. Accepts a session token (admin role) or a personal access
+        token carrying the `projects:create` scope — see docs/agents/setup.md.
       security:
         - BearerAuth: []
+        - PersonalAccessToken: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+          description: |
+            Optional, scoped per caller. Retrying a create with the same key returns the
+            earlier project (200) instead of minting a second one — but never re-shows the
+            plaintext API key, which is only ever returned once, at first creation.
       requestBody:
         required: true
         content:
@@ -374,6 +500,12 @@ paths:
             example:
               name: "My App"
       responses:
+        "200":
+          description: A project already existed for the given Idempotency-Key. No new key is minted or shown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdempotentProjectResponse"
         "201":
           description: Project created
           content:
@@ -1077,6 +1209,15 @@ components:
       description: |
         Session token obtained from `POST /api/v1/auth/login`. Sent as
         `Authorization: Bearer <token>`.
+    PersonalAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: qm_pat_...
+      description: |
+        Long-lived token for agents/CLIs, minted via `POST /api/v1/tokens` (session auth
+        only). Sent the same way as a session token — `Authorization: Bearer <token>` — but
+        scoped and revocable, and never grants access beyond `projects:create` /
+        `projects:read`. See docs/agents/setup.md.
 
   parameters:
     ProjectId:
@@ -1345,6 +1486,111 @@ components:
         total:
           type: integer
           description: Total number of projects owned by the user
+
+    IdempotentProjectResponse:
+      type: object
+      description: |
+        Returned instead of ProjectResponse when POST /projects is retried with an
+        Idempotency-Key that already matched an earlier project. Deliberately has no
+        `api_key` field — the plaintext key was only ever returned once, at first creation,
+        and cannot be recovered. Use `POST /projects/{id}/regenerate-key` for a new one.
+      required:
+        - id
+        - name
+        - message
+      properties:
+        id:
+          type: string
+          example: "proj_xyz789"
+        name:
+          type: string
+          example: "My App"
+        api_key_last4:
+          type: string
+          nullable: true
+          example: "h789"
+        message:
+          type: string
+
+    CreateTokenRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Human-readable label, e.g. the machine or agent it's issued to
+          example: "laptop-agent"
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [projects:create, projects:read]
+          description: |
+            Defaults to `["projects:create"]`. Requesting `projects:create` requires an
+            admin session — mirrors the `POST /projects` admin gate.
+        expires_in_days:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Defaults to never-expiring.
+
+    TokenResponse:
+      type: object
+      description: Never includes the plaintext token — only returned once, by POST /tokens.
+      required:
+        - id
+        - name
+        - last4
+        - scopes
+        - created_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        last4:
+          type: string
+          example: "a71b"
+        scopes:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateTokenResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenResponse"
+        - type: object
+          required:
+            - token
+          properties:
+            token:
+              type: string
+              description: Plaintext token — shown once, here, and never again. Store it now.
+              example: "qm_pat_9f3c1a2b4e5d6f708192a3b4c5d6e7f8"
+
+    TokenListResponse:
+      type: object
+      required:
+        - tokens
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/TokenResponse"
 
     Plan:
       type: string

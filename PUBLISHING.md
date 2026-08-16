@@ -6,7 +6,7 @@ This document describes how to release the `quietmetrix-sdk` Kotlin Multiplatfor
 
 | Field      | Value                                                           |
 | ---------- | --------------------------------------------------------------- |
-| Group      | `com.quietmetrix`                                               |
+| Group      | `io.github.sobuumedia`                                          |
 | Artifact   | `quietmetrix-sdk` (+ KMP target variants)                      |
 | Version    | Set in `quietmetrix-sdk/build.gradle.kts` (`version = "..."`)  |
 | Repository | `sobuumedia/quietmetrix` on GitHub                              |
@@ -21,7 +21,7 @@ The module's `publishing` block always registers `mavenLocal` and `sonatype`, an
 | ---------------- | -------------------- | ------------------------------------------------------- | ---------------------------------------------------- |
 | `mavenLocal`     | Yes                  | none                                                    | Quick dev integration tests on your machine.         |
 | `GitHubPackages` | Only with env vars   | `GITHUB_ACTOR` + `GITHUB_TOKEN`                         | **Current production release target.**               |
-| `sonatype`       | Yes                  | `OSSRH_USERNAME` + `OSSRH_PASSWORD`/`OSSRH_TOKEN` (or `-PossrhUsername`/`-PossrhPassword`), plus GPG signing vars | Maven Central via the Central Portal, see below.     |
+| `sonatype`       | Yes                  | `OSSRH_USERNAME` + `OSSRH_PASSWORD`/`OSSRH_TOKEN` (or `-PossrhUsername`/`-PossrhToken`), plus GPG signing vars | Maven Central via the Central Portal, see below.     |
 
 ## GitHub Packages release (current)
 
@@ -49,7 +49,7 @@ maven {
     }
 }
 ```
-…and depend on `com.quietmetrix:quietmetrix-sdk:<version>`. They need a PAT with at least `read:packages`.
+…and depend on `io.github.sobuumedia:quietmetrix-sdk:<version>`. They need a PAT with at least `read:packages`.
 
 ## Maven Central release
 
@@ -58,7 +58,8 @@ The module is **wired** for Central — POM metadata, the Central Portal staging
 ### 1. Sonatype Central Portal account
 
 - Sign up at https://central.sonatype.com.
-- Verify ownership of `com.quietmetrix` by adding a TXT DNS record on `quietmetrix.com` (or whichever domain you control under that namespace).
+- Verify ownership of the `io.github.sobuumedia` namespace through the associated
+  GitHub organization in Central Portal.
 - One verification covers every artifact under that namespace.
 
 ### 2. GPG key
@@ -76,7 +77,7 @@ Store the armored private key and its passphrase in CI secrets:
 ### 3. Central API token
 
 - In Central Portal → *Account* → *Generate User Token*.
-- Store the username + token in CI secrets (or pass as `-PossrhUsername` / `-PossrhPassword`):
+- Store the username + token in CI secrets (or pass as `-PossrhUsername` / `-PossrhToken`):
   - `OSSRH_USERNAME`
   - `OSSRH_PASSWORD` (the token; `OSSRH_TOKEN` is also accepted as a fallback)
 

@@ -121,6 +121,33 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
+    // ---- Access tokens (agents/CLIs) ----
+
+    suspend fun listTokens(): AccessTokensResponse {
+        val res = client.get(url("/tokens")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun createToken(name: String, scopes: List<String>? = null): CreateTokenResponse {
+        val res = client.post(url("/tokens")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(CreateTokenRequest(name, scopes))
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun revokeToken(tokenId: String) {
+        val res = client.delete(url("/tokens/$tokenId")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+    }
+
     // ---- User management (admin) ----
 
     suspend fun listUsers(): UsersResponse {

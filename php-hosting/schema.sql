@@ -35,9 +35,15 @@ CREATE TABLE IF NOT EXISTS projects (
     strict_schema   TINYINT(1)   NOT NULL DEFAULT 0,
     allowed_events  JSON         NULL,
     plan_id         VARCHAR(50)  NULL,         -- nullable, cloud-only field
+    -- Optional client-supplied dedup key for POST /projects (agents/CLIs). A retry of a
+    -- timed-out create with the same (owner, key) finds the earlier project instead of
+    -- minting a second one. Multiple NULLs per owner do not collide (standard SQL UNIQUE
+    -- semantics) — this is opt-in.
+    idempotency_key VARCHAR(128) NULL,
     created_at      VARCHAR(32)  NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY idx_projects_api_key    (api_key_hash),
+    UNIQUE KEY idx_projects_owner_idempotency (owner_user_id, idempotency_key),
     KEY idx_projects_owner             (owner_user_id),
     CONSTRAINT fk_projects_owner FOREIGN KEY (owner_user_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -51,6 +57,25 @@ CREATE TABLE IF NOT EXISTS project_members (
     KEY idx_project_members_user (user_id),
     CONSTRAINT fk_pm_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
     CONSTRAINT fk_pm_user    FOREIGN KEY (user_id)    REFERENCES users    (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Long-lived personal access tokens ("qm_pat_…") that let an agent/CLI call the API
+-- without a user's password. Only a sha256 hash is stored — see src/accessTokens.php.
+CREATE TABLE IF NOT EXISTS access_tokens (
+    id            VARCHAR(36)  NOT NULL,
+    user_id       VARCHAR(36)  NOT NULL,
+    name          VARCHAR(255) NOT NULL,
+    token_hash    CHAR(64)     NOT NULL,   -- SHA-256 hex of the plaintext token
+    token_last4   CHAR(4)      NOT NULL,   -- non-sensitive, for masked display
+    scopes        VARCHAR(500) NOT NULL,   -- comma-separated scope slugs
+    created_at    VARCHAR(32)  NOT NULL,
+    expires_at    VARCHAR(32)  NULL,
+    last_used_at  VARCHAR(32)  NULL,
+    revoked_at    VARCHAR(32)  NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_access_tokens_hash (token_hash),
+    KEY idx_access_tokens_user (user_id, revoked_at),
+    CONSTRAINT fk_at_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS events (

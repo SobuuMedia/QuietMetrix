@@ -17,6 +17,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/helpers.php';
 require_once __DIR__ . '/src/db.php';
 require_once __DIR__ . '/src/jwt.php';
+require_once __DIR__ . '/src/accessTokens.php';
 require_once __DIR__ . '/src/auth.php';
 require_once __DIR__ . '/src/rateLimit.php';
 require_once __DIR__ . '/src/installs.php';
@@ -196,7 +197,25 @@ if ($method === 'POST' && $uri === '/api/v1/funnels/register') {
     exit;
 }
 
-// ---- Projects (session auth) ----
+// ---- Access tokens (agents/CLIs; session auth only — see docs/agents/setup.md) ----
+
+if ($method === 'POST' && $uri === '/api/v1/tokens') {
+    require_once __DIR__ . '/src/routes/tokens.php';
+    handleTokensCreate();
+    exit;
+}
+if ($method === 'GET' && $uri === '/api/v1/tokens') {
+    require_once __DIR__ . '/src/routes/tokens.php';
+    handleTokensList();
+    exit;
+}
+if ($method === 'DELETE' && preg_match('#^/api/v1/tokens/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/tokens.php';
+    handleTokensDelete($m[1]);
+    exit;
+}
+
+// ---- Projects (session or token auth — see docs/agents/setup.md) ----
 
 if ($method === 'GET' && $uri === '/api/v1/projects') {
     require_once __DIR__ . '/src/routes/projects.php';

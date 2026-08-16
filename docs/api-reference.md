@@ -22,6 +22,19 @@ Admin endpoints use Bearer authentication obtained via login:
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
 
+### Personal Access Token (Agents/CLIs)
+
+`POST` and `GET /api/v1/projects` also accept a long-lived personal access token (`qm_pat_…`),
+sent the same way as a session token — `Authorization: Bearer <token>`. Unlike the session
+token, it's scoped (`projects:create`, `projects:read`) and revocable, and is meant to live in
+an agent's or CLI's environment rather than a browser session. Minted via `POST /api/v1/tokens`
+(session auth only — a token can never mint another token). See
+[Agent-driven setup](agents/setup.md).
+
+```
+Authorization: Bearer qm_pat_9f3c1a2b4e5d6f708192a3b4c5d6e7f8
+```
+
 ## Endpoints
 
 ### Health Check
@@ -57,11 +70,22 @@ Response: `202 Accepted` with `{ "ok": true, "queued": 1 }`
 
 ### Projects CRUD
 
-- `GET /api/v1/projects` — List projects (supports `?owner_only=true`)
-- `POST /api/v1/projects` — Create project (returns API key)
+- `GET /api/v1/projects` — List projects (supports `?owner_only=true`). Session or PAT auth.
+- `POST /api/v1/projects` — Create project (returns API key). Session (admin) or PAT auth.
+  Accepts an optional `Idempotency-Key` header — a retried create with the same key returns
+  the existing project (`200`) instead of minting a duplicate.
 - `GET /api/v1/projects/:id` — Get project details
 - `PATCH /api/v1/projects/:id` — Update project name (owner/admin only)
 - `DELETE /api/v1/projects/:id` — Delete project (owner only)
+
+### Access Tokens (Agents/CLIs)
+
+Session-authenticated only — see [Agent-driven setup](agents/setup.md).
+
+- `POST /api/v1/tokens` — Mint a `qm_pat_…` token. `{ name, scopes?, expires_in_days? }`.
+  Requesting `projects:create` requires an admin session. Returns the plaintext token once.
+- `GET /api/v1/tokens` — List the caller's non-revoked tokens. Never includes plaintext.
+- `DELETE /api/v1/tokens/:id` — Revoke a token.
 
 ### Project Members
 

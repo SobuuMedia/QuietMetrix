@@ -189,6 +189,130 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Access Tokens",
+      "item": [
+        {
+          "name": "POST /tokens returns 401 without a session",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/tokens",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"contract-test-agent\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /tokens returns 401 without a session",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/api/v1/tokens",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /tokens/{id} returns 401 without a session",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base}}/api/v1/tokens/does-not-exist",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Projects via Personal Access Token",
+      "item": [
+        {
+          "name": "POST /projects with a bogus qm_pat_ token returns 401",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/projects",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer qm_pat_contract_test_invalid" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Contract Test App\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /projects without auth returns 401",
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/api/v1/projects",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Contract Test App\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [

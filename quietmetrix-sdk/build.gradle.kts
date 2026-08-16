@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.4.0-SNAPSHOT"
+version = "0.4.0"
 
 kotlin {
     compilerOptions {
@@ -201,7 +201,9 @@ afterEvaluate {
             mavenLocal()
 
             val ossrhUsername = System.getenv("OSSRH_USERNAME") ?: findProperty("ossrhUsername") as? String
-            val ossrhToken = System.getenv("OSSRH_TOKEN") ?: findProperty("ossrhToken") as? String
+            val ossrhToken = System.getenv("OSSRH_TOKEN")
+                ?: System.getenv("OSSRH_PASSWORD")
+                ?: findProperty("ossrhToken") as? String
             if (ossrhUsername != null && ossrhToken != null) {
                 maven {
                     name = "sonatype"

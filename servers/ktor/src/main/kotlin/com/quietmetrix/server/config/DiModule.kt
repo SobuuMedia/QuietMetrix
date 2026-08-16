@@ -4,6 +4,7 @@ import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.ingest.EventNormalizer
 import com.quietmetrix.server.ingest.EventValidator
 import com.quietmetrix.server.ingest.IngestChannel
+import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.EventRepository
 import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.IngestAuditRepository
@@ -43,6 +44,7 @@ fun appModule(config: AppConfig) = module {
     single { EventRepository(get()) }
     single { ProjectRepository(get()) }
     single { UserRepository(get()) }
+    single { AccessTokenRepository(get()) }
     single { ProjectMemberRepository(get()) }
     single { FunnelRepository(get()) }
     single { FunnelRegistrationService(get()) }

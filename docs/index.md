@@ -37,6 +37,8 @@ Privacy-respecting analytics for every platform. Open-source, self-hostable, GDP
 - **Offline support**: Events buffered locally, sent when connectivity returns
 - **Open source**: MIT license, no vendor lock-in
 - **Self-hostable**: Run on a $3/mo shared host or as a Docker container
+- **Agent-driven setup**: tell an AI coding agent to create a project and wire the SDK in — see
+  [Agent-driven setup](agents/setup.md)
 
 ## Quick start (SDK)
 

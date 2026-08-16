@@ -90,3 +90,66 @@ function requireRole(array $session, array $allowed): void {
 function requireAdmin(array $session): void {
     requireRole($session, ['admin']);
 }
+
+/**
+ * Like requireSession(), but also accepts a personal access token
+ * (`Authorization: Bearer qm_pat_…`) so an agent/CLI can call the API without a
+ * user's password — see docs/agents/setup.md. On failure responds 401 and exits.
+ *
+ * Returns a session-shaped array either way: `['sub' => userId, 'role' => role, ...]`
+ * for a dashboard JWT, or `['sub' => userId, 'scopes' => [...]]` (no 'role' key) for a
+ * PAT. Use sessionIsAdmin()/sessionCanCreateProjects()/sessionCanReadProjects() rather
+ * than reading 'role' directly, since a PAT session has none.
+ */
+function requireSessionOrToken(): array {
+    $header = $_SERVER['HTTP_AUTHORIZATION']
+           ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+           ?? '';
+    if ($header === '' && function_exists('getallheaders')) {
+        $all = getallheaders();
+        $header = $all['Authorization'] ?? $all['authorization'] ?? '';
+    }
+    if (strpos($header, 'Bearer ') !== 0) {
+        errorResponse(401, 'unauthorized', 'Missing or invalid Authorization header');
+        exit;
+    }
+    $credential = substr($header, 7);
+
+    if (str_starts_with($credential, 'qm_pat_')) {
+        $validated = validateAccessToken($credential);
+        if ($validated === null) {
+            errorResponse(401, 'unauthorized', 'Invalid or expired token');
+            exit;
+        }
+        return ['sub' => $validated['userId'], 'scopes' => $validated['scopes']];
+    }
+
+    $payload = jwt_decode($credential, JWT_SECRET);
+    if ($payload === null) {
+        errorResponse(401, 'unauthorized', 'Invalid or expired token');
+        exit;
+    }
+    return $payload;
+}
+
+/** True if [$session] (from requireSessionOrToken()) is an admin dashboard session. A PAT is never admin. */
+function sessionIsAdmin(array $session): bool {
+    return !isset($session['scopes']) && ($session['role'] ?? '') === 'admin';
+}
+
+/** Mirrors the "only admins can create projects" rule, extended to a scoped PAT. */
+function sessionCanCreateProjects(array $session): bool {
+    if (isset($session['scopes'])) {
+        return in_array('projects:create', $session['scopes'], true);
+    }
+    return ($session['role'] ?? '') === 'admin';
+}
+
+/** Listing was previously open to any authenticated session; a PAT needs an explicit scope. */
+function sessionCanReadProjects(array $session): bool {
+    if (isset($session['scopes'])) {
+        return in_array('projects:create', $session['scopes'], true)
+            || in_array('projects:read', $session['scopes'], true);
+    }
+    return true;
+}

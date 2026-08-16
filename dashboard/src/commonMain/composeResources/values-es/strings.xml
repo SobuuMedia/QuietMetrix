@@ -174,6 +174,25 @@
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_about_body">QuietMetrix: un panel de analítica autoalojable y orientado a la privacidad.</string>
 
+    <!-- Settings: tokens de acceso (agentes/CLI) -->
+    <string name="tokens_title">Tokens de acceso</string>
+    <string name="tokens_name_and_last4">%1$s  ·  •••• %2$s</string>
+    <string name="tokens_hint">Tokens de larga duración para que agentes y CLIs creen proyectos en tu nombre, sin tu contraseña. Mantenlos en secreto: cualquiera con un token puede actuar como tú dentro de su alcance.</string>
+    <string name="tokens_new_action">Nuevo token</string>
+    <string name="tokens_empty">Todavía no hay tokens de acceso.</string>
+    <string name="tokens_name_label">Nombre</string>
+    <string name="tokens_name_placeholder">p. ej. laptop-agent</string>
+    <string name="tokens_create_action">Crear</string>
+    <string name="tokens_cancel_action">Cancelar</string>
+    <string name="tokens_revoke_action">Revocar</string>
+    <string name="tokens_created_title">Token creado</string>
+    <string name="tokens_created_warning">Copia este token ahora: no volverá a mostrarse.</string>
+    <string name="tokens_scope_label">Alcance: %1$s</string>
+    <string name="tokens_created_at_label">Creado %1$s</string>
+    <string name="tokens_never_used">Nunca usado</string>
+    <string name="tokens_last_used_label">Último uso %1$s</string>
+    <string name="snackbar_token_copied">Token copiado al portapapeles</string>
+
     <!-- Projects: gestión de clave API -->
     <string name="create_app_action">Nueva app</string>
     <string name="api_key_label">Clave API</string>
