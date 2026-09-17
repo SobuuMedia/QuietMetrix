@@ -41,73 +41,6 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'users', 'invite_expires', 'VARCHAR(32) NULL');
     addColumnIfMissing($db, 'projects', 'description', 'VARCHAR(1000) NULL');
     addColumnIfMissing($db, 'projects', 'api_key_last4', 'CHAR(4) NULL');
-    // Abuse-defense Stage 2: per-project install-id salt (backfilled for existing projects).
-    addColumnIfMissing($db, 'projects', 'install_salt', 'CHAR(64) NULL');
-    // Funnel/analytics identity: a separate salt from install_salt, never rotated on key
-    // regeneration. See docs/security/publishable-api-key.md — Privacy note.
-    addColumnIfMissing($db, 'projects', 'analytics_salt', 'CHAR(64) NULL');
-    // Stage 3: event-name allowlist
-    addColumnIfMissing($db, 'projects', 'strict_schema', "TINYINT(1) NOT NULL DEFAULT 0");
-    addColumnIfMissing($db, 'projects', 'allowed_events', 'JSON NULL');
-    // Backfill salts for any projects that predate the column.
-    $db->exec("UPDATE projects SET install_salt = SUBSTR(MD5(CONCAT(RAND(), UUID())), 1, 64) WHERE install_salt IS NULL");
-    // events: device classification + time-on-screen. Existing installs created
-    // before these columns existed must gain them, or inserts that reference them
-    // fail and every tracked event 500s (silently dropping duration_ms/device_class).
-    addColumnIfMissing($db, 'events', 'device_class', 'VARCHAR(20) NULL');
-    addColumnIfMissing($db, 'events', 'duration_ms', 'BIGINT NULL');
-    addColumnIfMissing($db, 'events', 'install_hash', 'CHAR(64) NULL');
-
-    // 1c. New tables for installs created before they existed. schema.sql (step 1 above) only
-    // runs when `users` is missing, so every later table needs its own guarded CREATE. In
-    // particular, tracking writes ingest_audit on every accepted event; omitting it here made
-    // an upgraded installation return HTTP 500 for every track request after the event insert.
-    createTableIfMissing($db, 'install_meta', "
-        CREATE TABLE install_meta (
-            id BIGINT NOT NULL AUTO_INCREMENT,
-            project_id VARCHAR(36) NOT NULL,
-            anonymous_id_hash CHAR(64) NOT NULL,
-            first_seen_at VARCHAR(32) NOT NULL,
-            last_seen_at VARCHAR(32) NOT NULL,
-            event_count BIGINT NOT NULL DEFAULT 0,
-            revoked TINYINT(1) NOT NULL DEFAULT 0,
-            PRIMARY KEY (id),
-            UNIQUE KEY idx_install_meta_project_install (project_id, anonymous_id_hash),
-            KEY idx_install_meta_project_revoked (project_id, revoked),
-            CONSTRAINT fk_install_meta_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-    createTableIfMissing($db, 'events_quarantine', "
-        CREATE TABLE events_quarantine (
-            id BIGINT NOT NULL AUTO_INCREMENT,
-            project_id VARCHAR(36) NOT NULL,
-            payload TEXT NOT NULL,
-            quarantine_reason VARCHAR(50) NOT NULL,
-            quarantine_detail TEXT,
-            client_ip VARCHAR(45),
-            anonymous_id_hash CHAR(64),
-            quarantined_at VARCHAR(32) NOT NULL,
-            PRIMARY KEY (id),
-            KEY idx_quarantine_project_time (project_id, quarantined_at),
-            CONSTRAINT fk_q_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-    createTableIfMissing($db, 'ingest_audit', "
-        CREATE TABLE ingest_audit (
-            id BIGINT NOT NULL AUTO_INCREMENT,
-            project_id VARCHAR(36) NOT NULL,
-            api_key_last4 CHAR(4),
-            client_ip VARCHAR(45),
-            anonymous_id_hash CHAR(64),
-            event_name VARCHAR(255) NOT NULL,
-            disposition VARCHAR(20) NOT NULL,
-            reason TEXT,
-            audited_at VARCHAR(32) NOT NULL,
-            PRIMARY KEY (id),
-            KEY idx_audit_project_time (project_id, audited_at),
-            CONSTRAINT fk_audit_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
     createTableIfMissing($db, 'funnels', "
         CREATE TABLE funnels (
             id              VARCHAR(36)   NOT NULL,
@@ -169,6 +102,21 @@ function ensureInstalled(): void {
     addIndexIfMissing($db, 'projects', 'idx_projects_owner_idempotency',
         'UNIQUE KEY idx_projects_owner_idempotency (owner_user_id, idempotency_key)');
 
+    // 1d. Drop the raw event-stream ingest path (see the Ktor V19__drop_events.sql
+    // migration): /track is gone, so nothing writes to these tables or reads these columns
+    // any more. One-way and destructive on an existing install's historical event/session
+    // data, same as the Ktor migration — this is the PHP side of that same breaking change.
+    dropTableIfExists($db, 'events_quarantine');
+    dropTableIfExists($db, 'ingest_audit');
+    dropTableIfExists($db, 'install_meta');
+    dropTableIfExists($db, 'events_inbox');
+    dropTableIfExists($db, 'sessions');
+    dropTableIfExists($db, 'events');
+    dropColumnIfExists($db, 'projects', 'install_salt');
+    dropColumnIfExists($db, 'projects', 'analytics_salt');
+    dropColumnIfExists($db, 'projects', 'strict_schema');
+    dropColumnIfExists($db, 'projects', 'allowed_events');
+
     // 2. First admin user
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([ADMIN_EMAIL]);
@@ -213,6 +161,30 @@ function createTableIfMissing(PDO $db, string $table, string $createSql): void {
     }
 }
 
+/** Drops `$table` if it exists. Sibling to createTableIfMissing() for a table removed after
+ *  a project shipped — see ensureInstalled()'s step 1d. MySQL supports DROP TABLE IF EXISTS
+ *  natively, so this needs no information_schema guard of its own. */
+function dropTableIfExists(PDO $db, string $table): void {
+    // Identifiers are hard-coded constants from this file, not user input.
+    $db->exec("DROP TABLE IF EXISTS `$table`");
+}
+
+/**
+ * Drops `$column` from `$table` if it is present. Sibling to addColumnIfMissing() — MySQL has
+ * no portable `DROP COLUMN IF EXISTS`, so this guards with the same information_schema check.
+ */
+function dropColumnIfExists(PDO $db, string $table, string $column): void {
+    $stmt = $db->prepare(
+        'SELECT 1 FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1'
+    );
+    $stmt->execute([$table, $column]);
+    if ($stmt->fetchColumn() !== false) {
+        // Identifiers are hard-coded constants from this file, not user input.
+        $db->exec("ALTER TABLE `$table` DROP COLUMN `$column`");
+    }
+}
+
 /**
  * Adds `$indexDefinition` (e.g. "UNIQUE KEY name (col1, col2)") to `$table` if an index of
  * that name does not already exist. Sibling to addColumnIfMissing() — MySQL has no portable
@@ -243,13 +215,4 @@ function windowSeconds(int $maxDays = 365): int {
     }
     $days = max(1, min($maxDays, (int)($_GET['days'] ?? 30)));
     return $days * 86400;
-}
-
-/**
- * SQL grouping expression for time-series buckets. Windows of one day or less
- * bucket by hour (ISO prefix "YYYY-MM-DDTHH"); longer windows bucket by day.
- * The returned expression is a constant, never built from user input.
- */
-function bucketExpr(int $seconds): string {
-    return $seconds <= 86400 ? 'SUBSTRING(ts, 1, 13)' : 'DATE(ts)';
 }

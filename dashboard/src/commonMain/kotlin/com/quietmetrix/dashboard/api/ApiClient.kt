@@ -239,15 +239,6 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun events(projectId: String, demo: Boolean): EventsResponse {
-        val path = if (demo) "/_demo/events" else "/projects/$projectId/events?limit=100"
-        val res = client.get(url(path)) {
-            token?.let { header("Authorization", "Bearer $it") }
-        }
-        ensureSuccess(res)
-        return res.body()
-    }
-
     suspend fun transitions(projectId: String, range: TimeRange): TransitionsResponse {
         val res = client.get(url("/projects/$projectId/transitions?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
@@ -266,6 +257,22 @@ class ApiClient(private val baseUrl: String) {
 
     suspend fun retention(projectId: String, days: Int): RetentionResponse {
         val res = client.get(url("/projects/$projectId/retention?days=$days")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun search(projectId: String, days: Int): SearchResponse {
+        val res = client.get(url("/projects/$projectId/search?days=$days")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun friction(projectId: String, days: Int): FrictionResponse {
+        val res = client.get(url("/projects/$projectId/friction?days=$days")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)

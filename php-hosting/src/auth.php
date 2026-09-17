@@ -153,3 +153,28 @@ function sessionCanReadProjects(array $session): bool {
     }
     return true;
 }
+
+/** Gates read access to event/funnel analytics — a PAT needs the explicit analytics:read scope. */
+function sessionCanReadAnalytics(array $session): bool {
+    if (isset($session['scopes'])) {
+        return in_array('analytics:read', $session['scopes'], true);
+    }
+    return true;
+}
+
+/**
+ * Asserts the caller (dashboard session or PAT) can read analytics for [projectId].
+ * Combines the analytics:read scope check with the existing owner/member/admin gate, since
+ * requireProjectAccess() already reads sub/role generically — see requireSessionOrToken().
+ * Shared by routes/dashboard.php and routes/funnels.php, so it lives here (always loaded)
+ * rather than in either route file (only require_once'd on a matching request).
+ */
+function requireAnalyticsAccess(string $projectId): array {
+    $session = requireSessionOrToken();
+    if (!sessionCanReadAnalytics($session)) {
+        errorResponse(403, 'forbidden', 'This token cannot read analytics');
+        exit;
+    }
+    requireProjectAccess($session, $projectId);
+    return $session;
+}

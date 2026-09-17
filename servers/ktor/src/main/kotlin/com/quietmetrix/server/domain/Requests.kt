@@ -4,50 +4,45 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class TrackEventRequest(
-    val event: String,
-    val screen: String? = null,
-    val props: Map<String, kotlinx.serialization.json.JsonElement>? = null,
-    val sid: String? = null,
-    val ts: String? = null,
-    val wasOffline: Boolean = false,
-    val sdk: SdkInfo? = null,
-    val ctx: EventContext? = null,
-)
-
-@Serializable
-data class TrackBatchRequest(
-    val events: List<TrackEventRequest>,
-)
-
-@Serializable
 data class SdkInfo(
     val platform: String,
     val version: String,
 )
 
+/**
+ * One counter delta on the wire: `metric` + `dims` identify the cell, `n` is the occurrence
+ * count since the last flush, and `u` is 1 only on the first flush that touched this exact
+ * cell today (the SDK's own signal, summed server-side into a distinct-device count with no
+ * identifier ever existing — see [com.quietmetrix.server.persistence.CounterRepository]).
+ */
 @Serializable
-data class EventContext(
-    val referrer: String? = null,
-    val language: String? = null,
-    val ua: String? = null,
-    val viewport: String? = null,
-    // The SDK's wire DTO (EventContextDto) declares this field literally as `anonymous_id`
-    // (snake_case), so kotlinx.serialization emits that exact key with no @SerialName of its
-    // own. Without this annotation here, the two field names silently mismatch — the SDK's
-    // `anonymous_id` is dropped by `ignoreUnknownKeys`, `anonymousId` here is always null, and
-    // every event falls back to session-level funnel/analytics identity. See A2/funnels.
-    @SerialName("anonymous_id") val anonymousId: String? = null,
-    val country: String? = null,
-    val sessionNumber: Int? = null,
-    val isSessionStart: Boolean? = null,
-    val isSessionEnd: Boolean? = null,
+data class CounterItem(
+    val m: String,
+    val d: Map<String, String> = emptyMap(),
+    val n: Long,
+    val u: Int = 0,
 )
 
 @Serializable
-data class TrackEventResponse(
+data class CounterAppInfo(
+    val version: String? = null,
+    val country: String? = null,
+)
+
+@Serializable
+data class CounterBatchRequest(
+    val sdk: SdkInfo? = null,
+    val app: CounterAppInfo? = null,
+    /** The device's local date (ISO `yyyy-MM-dd`); clamped server-side to `[today-2, today]`. */
+    val day: String,
+    val counters: List<CounterItem>,
+)
+
+@Serializable
+data class CounterBatchResponse(
     val ok: Boolean = true,
-    val queued: Int = 1,
+    val accepted: Int,
+    val quarantined: Int = 0,
 )
 
 @Serializable
@@ -177,9 +172,36 @@ data class TransitionItem(
 )
 
 @Serializable
+data class SearchResponse(
+    val screens: List<SearchScreenItem>,
+)
+
+/** The search query itself is never sent — see the SDK's `trackSearch` — only whether it came
+ *  back empty. [rate] is null when [total] is 0, never a fake 0.0. */
+@Serializable
+data class SearchScreenItem(
+    val screen: String,
+    val total: Int,
+    @SerialName("zero_result") val zeroResult: Int,
+    val rate: Double? = null,
+)
+
+@Serializable
+data class FrictionResponse(
+    val screens: List<FrictionScreenItem>,
+)
+
+@Serializable
+data class FrictionScreenItem(
+    val screen: String,
+    @SerialName("rage_taps") val rageTaps: Int,
+)
+
+/** [avgEvents] is not included: no counter ties an event count to a session under
+ *  aggregate-only ingest, so it would be a permanently-fake number rather than an honest gap. */
+@Serializable
 data class SessionsResponse(
     @SerialName("total_sessions") val totalSessions: Int,
-    @SerialName("avg_events") val avgEvents: Double,
     @SerialName("avg_duration_sec") val avgDurationSec: Int,
     @SerialName("daily_sessions") val dailySessions: List<DailySessionItem>,
 )
@@ -195,6 +217,9 @@ data class RetentionResponse(
     val cohorts: List<RetentionCohort>,
 )
 
+/** [activationRate] is null when the project's app hasn't configured
+ *  [com.quietmetrix.analytics.QuietMetrixConfig.activationEvent] — not zero, which would claim
+ *  a real 0% rather than "not tracked". */
 @Serializable
 data class RetentionCohort(
     @SerialName("cohort_date") val cohortDate: String,
@@ -204,6 +229,7 @@ data class RetentionCohort(
     val day7: Double? = null,
     val day14: Double? = null,
     val day30: Double? = null,
+    @SerialName("activation_rate") val activationRate: Double? = null,
 )
 
 @Serializable

@@ -2,11 +2,7 @@ package com.quietmetrix.server.routes
 
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
-import com.quietmetrix.server.persistence.tables.EventCountsDaily
-import com.quietmetrix.server.persistence.tables.Events
-import com.quietmetrix.server.persistence.tables.EventsInbox
 import com.quietmetrix.server.persistence.tables.Projects
-import com.quietmetrix.server.persistence.tables.UsageCounters
 import com.quietmetrix.server.persistence.tables.Users
 import com.quietmetrix.server.ratelimit.IpRateLimiter
 import com.quietmetrix.server.config.IpRateLimitConfig
@@ -31,17 +27,16 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Stage 1 — per-IP throttling on the ingest routes, exercised end-to-end through the HTTP
- * layer using the real [IpRateLimiter], the real trusted-proxy [clientIp] extension, and a
- * real H2-backed [ProjectRepository]. (Avoids koin-ktor's Route.inject here because of a
- * pre-existing koin 3.5.6 ↔ ktor 3 incompatibility; the per-IP wiring in TrackRoutes mirrors
+ * Stage 1 — per-IP throttling on an API-key-gated route, exercised end-to-end through the
+ * HTTP layer using the real [IpRateLimiter], the real trusted-proxy [clientIp] extension, and
+ * a real H2-backed [ProjectRepository]. (Avoids koin-ktor's Route.inject here because of a
+ * pre-existing koin 3.5.6 ↔ ktor 3 incompatibility; the per-IP wiring in CounterRoutes mirrors
  * this logic exactly.)
  */
 class IngestIpThrottleTest {
@@ -49,10 +44,10 @@ class IngestIpThrottleTest {
     private val testScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     @Test
-    fun `track returns 429 after per-ip burst is exhausted`() = testApplication {
+    fun `an api-key-gated route returns 429 after per-ip burst is exhausted`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:ipthrottle;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
         transaction(testDb) {
-            SchemaUtils.create(Projects, Users, Events, EventsInbox, EventCountsDaily, UsageCounters)
+            SchemaUtils.create(Projects, Users)
         }
         val projectRepo = ProjectRepository(testDb)
         val userRepo = UserRepository(testDb)
@@ -72,7 +67,7 @@ class IngestIpThrottleTest {
         application {
             install(ContentNegotiation) { json(kotlinx.serialization.json.Json { encodeDefaults = true; ignoreUnknownKeys = true }) }
             routing {
-                post("/api/v1/track") {
+                post("/api/v1/ip-throttled") {
                     val key = call.request.headers["X-QM-Api-Key"]
                     if (key.isNullOrBlank()) {
                         call.respondText("""{"error":"unauthorized"}""", ContentType.Application.Json, HttpStatusCode.Unauthorized)
@@ -100,15 +95,15 @@ class IngestIpThrottleTest {
         }
 
         val body = """{"event":"page_view"}"""
-        val r1 = client.post("/api/v1/track") {
+        val r1 = client.post("/api/v1/ip-throttled") {
             header("X-QM-Api-Key", apiKey); header("X-Forwarded-For", "9.9.9.9")
             contentType(ContentType.Application.Json); setBody(body)
         }
-        val r2 = client.post("/api/v1/track") {
+        val r2 = client.post("/api/v1/ip-throttled") {
             header("X-QM-Api-Key", apiKey); header("X-Forwarded-For", "9.9.9.9")
             contentType(ContentType.Application.Json); setBody(body)
         }
-        val r3 = client.post("/api/v1/track") {
+        val r3 = client.post("/api/v1/ip-throttled") {
             header("X-QM-Api-Key", apiKey); header("X-Forwarded-For", "9.9.9.9")
             contentType(ContentType.Application.Json); setBody(body)
         }
@@ -116,7 +111,7 @@ class IngestIpThrottleTest {
         assertEquals(HttpStatusCode.Accepted, r2.status, "r2 body: ${r2.bodyAsText()}")
         assertEquals(HttpStatusCode.TooManyRequests, r3.status, "third request from same IP must be throttled: ${r3.bodyAsText()}")
 
-        val rOther = client.post("/api/v1/track") {
+        val rOther = client.post("/api/v1/ip-throttled") {
             header("X-QM-Api-Key", apiKey); header("X-Forwarded-For", "8.8.8.8")
             contentType(ContentType.Application.Json); setBody(body)
         }

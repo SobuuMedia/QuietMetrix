@@ -31,10 +31,9 @@ Initialize early in your application startup, before any events are tracked:
 fun main() {
     QuietMetrix.init(QuietMetrixConfig(
         storageKeyPrefix = "myapp_",
-        trackingEndpoint = "https://your-server.com/api/v1/track",
+        trackingEndpoint = "https://your-server.com/api/v1",
         apiKey = "qm_ak_your_api_key",
         flushIntervalMs = 30_000L,
-        maxQueueSize = 1000,
     ))
     // ... start your application
 }
@@ -47,7 +46,7 @@ public class MyApp {
     public static void main(String[] args) {
         QuietMetrixConfig config = new QuietMetrixConfig(
             "myapp_",
-            "https://your-server.com/api/v1/track",
+            "https://your-server.com/api/v1",
             "qm_ak_your_api_key",
             30_000L,
             1000
@@ -94,7 +93,7 @@ val signupFunnel = Funnel(
 
 QuietMetrix.init(QuietMetrixConfig(
     storageKeyPrefix = "myapp_",
-    trackingEndpoint = "https://your-server.com/api/v1/track",
+    trackingEndpoint = "https://your-server.com/api/v1",
     apiKey = "qm_ak_your_api_key",
     funnels = listOf(signupFunnel),
 ))

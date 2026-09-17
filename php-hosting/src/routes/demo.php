@@ -66,32 +66,3 @@ function handleDemoAggregates(): void {
         'daily'         => $daily,
     ]);
 }
-
-/** GET /api/v1/_demo/events */
-function handleDemoEvents(): void {
-    requireSession();
-    $events = [];
-    $names    = ['page_view', 'login', 'signup', 'purchase', 'screen_view'];
-    $screens  = ['home', 'pricing', 'login', 'docs', 'settings', null];
-    $platforms = ['android', 'ios', 'web', 'macos', 'jvm'];
-    for ($i = 0; $i < 50; $i++) {
-        $screen = $screens[$i % count($screens)];
-        $events[] = [
-            'id'           => 1000 - $i,
-            'event_name'   => $names[$i % count($names)],
-            'screen'       => $screen,
-            'props'        => $i % 3 === 0 ? ['plan' => 'pro', 'amount' => 29] : null,
-            'session_id'   => 'demo-' . ($i % 7),
-            'ts'           => gmdate('Y-m-d\TH:i:s\Z', time() - $i * 60),
-            'was_offline'  => $i % 11 === 0,
-            'country'      => ['US','GB','DE','FR','ES','BR'][$i % 6],
-            'device_class' => $i % 2 === 0 ? 'mobile' : 'desktop',
-            'language'     => ['en','en','de','fr','es','pt'][$i % 6],
-            'platform'     => $platforms[$i % count($platforms)],
-            'sdk_version'  => '0.2.0',
-            // Dwell time, present only while a screen is active (mirrors real capture).
-            'duration_ms'  => $screen !== null ? 5000 + ($i % 12) * 1500 : null,
-        ];
-    }
-    jsonResponse(200, ['demo' => true, 'events' => $events]);
-}

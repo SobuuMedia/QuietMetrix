@@ -19,12 +19,11 @@
 
     <!-- Tab info dialogs -->
     <string name="tab_info_overview">Los eventos y pantallas principales muestran lo que más hacen tus usuarios. El gráfico diario sigue la tendencia de volumen en el período seleccionado. Todos los datos son agregados: no se expone ningún usuario individual.</string>
-    <string name="tab_info_events">Registro de eventos en orden cronológico inverso. Cada fila es un evento de analítica enviado por el SDK. Úsalo para inspeccionar props, pantallas y metadatos al depurar tu integración.</string>
     <string name="tab_info_projects">Administra tus proyectos y claves de API. Cada proyecto tiene una clave única: crea proyectos separados para distintas apps, entornos (dev/staging/prod) o plataformas.</string>
     <string name="tab_info_settings">Activa datos de demostración para pruebas en modo depuración. El interruptor solo aparece cuando el servidor corre en configuración de depuración; las implementaciones de producción lo ocultan por defecto.</string>
-    <string name="tab_info_flow">Las transiciones de pantalla muestran cómo navegan los usuarios tu app. Cada fila es una ruta común de una pantalla a la siguiente, agrupada por sesión. Una caída alta en un paso puede indicar fricción: investiga por qué los usuarios abandonan ahí.</string>
-    <string name="tab_info_live">Eventos entrantes en tiempo real. Este feed se actualiza cada pocos segundos para mostrar los eventos más recientes. Útil al integrar el SDK: observa los eventos aparecer segundos después de dispararse en tu app.</string>
-    <string name="tab_info_funnels">Un embudo es una lista ordenada de eventos que ya registras, más una ventana de tiempo. Los pasos referencian eventos existentes, así que un embudo se analiza de forma retroactiva, sin cambios en la app. Pulsa "Nuevo embudo" arriba para crear uno, o decláralo en la configuración del SDK de tu app y aparecerá aquí automáticamente. Editar un embudo aquí lo bloquea para que la app no pueda sobrescribir tus cambios.</string>
+    <string name="tab_info_flow">Las transiciones de pantalla muestran cómo navegan los usuarios tu app. Cada fila es una ruta común de una pantalla a la siguiente. Una caída alta en un paso puede indicar fricción: investiga por qué los usuarios abandonan ahí.</string>
+    <string name="tab_info_retention">La retención muestra qué parte de cada cohorte volvió al menos N días después de su primer inicio. Cada fila es una cohorte semanal; el rango bajo un porcentaje es su intervalo de confianza: con una cohorte pequeña, trata el rango como la respuesta honesta, no el número aislado.</string>
+    <string name="tab_info_funnels">Un embudo es una lista ordenada de eventos que ya registras, más una ventana de tiempo. Cada dispositivo evalúa su propio avance y solo informa hasta dónde llegó: los embudos se declaran en la configuración del SDK de tu app y aparecen aquí automáticamente al registrarse.</string>
 
     <!-- UI elements -->
     <string name="tab_info_content_description">Información</string>
@@ -37,9 +36,8 @@
 
     <!-- Navigation (side menu) -->
     <string name="nav_overview">Resumen</string>
-    <string name="nav_events">Eventos</string>
     <string name="nav_flow">Flujo</string>
-    <string name="nav_live">En vivo</string>
+    <string name="nav_retention">Retención</string>
     <string name="nav_projects">Proyectos</string>
     <string name="nav_funnels">Embudos</string>
     <string name="nav_users">Usuarios</string>
@@ -93,7 +91,6 @@
     <string name="kpi_window">Período</string>
     <string name="kpi_window_value">%1$d días</string>
     <string name="kpi_sessions">Sesiones</string>
-    <string name="kpi_events_per_session">Eventos / sesión</string>
     <string name="kpi_avg_duration">Duración media</string>
 
     <!-- Card titles -->
@@ -101,6 +98,9 @@
     <string name="card_top_events">Eventos principales</string>
     <string name="card_top_screens">Pantallas principales</string>
     <string name="card_screen_time">Tiempo medio en pantalla</string>
+    <string name="card_top_values">Valores principales</string>
+    <string name="card_search_zero_result">Búsquedas sin resultados</string>
+    <string name="card_friction">Toques de frustración</string>
     <string name="card_sessions_trend">Sesiones diarias</string>
     <string name="card_countries">Países</string>
     <string name="card_platforms">Plataformas</string>
@@ -110,6 +110,7 @@
     <string name="state_no_data">Aún no hay datos.</string>
     <string name="state_no_events">Aún no hay eventos.</string>
     <string name="state_no_transitions">Aún no hay transiciones de pantalla.</string>
+    <string name="state_no_retention">Aún no hay datos de retención.</string>
     <string name="state_waiting_live">Esperando eventos…</string>
     <string name="state_no_projects">Aún no hay proyectos: crea uno abajo.</string>
 
@@ -123,8 +124,18 @@
     <string name="col_from">Desde</string>
     <string name="col_to">Hasta</string>
     <string name="col_count">Recuento</string>
+    <string name="col_zero_result_rate">Tasa sin resultados</string>
+    <string name="col_rage_taps">Toques de frustración</string>
     <string name="col_device">Dispositivo</string>
     <string name="col_session">Sesión</string>
+    <string name="col_cohort">Cohorte</string>
+    <string name="col_cohort_size">Tamaño</string>
+    <string name="col_day1">Día 1</string>
+    <string name="col_day3">Día 3</string>
+    <string name="col_day7">Día 7</string>
+    <string name="col_day14">Día 14</string>
+    <string name="col_day30">Día 30</string>
+    <string name="col_activation">Activación</string>
     <string name="col_duration">Tiempo en pantalla</string>
     <string name="col_step">Paso</string>
     <string name="col_conversion_from_entry">% de entrada</string>
@@ -191,6 +202,11 @@
     <string name="tokens_created_at_label">Creado %1$s</string>
     <string name="tokens_never_used">Nunca usado</string>
     <string name="tokens_last_used_label">Último uso %1$s</string>
+    <string name="tokens_scope_picker_label">Permisos</string>
+    <string name="tokens_scope_create_projects">Crear proyectos</string>
+    <string name="tokens_scope_read_projects">Listar proyectos</string>
+    <string name="tokens_scope_read_analytics">Leer analíticas</string>
+    <string name="tokens_scope_read_analytics_hint">Permite que un agente consulte recuentos de eventos, resultados de embudos y otras analíticas de esta cuenta — p. ej. "¿cuántas veces se completó el embudo de incorporación esta semana?"</string>
     <string name="snackbar_token_copied">Token copiado al portapapeles</string>
 
     <!-- Projects: gestión de clave API -->
@@ -233,46 +249,22 @@
 
     <!-- Embudos -->
     <string name="funnels_title">Embudos</string>
-    <string name="funnel_create_action">Nuevo embudo</string>
-    <string name="funnel_empty">Aún no hay embudos: crea uno, o declara uno en tu app y aparecerá aquí.</string>
-    <string name="funnel_tutorial_title">Primeros pasos con los embudos</string>
+    <string name="funnel_empty">Aún no hay embudos: declara uno en la configuración del SDK de tu app y aparecerá aquí.</string>
+    <string name="funnel_tutorial_title">Cómo funcionan los embudos</string>
     <string name="funnel_tutorial_intro">Un embudo muestra cuántas personas completan una secuencia de pasos —como ver tu pantalla de registro y luego enviarla— y exactamente dónde abandona el resto.</string>
-    <string name="funnel_tutorial_step1">Los pasos referencian eventos que ya registras (p. ej. screen_view, button_click). No hace falta código de seguimiento nuevo: los embudos analizan datos que ya tienes.</string>
-    <string name="funnel_tutorial_step2">Pulsa el botón de abajo, dale al embudo entre 2 y 10 pasos ordenados y una ventana de conversión: cuánto tiempo tiene alguien para completarlos todos.</string>
-    <string name="funnel_tutorial_step3">O decláralo una vez en la configuración del SDK de tu app: se registrará aquí automáticamente, sin configuración en el panel.</string>
-    <string name="funnel_tutorial_cta">Crea tu primer embudo</string>
+    <string name="funnel_tutorial_step1">Los pasos referencian eventos que ya registras (p. ej. screen_view, button_click). Declara el embudo una vez en la configuración del SDK de tu app como un FunnelManifest: sin configuración en el panel.</string>
+    <string name="funnel_tutorial_step2">Cada dispositivo evalúa su propio avance frente a los pasos del embudo en tiempo real y solo informa hasta dónde llegó. El embudo aparece aquí automáticamente cuando tu app lo registra.</string>
     <string name="funnel_none_selected">Selecciona un embudo para ver sus resultados.</string>
     <string name="funnel_pick_funnel">Selecciona un embudo</string>
-    <string name="funnel_select_breakdown">Elige una dimensión arriba para dividir este embudo por país, plataforma, dispositivo o idioma.</string>
-    <string name="funnel_truncated_warning">Este período tiene más eventos coincidentes de los que se pueden analizar a la vez; los resultados pueden estar incompletos. Prueba con un período más corto.</string>
     <string name="funnel_badge_sdk">Desde la app</string>
-    <string name="funnel_badge_locked">Bloqueado</string>
-    <string name="funnel_edit">Editar</string>
     <string name="funnel_delete">Eliminar</string>
     <string name="funnel_kpi_entered">Entraron</string>
     <string name="funnel_kpi_converted">Convirtieron</string>
     <string name="funnel_kpi_overall_conversion">Conversión total</string>
-    <string name="funnel_kpi_median_time">Tiempo mediano de conversión</string>
     <string name="funnel_card_steps">Pasos</string>
-    <string name="funnel_card_breakdown">Desglose</string>
-    <string name="funnel_card_trend">Tendencia</string>
-    <string name="funnel_breakdown_none">Sin desglose</string>
-    <string name="funnel_breakdown_country">País</string>
-    <string name="funnel_breakdown_platform">Plataforma</string>
-    <string name="funnel_breakdown_device">Dispositivo</string>
-    <string name="funnel_breakdown_language">Idioma</string>
+    <string name="funnel_no_entrants">No hay entradas en este rango.</string>
     <string name="funnel_delete_confirm_title">Eliminar embudo</string>
     <string name="funnel_delete_confirm_body">¿Eliminar "%1$s"? Esto no se puede deshacer.</string>
-    <string name="funnel_editor_title_create">Nuevo embudo</string>
-    <string name="funnel_editor_title_edit">Editar embudo</string>
-    <string name="funnel_editor_key_label">Clave (usada por tu app para referenciar este embudo)</string>
-    <string name="funnel_editor_name_label">Nombre</string>
-    <string name="funnel_editor_window_label">Ventana de conversión</string>
-    <string name="funnel_editor_step_event_label">Nombre del evento del paso %1$d</string>
-    <string name="funnel_editor_step_screen_label">Pantalla (opcional)</string>
-    <string name="funnel_editor_remove_step">Quitar paso</string>
-    <string name="funnel_editor_step_add">Añadir paso</string>
-    <string name="funnel_editor_save">Guardar</string>
     <string name="funnel_editor_cancel">Cancelar</string>
 
     <!-- Pantalla de aceptación de invitación -->

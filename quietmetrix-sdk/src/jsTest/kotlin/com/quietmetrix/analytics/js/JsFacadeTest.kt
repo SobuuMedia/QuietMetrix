@@ -18,7 +18,7 @@ class JsFacadeTest {
         InMemoryStore.clear()
     }
 
-    // init() starts FlushManager's periodic timer; stop() cancels it so the Node test
+    // init() starts CounterFlusher's periodic timer; stop() cancels it so the Node test
     // process can exit instead of hanging on a live event loop.
     @AfterTest
     fun tearDown() {

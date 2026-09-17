@@ -47,6 +47,10 @@ fun formatFloat(value: Float, decimals: Int = 1): String {
     return if (decimals == 0) "$sign$intPart" else "$sign$intPart.$frac"
 }
 
+/** Integer minor units (e.g. cents) -> "4.99". No currency symbol — QuietMetrix doesn't know
+ *  which currency a `trackValue` amount is in, only its magnitude. */
+fun formatMinorUnits(minorUnits: Long): String = formatFloat(minorUnits / 100f, decimals = 2)
+
 /**
  * Chart x-axis label for a daily/hourly bucket key. Daily buckets ("2026-06-28")
  * are shown as-is; hourly buckets ("2026-06-28T14") collapse to "14:00".

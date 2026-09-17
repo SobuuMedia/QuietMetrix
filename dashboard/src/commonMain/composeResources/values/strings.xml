@@ -19,12 +19,11 @@
 
     <!-- Tab info dialogs -->
     <string name="tab_info_overview">Top events and screens show what your users do most. The daily chart tracks volume trends over the selected time window. All data is aggregated — no individual user is exposed.</string>
-    <string name="tab_info_events">Raw event log in reverse chronological order. Each row represents one analytics event fired by the SDK. Use this to inspect props, screens, and metadata when debugging your integration.</string>
     <string name="tab_info_projects">Manage your projects and API keys. Each project has a unique API key — create separate projects for different apps, environments (dev/staging/prod), or platforms.</string>
     <string name="tab_info_settings">Toggle demo data for testing in debug mode. The demo switch only appears when the server runs in debug configuration. Production deployments hide this by default.</string>
-    <string name="tab_info_flow">Screen transitions show how users navigate your app. Each row represents one common path from one screen to the next, grouped by session. High drop-off at a step may indicate UX friction — investigate why users leave at that point.</string>
-    <string name="tab_info_live">Incoming events in real time. This feed auto-refreshes every few seconds to show the most recent events. Useful while integrating the SDK — watch events appear seconds after they fire in your app.</string>
-    <string name="tab_info_funnels">A funnel is an ordered list of events you already track, plus a time window. Steps reference existing events, so a funnel analyzes retroactively — no app changes needed. Click "New funnel" above to create one, or declare it in your app's SDK config and it appears here automatically. Editing a funnel here locks it so the app can't overwrite your changes.</string>
+    <string name="tab_info_flow">Screen transitions show how users navigate your app. Each row represents one common path from one screen to the next. High drop-off at a step may indicate UX friction — investigate why users leave at that point.</string>
+    <string name="tab_info_retention">Retention shows what share of each cohort came back at least N days after their first launch. Each row is a weekly cohort; the shaded range under a percentage is its confidence interval — with a small cohort, treat the range as the honest answer, not the single number.</string>
+    <string name="tab_info_funnels">A funnel is an ordered list of events you already track, plus a time window. Each device evaluates its own progress and reports only how far it got — funnels are declared in your app's SDK config and appear here automatically once registered.</string>
 
     <!-- UI elements -->
     <string name="tab_info_content_description">Information</string>
@@ -37,9 +36,8 @@
 
     <!-- Navigation (side menu) -->
     <string name="nav_overview">Overview</string>
-    <string name="nav_events">Events</string>
     <string name="nav_flow">Flow</string>
-    <string name="nav_live">Live</string>
+    <string name="nav_retention">Retention</string>
     <string name="nav_projects">Projects</string>
     <string name="nav_funnels">Funnels</string>
     <string name="nav_users">Users</string>
@@ -93,7 +91,6 @@
     <string name="kpi_window">Window</string>
     <string name="kpi_window_value">%1$d days</string>
     <string name="kpi_sessions">Sessions</string>
-    <string name="kpi_events_per_session">Events / session</string>
     <string name="kpi_avg_duration">Avg duration</string>
 
     <!-- Card titles -->
@@ -101,6 +98,9 @@
     <string name="card_top_events">Top events</string>
     <string name="card_top_screens">Top screens</string>
     <string name="card_screen_time">Avg time on screen</string>
+    <string name="card_top_values">Top values</string>
+    <string name="card_search_zero_result">Zero-result searches</string>
+    <string name="card_friction">Rage taps</string>
     <string name="card_sessions_trend">Daily sessions</string>
     <string name="card_countries">Countries</string>
     <string name="card_platforms">Platforms</string>
@@ -110,6 +110,7 @@
     <string name="state_no_data">No data yet.</string>
     <string name="state_no_events">No events yet.</string>
     <string name="state_no_transitions">No screen transitions yet.</string>
+    <string name="state_no_retention">No retention data yet.</string>
     <string name="state_waiting_live">Waiting for events…</string>
     <string name="state_no_projects">No projects yet — create one below.</string>
 
@@ -123,8 +124,18 @@
     <string name="col_from">From</string>
     <string name="col_to">To</string>
     <string name="col_count">Count</string>
+    <string name="col_zero_result_rate">Zero-result rate</string>
+    <string name="col_rage_taps">Rage taps</string>
     <string name="col_device">Device</string>
     <string name="col_session">Session</string>
+    <string name="col_cohort">Cohort</string>
+    <string name="col_cohort_size">Size</string>
+    <string name="col_day1">Day 1</string>
+    <string name="col_day3">Day 3</string>
+    <string name="col_day7">Day 7</string>
+    <string name="col_day14">Day 14</string>
+    <string name="col_day30">Day 30</string>
+    <string name="col_activation">Activation</string>
     <string name="col_duration">Time on screen</string>
     <string name="col_step">Step</string>
     <string name="col_conversion_from_entry">% of entry</string>
@@ -191,6 +202,11 @@
     <string name="tokens_created_at_label">Created %1$s</string>
     <string name="tokens_never_used">Never used</string>
     <string name="tokens_last_used_label">Last used %1$s</string>
+    <string name="tokens_scope_picker_label">Permissions</string>
+    <string name="tokens_scope_create_projects">Create projects</string>
+    <string name="tokens_scope_read_projects">List projects</string>
+    <string name="tokens_scope_read_analytics">Read analytics</string>
+    <string name="tokens_scope_read_analytics_hint">Lets an agent query event counts, funnel results, and other analytics for this account — e.g. "how many times did the onboarding funnel complete this week?"</string>
     <string name="snackbar_token_copied">Token copied to clipboard</string>
 
     <!-- Projects: API key management -->
@@ -233,46 +249,22 @@
 
     <!-- Funnels -->
     <string name="funnels_title">Funnels</string>
-    <string name="funnel_create_action">New funnel</string>
-    <string name="funnel_empty">No funnels yet — create one, or declare one in your app and it will appear here.</string>
-    <string name="funnel_tutorial_title">Get started with funnels</string>
+    <string name="funnel_empty">No funnels yet — declare one in your app\'s SDK config and it will appear here.</string>
+    <string name="funnel_tutorial_title">How funnels work</string>
     <string name="funnel_tutorial_intro">A funnel shows how many people complete a sequence of steps — like viewing your signup screen, then submitting it — and exactly where the rest drop off.</string>
-    <string name="funnel_tutorial_step1">Steps reference events you already track (e.g. screen_view, button_click). No new tracking code needed — funnels analyze data you already have.</string>
-    <string name="funnel_tutorial_step2">Click the button below, give the funnel 2–10 ordered steps, and a conversion window: how long someone has to finish them all.</string>
-    <string name="funnel_tutorial_step3">Or declare it once in your app's SDK config — it registers itself here automatically, no dashboard setup required.</string>
-    <string name="funnel_tutorial_cta">Create your first funnel</string>
+    <string name="funnel_tutorial_step1">Steps reference events you already track (e.g. screen_view, button_click). Declare the funnel once in your app\'s SDK config as a FunnelManifest — no dashboard setup needed.</string>
+    <string name="funnel_tutorial_step2">Each device evaluates its own progress against the funnel\'s steps in real time and reports only how far it got. The funnel appears here automatically once your app registers it.</string>
     <string name="funnel_none_selected">Select a funnel to see its results.</string>
     <string name="funnel_pick_funnel">Select a funnel</string>
-    <string name="funnel_select_breakdown">Choose a dimension above to split this funnel by country, platform, device, or language.</string>
-    <string name="funnel_truncated_warning">This range has more matching events than can be analyzed at once — results may be incomplete. Try a shorter time range.</string>
     <string name="funnel_badge_sdk">From app</string>
-    <string name="funnel_badge_locked">Locked</string>
-    <string name="funnel_edit">Edit</string>
     <string name="funnel_delete">Delete</string>
     <string name="funnel_kpi_entered">Entered</string>
     <string name="funnel_kpi_converted">Converted</string>
     <string name="funnel_kpi_overall_conversion">Overall conversion</string>
-    <string name="funnel_kpi_median_time">Median time to convert</string>
     <string name="funnel_card_steps">Steps</string>
-    <string name="funnel_card_breakdown">Breakdown</string>
-    <string name="funnel_card_trend">Trend</string>
-    <string name="funnel_breakdown_none">No breakdown</string>
-    <string name="funnel_breakdown_country">Country</string>
-    <string name="funnel_breakdown_platform">Platform</string>
-    <string name="funnel_breakdown_device">Device</string>
-    <string name="funnel_breakdown_language">Language</string>
+    <string name="funnel_no_entrants">No entrants in this range.</string>
     <string name="funnel_delete_confirm_title">Delete funnel</string>
     <string name="funnel_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
-    <string name="funnel_editor_title_create">New funnel</string>
-    <string name="funnel_editor_title_edit">Edit funnel</string>
-    <string name="funnel_editor_key_label">Key (used by your app to reference this funnel)</string>
-    <string name="funnel_editor_name_label">Name</string>
-    <string name="funnel_editor_window_label">Conversion window</string>
-    <string name="funnel_editor_step_event_label">Step %1$d event name</string>
-    <string name="funnel_editor_step_screen_label">Screen (optional)</string>
-    <string name="funnel_editor_remove_step">Remove step</string>
-    <string name="funnel_editor_step_add">Add step</string>
-    <string name="funnel_editor_save">Save</string>
     <string name="funnel_editor_cancel">Cancel</string>
 
     <!-- Invitation acceptance screen -->

@@ -24,13 +24,21 @@ package com.quietmetrix.analytics
  *   without it, funnels spanning more than one app session under-report. Default `true`. Set
  *   `false` for a stricter anonymous posture with no persistent identifier of any kind; no id is
  *   generated or written to storage, and `ctx.anonymous_id` is omitted from every event.
+ * @param activationEvent The event name that marks a device as "activated" — e.g. completing
+ *   onboarding, or a use-case-specific milestone that predicts retention. Null (the default)
+ *   disables activation tracking entirely: no `activation` counter is ever recorded. Reported
+ *   at most once per device, the first time this event fires within [activationWindowDays] of
+ *   first launch — see [com.quietmetrix.analytics.internal.counters.ActivationReporter].
+ * @param activationWindowDays [activationEvent] must fire within this many days of first
+ *   launch to count as activation; firing later never reports (unlike retention's day-N marks,
+ *   activation is not an "at least" signal — a device that takes 10 days to activate against a
+ *   3-day window did not activate). Default 3.
  */
 data class QuietMetrixConfig(
     val storageKeyPrefix: String,
     val trackingEndpoint: String? = null,
     val apiKey: String? = null,
     val flushIntervalMs: Long = 30_000L,
-    val maxQueueSize: Int = 1000,
     val autoTrackInitialPageView: Boolean = true,
     val trackingAllowedByDefault: Boolean = false,
     val userAgent: String? = null,
@@ -40,4 +48,6 @@ data class QuietMetrixConfig(
     val funnels: List<Funnel> = emptyList(),
     val funnelManifest: FunnelManifest? = null,
     val collectAnonymousId: Boolean = true,
+    val activationEvent: String? = null,
+    val activationWindowDays: Long = 3L,
 )

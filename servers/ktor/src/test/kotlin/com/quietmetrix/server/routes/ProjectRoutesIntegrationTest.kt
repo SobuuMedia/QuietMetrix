@@ -3,12 +3,8 @@ package com.quietmetrix.server.routes
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
-import com.quietmetrix.server.persistence.tables.EventCountsDaily
-import com.quietmetrix.server.persistence.tables.Events
-import com.quietmetrix.server.persistence.tables.EventsInbox
 import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
-import com.quietmetrix.server.persistence.tables.UsageCounters
 import com.quietmetrix.server.persistence.tables.Users
 import com.quietmetrix.server.ratelimit.QuotaEnforcer
 import io.ktor.client.request.delete
@@ -26,9 +22,8 @@ import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -38,7 +33,7 @@ class ProjectRoutesIntegrationTest {
     @Test
     fun `create project returns 201 with keys`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr1;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers) }
         val userRepo = UserRepository(testDb)
         userRepo.create("owner@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
@@ -61,7 +56,7 @@ class ProjectRoutesIntegrationTest {
     @Test
     fun `self-host imposes no project limit`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr2;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers) }
         val userRepo = UserRepository(testDb)
         userRepo.create("selfhost@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
@@ -88,7 +83,7 @@ class ProjectRoutesIntegrationTest {
     @Test
     fun `patch project name returns updated project`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr3;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers) }
         val userRepo = UserRepository(testDb)
         userRepo.create("patchuser@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
@@ -116,7 +111,7 @@ class ProjectRoutesIntegrationTest {
     @Test
     fun `delete project soft deletes`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr4;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers) }
         val userRepo = UserRepository(testDb)
         userRepo.create("deleteuser@test.com", "password")
         val projectRepo = ProjectRepository(testDb)
@@ -144,7 +139,7 @@ class ProjectRoutesIntegrationTest {
     @Test
     fun `add and list members`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr5;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers) }
         val userRepo = UserRepository(testDb)
         userRepo.create("owner@test.com", "password")
         userRepo.create("viewer@test.com", "password")
@@ -181,7 +176,7 @@ class ProjectRoutesIntegrationTest {
     @Test
     fun `remove member returns success`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:pr6;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users, ProjectMembers) }
         val userRepo = UserRepository(testDb)
         userRepo.create("owner@test.com", "password")
         val viewerId = userRepo.create("viewer@test.com", "password")

@@ -2,9 +2,8 @@ package com.quietmetrix.server
 
 import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

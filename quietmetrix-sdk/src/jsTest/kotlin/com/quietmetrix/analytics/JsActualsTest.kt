@@ -4,7 +4,6 @@ import com.quietmetrix.analytics.internal.ConfigHolder
 import com.quietmetrix.analytics.internal.InMemoryStore
 import com.quietmetrix.analytics.internal.context.DeviceContext
 import com.quietmetrix.analytics.internal.createPersistentStore
-import com.quietmetrix.analytics.internal.transport.ConnectivityMonitor
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -62,10 +61,5 @@ class JsActualsTest {
         val ctx = DeviceContext()
         assertEquals("js", ctx.platform)
         assertTrue(ctx.anonymousId.startsWith("qm_aid_"))
-    }
-
-    @Test
-    fun connectivityMonitor_defaultsOnline() {
-        assertTrue(ConnectivityMonitor().isOnline)
     }
 }

@@ -1,14 +1,19 @@
 <?php
 
-require_once __DIR__ . '/../funnelAnalyze.php';
+require_once __DIR__ . '/../funnelCounterAnalyze.php';
 
 /**
- * GET /api/v1/projects/{id}/funnels/{funnelKey}/results ?range=7d&breakdown=platform&trend=1
- * → step-by-step conversion, drop-off, time-to-convert, and optional breakdown/trend.
+ * GET /api/v1/projects/{id}/funnels/{funnelKey}/results ?range=7d
+ * → step-by-step conversion and drop-off, aggregated from the funnel_step counter cells the
+ * device itself already reduced its progress to. Mirrors
+ * servers/ktor/.../routes/FunnelRoutes.kt's results handler -- keep the two in sync.
+ *
+ * breakdown/trend query params are still accepted (unrecognized query params are otherwise
+ * ignored across this API) but no longer honored -- see funnelCounterAnalyze()'s doc comment
+ * for what's gone versus deferred under aggregate-only ingest.
  */
 function handleFunnelResults(string $projectId, string $funnelKey): void {
-    $session = requireSession();
-    requireProjectAccess($session, $projectId);
+    requireAnalyticsAccess($projectId);
 
     $funnel = findFunnelRow($projectId, $funnelKey);
     if ($funnel === null) {
@@ -17,65 +22,28 @@ function handleFunnelResults(string $projectId, string $funnelKey): void {
     }
     $steps = json_decode($funnel['steps'], true) ?? [];
     $windowSecondsVal = (int)$funnel['window_seconds'];
-    $eventNames = array_values(array_unique(array_map(fn($s) => $s['event'], $steps)));
-    if (empty($eventNames)) {
-        jsonResponse(200, funnelResultsEnvelope($funnel, $windowSecondsVal, $steps, gmdate('Y-m-d\TH:i:s\Z'), gmdate('Y-m-d\TH:i:s\Z'),
-            funnelAnalyze($steps, $windowSecondsVal, [], gmdate('Y-m-d\TH:i:s\Z'), gmdate('Y-m-d\TH:i:s\Z'), null, false,
-                $funnel['count_mode'], $funnel['identity_scope'], $funnel['correlation_property']), false));
-        return;
-    }
 
     $rangeSeconds = windowSeconds(365);
     $now = time();
     $fromIso = gmdate('Y-m-d\TH:i:s\Z', $now - $rangeSeconds);
     $toIso = gmdate('Y-m-d\TH:i:s\Z', $now);
-    // Widened upper bound: a completion just after the requested range still counts for an
-    // actor who entered inside it (funnelAnalyze's entry-time filter excludes anyone whose
-    // ENTRY falls outside [from, to)).
-    $widenedToIso = gmdate('Y-m-d\TH:i:s\Z', $now + $windowSecondsVal);
+    $fromDay = gmdate('Y-m-d', $now - $rangeSeconds);
+    $toDay = gmdate('Y-m-d', $now);
 
-    $cap = 50000;
-    $placeholders = implode(',', array_fill(0, count($eventNames), '?'));
-    $stmt = getDb()->prepare(
-        "SELECT session_id, install_hash, event_name, screen, props, ts, country, platform, device_class, language
-           FROM events
-          WHERE project_id = ? AND event_name IN ($placeholders) AND ts >= ? AND ts < ?
-          ORDER BY ts ASC
-          LIMIT $cap"
-    );
-    $stmt->execute(array_merge([$projectId], $eventNames, [$fromIso, $widenedToIso]));
-    $dbRows = $stmt->fetchAll();
-    $truncated = count($dbRows) >= $cap;
-
-    $rows = [];
-    foreach ($dbRows as $r) {
-        $actor = actorKey($r['install_hash'], $r['session_id']);
-        if ($actor === null) continue;
-        $rows[] = [
-            'actor_key' => $actor,
-            'install_hash' => $r['install_hash'],
-            'session_id' => $r['session_id'],
-            'event_name' => $r['event_name'],
-            'ts' => $r['ts'],
-            'screen' => $r['screen'],
-            'props' => is_string($r['props']) ? (json_decode($r['props'], true) ?? []) : [],
-            'country' => $r['country'],
-            'platform' => $r['platform'],
-            'device_class' => $r['device_class'],
-            'language' => $r['language'],
-        ];
+    $allCells = counterReadCells($projectId, 'funnel_step', $fromDay, $toDay);
+    $cells = [];
+    foreach ($allCells as $c) {
+        if (($c['dims']['f'] ?? null) !== $funnelKey) continue;
+        $step = (int)($c['dims']['step'] ?? 0);
+        if ($step <= 0) continue;
+        $cells[] = ['step' => $step, 'n' => $c['n']];
     }
 
-    $breakdownDimension = $_GET['breakdown'] ?? null;
-    if (!in_array($breakdownDimension, ['country', 'platform', 'device_class', 'language'], true)) {
-        $breakdownDimension = null;
-    }
-    $withTrend = ($_GET['trend'] ?? null) === '1';
+    $analyzed = funnelCounterAnalyze($steps, $cells, $funnel['count_mode']);
 
-    $analyzed = funnelAnalyze($steps, $windowSecondsVal, $rows, $fromIso, $toIso, $breakdownDimension, $withTrend,
-        $funnel['count_mode'], $funnel['identity_scope'], $funnel['correlation_property']);
-
-    jsonResponse(200, funnelResultsEnvelope($funnel, $windowSecondsVal, $steps, $fromIso, $toIso, $analyzed, $truncated));
+    // No row cap under an aggregate read -- counters are already the rolled-up result, not a
+    // set of rows that can overflow.
+    jsonResponse(200, funnelResultsEnvelope($funnel, $windowSecondsVal, $steps, $fromIso, $toIso, $analyzed, false));
 }
 
 function funnelResultsEnvelope(array $funnel, int $windowSeconds, array $steps, string $fromIso, string $toIso, array $analyzed, bool $truncated): array {
@@ -104,8 +72,7 @@ function funnelResultsEnvelope(array $funnel, int $windowSeconds, array $steps, 
 
 /** GET /api/v1/projects/{id}/funnels → list active (non-archived) funnels. */
 function handleFunnelsList(string $projectId): void {
-    $session = requireSession();
-    requireProjectAccess($session, $projectId);
+    requireAnalyticsAccess($projectId);
 
     $stmt = getDb()->prepare(
         'SELECT funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, created_at, updated_at

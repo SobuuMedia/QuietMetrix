@@ -57,10 +57,9 @@
 
         const config = new QuietMetrixConfig(
             "qmweb_",       // storageKeyPrefix
-            "http://localhost:8080/api/track",  // trackingEndpoint
+            "http://localhost:8080/api/v1",  // trackingEndpoint (base API root; CounterFlusher derives /api/v1/counters from it)
             null,           // apiKey
             30_000,         // flushIntervalMs
-            1000,           // maxQueueSize
             false,          // autoTrackInitialPageView
             true,           // trackingAllowedByDefault
             "QuietMetrix Web Sample"  // userAgent

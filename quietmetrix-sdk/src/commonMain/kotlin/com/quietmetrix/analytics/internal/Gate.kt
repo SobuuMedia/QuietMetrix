@@ -1,6 +1,6 @@
 package com.quietmetrix.analytics.internal
 
-import com.quietmetrix.analytics.internal.transport.FlushManager
+import com.quietmetrix.analytics.internal.counters.MetricGateway
 import com.quietmetrix.analytics.isTrackingAllowed
 
 internal object Gate {
@@ -23,7 +23,7 @@ internal object Gate {
         val key = StorageKeys.analyticsEnabled(config.storageKeyPrefix)
         InMemoryStore.set(key, if (enabled) "1" else "0")
         if (!enabled) {
-            FlushManager.purgeQueue()
+            MetricGateway.purge()
         }
     }
 }

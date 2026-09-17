@@ -22,7 +22,7 @@ import { init, trackEvent } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track", // your ingest URL
+    trackingEndpoint: "https://your-server.com/api/v1", // your ingest URL
     apiKey: "qm_ak_your_api_key",                              // your API key
 });
 ```
@@ -46,10 +46,9 @@ commonly needed; the rest have sensible defaults.
 ```javascript
 init({
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_your_api_key",
     flushIntervalMs: 30000,             // default 30000
-    maxQueueSize: 1000,                 // default 1000
     autoTrackInitialPageView: true,     // default true
     trackingAllowedByDefault: false,    // default false
     debug: false,                       // default false
@@ -78,7 +77,7 @@ import { init } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_your_api_key",
     funnels: [
         {
@@ -124,7 +123,7 @@ import router from "./router";
 
 init({
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_your_api_key",
 });
 
@@ -150,7 +149,7 @@ import { init } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_your_api_key",
 });
 ```

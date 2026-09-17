@@ -1,13 +1,9 @@
 package com.quietmetrix.server.persistence
 
 import com.quietmetrix.server.persistence.tables.ProjectMembers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 class ProjectMemberRepository(private val database: Database) {
 
@@ -24,9 +20,7 @@ class ProjectMemberRepository(private val database: Database) {
     fun remove(pid: Long, uid: Long): Boolean {
         return transaction(database) {
             ProjectMembers.deleteWhere(limit = null) {
-                with(it) {
-                    (ProjectMembers.projectId eq pid) and (ProjectMembers.userId eq uid)
-                }
+                (ProjectMembers.projectId eq pid) and (ProjectMembers.userId eq uid)
             } > 0
         }
     }

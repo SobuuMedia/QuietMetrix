@@ -2,20 +2,18 @@ package com.quietmetrix.dashboard.nav
 
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.resources.Res
-import com.quietmetrix.dashboard.resources.ic_events
 import com.quietmetrix.dashboard.resources.ic_flow
 import com.quietmetrix.dashboard.resources.ic_funnel
-import com.quietmetrix.dashboard.resources.ic_live
 import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.ic_projects
+import com.quietmetrix.dashboard.resources.ic_retention
 import com.quietmetrix.dashboard.resources.ic_settings
 import com.quietmetrix.dashboard.resources.ic_users
-import com.quietmetrix.dashboard.resources.nav_events
 import com.quietmetrix.dashboard.resources.nav_flow
 import com.quietmetrix.dashboard.resources.nav_funnels
-import com.quietmetrix.dashboard.resources.nav_live
 import com.quietmetrix.dashboard.resources.nav_overview
 import com.quietmetrix.dashboard.resources.nav_projects
+import com.quietmetrix.dashboard.resources.nav_retention
 import com.quietmetrix.dashboard.resources.nav_settings
 import com.quietmetrix.dashboard.resources.nav_users
 import org.jetbrains.compose.resources.DrawableResource
@@ -32,9 +30,8 @@ enum class NavDestination(
     val adminOnly: Boolean = false,
 ) {
     Overview(icon = Res.drawable.ic_overview, labelRes = Res.string.nav_overview),
-    Events(icon = Res.drawable.ic_events, labelRes = Res.string.nav_events),
     Flow(icon = Res.drawable.ic_flow, labelRes = Res.string.nav_flow),
-    Live(icon = Res.drawable.ic_live, labelRes = Res.string.nav_live),
+    Retention(icon = Res.drawable.ic_retention, labelRes = Res.string.nav_retention),
     Projects(icon = Res.drawable.ic_projects, labelRes = Res.string.nav_projects),
     Funnels(icon = Res.drawable.ic_funnel, labelRes = Res.string.nav_funnels),
     Users(icon = Res.drawable.ic_users, labelRes = Res.string.nav_users, adminOnly = true),

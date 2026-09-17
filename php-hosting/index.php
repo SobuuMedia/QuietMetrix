@@ -20,12 +20,18 @@ require_once __DIR__ . '/src/jwt.php';
 require_once __DIR__ . '/src/accessTokens.php';
 require_once __DIR__ . '/src/auth.php';
 require_once __DIR__ . '/src/rateLimit.php';
-require_once __DIR__ . '/src/installs.php';
-require_once __DIR__ . '/src/quarantine.php';
+require_once __DIR__ . '/src/counterRegistry.php';
+require_once __DIR__ . '/src/counters.php';
 require_once __DIR__ . '/src/funnelValidation.php';
-require_once __DIR__ . '/src/funnelActor.php';
-require_once __DIR__ . '/src/funnelMatch.php';
 require_once __DIR__ . '/src/funnelSteps.php';
+require_once __DIR__ . '/src/funnelCounterAnalyze.php';
+require_once __DIR__ . '/src/retentionCounterAnalyze.php';
+require_once __DIR__ . '/src/overviewCounterAnalyze.php';
+require_once __DIR__ . '/src/sessionCounterAnalyze.php';
+require_once __DIR__ . '/src/valueCounterAnalyze.php';
+require_once __DIR__ . '/src/activationCounterAnalyze.php';
+require_once __DIR__ . '/src/searchCounterAnalyze.php';
+require_once __DIR__ . '/src/frictionCounterAnalyze.php';
 require_once __DIR__ . '/src/bootstrap.php';
 
 // ---------------------------------------------------------------------------
@@ -179,16 +185,11 @@ if ($method === 'POST' && $uri === '/api/v1/auth/refresh') {
     exit;
 }
 
-// ---- Track ingest (api-key auth) ----
+// ---- Counter ingest (api-key auth) ----
 
-if ($method === 'POST' && $uri === '/api/v1/track') {
-    require_once __DIR__ . '/src/routes/track.php';
-    handleTrack();
-    exit;
-}
-if ($method === 'POST' && $uri === '/api/v1/track/batch') {
-    require_once __DIR__ . '/src/routes/track.php';
-    handleTrackBatch();
+if ($method === 'POST' && $uri === '/api/v1/counters') {
+    require_once __DIR__ . '/src/routes/counters.php';
+    handleCounters();
     exit;
 }
 if ($method === 'POST' && $uri === '/api/v1/funnels/register') {
@@ -319,11 +320,6 @@ if ($method === 'POST' && preg_match('#^/api/v1/invites/([^/]+)/accept$#', $uri,
 
 // ---- Dashboard data ----
 
-if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/events$#', $uri, $m)) {
-    require_once __DIR__ . '/src/routes/dashboard.php';
-    handleProjectEvents($m[1]);
-    exit;
-}
 if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/aggregates$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/dashboard.php';
     handleProjectAggregates($m[1]);
@@ -332,6 +328,16 @@ if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/aggregates$#', $
 if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/transitions$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/dashboard.php';
     handleProjectTransitions($m[1]);
+    exit;
+}
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/search$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/dashboard.php';
+    handleProjectSearch($m[1]);
+    exit;
+}
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/friction$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/dashboard.php';
+    handleProjectFriction($m[1]);
     exit;
 }
 if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/sessions$#', $uri, $m)) {
@@ -351,11 +357,6 @@ if (DEBUG === true) {
     if ($method === 'GET' && $uri === '/api/v1/_demo/aggregates') {
         require_once __DIR__ . '/src/routes/demo.php';
         handleDemoAggregates();
-        exit;
-    }
-    if ($method === 'GET' && $uri === '/api/v1/_demo/events') {
-        require_once __DIR__ . '/src/routes/demo.php';
-        handleDemoEvents();
         exit;
     }
 }

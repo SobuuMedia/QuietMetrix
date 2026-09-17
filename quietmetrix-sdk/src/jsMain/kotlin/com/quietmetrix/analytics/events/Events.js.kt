@@ -1,68 +1,25 @@
 package com.quietmetrix.analytics
 
-import com.quietmetrix.analytics.internal.ConfigHolder
 import com.quietmetrix.analytics.internal.EventValidator
 import com.quietmetrix.analytics.internal.Gate
-import com.quietmetrix.analytics.internal.SDK_VERSION
-import com.quietmetrix.analytics.internal.ScreenTracker
-import com.quietmetrix.analytics.internal.context.DeviceContext
-import com.quietmetrix.analytics.internal.transport.ConnectivityMonitor
-import com.quietmetrix.analytics.internal.transport.EnqueuedEvent
-import com.quietmetrix.analytics.internal.transport.EventContext
-import com.quietmetrix.analytics.internal.transport.EventQueue
-import com.quietmetrix.analytics.internal.transport.SdkInfo
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
+import com.quietmetrix.analytics.internal.counters.recordEventCounter
 
-// All browser lookups guard on `typeof` so trackEvent works under SSR / plain Node without
-// throwing; missing globals simply yield null context values.
-
+// Guards on `typeof` so this works under SSR / plain Node without throwing; a missing global
+// simply means the embedding hook silently does nothing.
 private fun callQuietmetrixTrack(e: String, s: String?) {
     js("(typeof window !== 'undefined' && typeof window.__quietmetrixTrack === 'function') && window.__quietmetrixTrack(e, s)")
 }
 
-private fun generateSidNative(): String =
-    js("Math.random().toString(36).slice(2) + Date.now().toString(36)")
-
-private fun getDocumentReferrer(): String? =
-    js("(typeof document !== 'undefined' && document.referrer) ? document.referrer : null")
-
-private fun getNavigatorLanguage(): String? =
-    js("(typeof navigator !== 'undefined' && navigator.language) ? navigator.language.split('-')[0] : null")
-
-private fun getNavigatorUserAgent(): String? =
-    js("(typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : null")
-
-private fun getWindowViewport(): String? =
-    js("(typeof window !== 'undefined') ? (window.innerWidth + 'x' + window.innerHeight) : null")
-
-private fun getSessionSid(): String? =
-    js("(typeof sessionStorage !== 'undefined') ? sessionStorage.getItem('_sid') : null")
-
-@OptIn(ExperimentalTime::class)
+/**
+ * Validates [event]/[screen]/[props], then records an `event{name}` counter — see
+ * [recordEventCounter] for why [props] and [screen] never reach the wire. Still notifies the
+ * embedding page's `window.__quietmetrixTrack` hook, an unrelated local JS callback that never
+ * sends data over the network.
+ */
 actual suspend fun trackEvent(event: String, screen: String?, props: Map<String, Any?>) {
     if (!Gate.shouldTrack()) return
     val errors = EventValidator.validate(event, screen, props)
     if (errors.isNotEmpty()) return
-    ConfigHolder.config
-    val sid = getSessionSid() ?: generateSidNative()
-    EventQueue.enqueue(
-        EnqueuedEvent(
-            event = event,
-            screen = screen,
-            props = ScreenTracker.enrichWithDwell(props),
-            sid = sid,
-            ts = Clock.System.now(),
-            wasOffline = !ConnectivityMonitor().isOnline,
-            sdk = SdkInfo("js", SDK_VERSION),
-            ctx = EventContext(
-                referrer = getDocumentReferrer(),
-                language = getNavigatorLanguage(),
-                ua = getNavigatorUserAgent(),
-                viewport = getWindowViewport(),
-                anonymousId = DeviceContext().anonymousId,
-            ),
-        )
-    )
+    recordEventCounter(event, screen, props)
     callQuietmetrixTrack(event, screen)
 }

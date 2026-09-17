@@ -5,13 +5,9 @@ import com.quietmetrix.server.funnels.FunnelStepDefinition
 import com.quietmetrix.server.persistence.tables.FunnelManifests
 import com.quietmetrix.server.persistence.tables.Funnels
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.LocalDateTime
 
 data class FunnelRecord(

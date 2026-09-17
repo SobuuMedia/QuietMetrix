@@ -2,12 +2,15 @@ package com.quietmetrix.analytics.internal
 
 import com.quietmetrix.analytics.QuietMetrix
 import com.quietmetrix.analytics.QuietMetrixConfig
-import com.quietmetrix.analytics.internal.transport.EventQueue
+import com.quietmetrix.analytics.internal.counters.MetricGateway
+import com.quietmetrix.analytics.internal.counters.MetricRecorder
+import com.quietmetrix.analytics.internal.counters.SessionTracker
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -24,71 +27,87 @@ class ScreenTrackerTest {
         InMemoryStore.clear()
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "test_", trackingAllowedByDefault = true))
         ScreenTracker.reset()
-        EventQueue.clear()
+        MetricGateway.reset()
     }
 
     @AfterTest
     fun tearDown() = runTest {
-        // Reset the tracker BEFORE stop(): stop() triggers the fire-and-forget
-        // ScreenTracker.closeOutAsync(), which would otherwise flush a still-active screen on a
-        // background dispatcher and land a stray screen_view in the shared EventQueue after cleanup,
-        // polluting whichever test runs next.
+        // Reset the trackers BEFORE stop(): stop() triggers the fire-and-forget
+        // ScreenTracker.closeOutAsync() and SessionTracker.stop(), either of which would
+        // otherwise record into the shared MetricGateway on a background dispatcher after
+        // cleanup here, polluting whichever test runs next.
         ScreenTracker.reset()
+        SessionTracker.reset()
         QuietMetrix.stop()
-        EventQueue.clear()
         ConfigHolder.reset()
         InMemoryStore.clear()
+        MetricGateway.reset()
     }
 
+    private fun List<MetricRecorder.PendingCounter>.one(metric: String) = single { it.metric == metric }
+    private fun List<MetricRecorder.PendingCounter>.find(metric: String) = firstOrNull { it.metric == metric }
+
     @Test
-    fun `entering a new screen emits the previous screen view with its duration`() = runTest {
+    fun `entering a new screen records the previous screen's dwell bucket and the transition`() = runTest {
         ScreenTracker.enter("Home", now = t0)
         ScreenTracker.enter("Cart", now = t0.plus(5.seconds))
 
-        val events = EventQueue.drain(10)
-        assertEquals(1, events.size)
-        val e = events[0]
-        assertEquals("screen_view", e.event)
-        assertEquals("Home", e.screen)
-        assertEquals(5000L, e.props["duration_ms"])
+        val pending = MetricGateway.drain()
+        val dwell = pending.one("screen_dwell")
+        assertEquals(mapOf("screen" to "Home", "bucket" to "5_10s"), dwell.dims)
+
+        val transition = pending.one("screen_transition")
+        assertEquals(mapOf("from" to "Home", "to" to "Cart"), transition.dims)
     }
 
     @Test
-    fun `flush emits the current screen then clears it`() = runTest {
+    fun `flush records the current screen's dwell then clears it`() = runTest {
         ScreenTracker.enter("Home", now = t0)
-        ScreenTracker.flush(now = t0.plus(3.seconds))
+        val flushedScreen = ScreenTracker.flush(now = t0.plus(3.seconds))
+        assertEquals("Home", flushedScreen)
 
-        val first = EventQueue.drain(10)
-        assertEquals(1, first.size)
-        assertEquals("Home", first[0].screen)
-        assertEquals(3000L, first[0].props["duration_ms"])
+        val dwell = MetricGateway.drain().one("screen_dwell")
+        assertEquals(mapOf("screen" to "Home", "bucket" to "0_5s"), dwell.dims)
 
-        // A second flush with no active screen emits nothing.
-        ScreenTracker.flush(now = t0.plus(9.seconds))
-        assertTrue(EventQueue.drain(10).isEmpty())
+        // A second flush with no active screen records nothing and returns null.
+        assertNull(ScreenTracker.flush(now = t0.plus(9.seconds)))
+        assertTrue(MetricGateway.drain().none { it.metric == "screen_dwell" || it.metric == "screen_transition" })
     }
 
     @Test
-    fun `first enter with no prior screen emits nothing`() = runTest {
+    fun `first enter with no prior screen records nothing`() = runTest {
         ScreenTracker.enter("Home", now = t0)
-        assertTrue(EventQueue.drain(10).isEmpty())
+        assertTrue(MetricGateway.drain().none { it.metric == "screen_dwell" || it.metric == "screen_transition" })
     }
 
     @Test
-    fun `props supplied on enter are attached to that screen's event`() = runTest {
+    fun `props supplied on enter are dropped, not attached to any counter`() = runTest {
         ScreenTracker.enter("Home", props = mapOf("tab" to "feed"), now = t0)
         ScreenTracker.enter("Cart", now = t0.plus(2.seconds))
 
-        val e = EventQueue.drain(10).single()
-        assertEquals("feed", e.props["tab"])
-        assertEquals(2000L, e.props["duration_ms"])
+        val pending = MetricGateway.drain()
+        // Dwell and transition still fire; the dropped prop appears in neither cell's dims.
+        assertEquals(mapOf("screen" to "Home", "bucket" to "0_5s"), pending.one("screen_dwell").dims)
+        assertEquals(mapOf("from" to "Home", "to" to "Cart"), pending.one("screen_transition").dims)
+        assertTrue(pending.none { "tab" in it.dims })
     }
 
     @Test
-    fun `zero or negative duration is not emitted`() = runTest {
+    fun `zero duration records the transition but not a dwell bucket`() = runTest {
         ScreenTracker.enter("Home", now = t0)
         ScreenTracker.enter("Cart", now = t0)
-        assertTrue(EventQueue.drain(10).isEmpty())
+
+        val pending = MetricGateway.drain()
+        assertNull(pending.find("screen_dwell"))
+        assertEquals(mapOf("from" to "Home", "to" to "Cart"), pending.one("screen_transition").dims)
+    }
+
+    @Test
+    fun `re-entering the same screen name is not recorded as a transition`() = runTest {
+        ScreenTracker.enter("Home", now = t0)
+        ScreenTracker.enter("Home", now = t0.plus(5.seconds))
+
+        assertNull(MetricGateway.drain().find("screen_transition"))
     }
 
     // --- enrichWithDwell: the client path that stamps time-on-screen onto events. -------------

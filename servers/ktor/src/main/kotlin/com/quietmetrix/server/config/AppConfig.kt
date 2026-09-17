@@ -8,9 +8,9 @@ data class AppConfig(
     val auth: AuthConfig,
     val rateLimit: RateLimitConfig,
     val ipRateLimit: IpRateLimitConfig = IpRateLimitConfig(),
-    val installRateLimit: InstallRateLimitConfig = InstallRateLimitConfig(),
     val cors: CorsConfig = CorsConfig(),
     val trustedProxies: Set<String> = emptySet(),
+    val counters: CountersConfig = CountersConfig(),
 ) {
     enum class Profile { SELFHOST, CLOUD }
 
@@ -50,17 +50,14 @@ data class AppConfig(
                     requestsPerSecond = config.propertyOrNull("quietmetrix.ipRateLimit.requestsPerSecond")?.getString()?.toInt() ?: 5,
                     burstPerMinute = config.propertyOrNull("quietmetrix.ipRateLimit.burstPerMinute")?.getString()?.toInt() ?: 60,
                 ),
-                installRateLimit = InstallRateLimitConfig(
-                    enabled = config.propertyOrNull("quietmetrix.installRateLimit.enabled")?.getString()?.toBoolean() ?: true,
-                    requestsPerSecond = config.propertyOrNull("quietmetrix.installRateLimit.requestsPerSecond")?.getString()?.toInt() ?: 1,
-                    burstPerMinute = config.propertyOrNull("quietmetrix.installRateLimit.burstPerMinute")?.getString()?.toInt() ?: 30,
-                    rampEventThreshold = config.propertyOrNull("quietmetrix.installRateLimit.rampEventThreshold")?.getString()?.toLong() ?: 500L,
-                    rampWindowMinutes = config.propertyOrNull("quietmetrix.installRateLimit.rampWindowMinutes")?.getString()?.toLong() ?: 10L,
-                ),
                 cors = CorsConfig(
                     allowedOrigins = parseOrigins(config.propertyOrNull("quietmetrix.cors.allowedOrigins")),
                 ),
                 trustedProxies = config.propertyOrNull("quietmetrix.security.trustedProxies")?.getList()?.toSet() ?: emptySet(),
+                counters = CountersConfig(
+                    kThreshold = config.propertyOrNull("quietmetrix.counters.kThreshold")?.getString()?.toInt() ?: 5,
+                    maxDistinctCellsPerMetric = config.propertyOrNull("quietmetrix.counters.maxDistinctCellsPerMetric")?.getString()?.toInt() ?: 500,
+                ),
             )
             require(appConfig.auth.jwtSecret.isNotBlank() && !appConfig.auth.jwtSecret.startsWith("change-me")) {
                 "QM_JWT_SECRET must be set to a strong random value in production"
@@ -129,16 +126,16 @@ data class IpRateLimitConfig(
 )
 
 /**
- * Per-install ingest throttling + ramp-up detector (abuse defense Stage 2). Keyed on the
- * salt-hashed `anonymousId`. A brand-new install that fires more than [rampEventThreshold]
- * events within [rampWindowMinutes] is auto-revoked. See docs/security/publishable-api-key.md.
+ * Aggregate-ingest tuning. [kThreshold] is the k-anonymity read gate: a counter cell is
+ * invisible through every read path until at least this many distinct devices have
+ * contributed to it (see `CounterRepository.readCells`). [maxDistinctCellsPerMetric] caps how
+ * many distinct dims combinations one metric may accumulate per project, so an unbounded
+ * dimension value can't grow the table without limit; cells beyond the cap are quarantined
+ * rather than dropped silently.
  */
-data class InstallRateLimitConfig(
-    val enabled: Boolean = true,
-    val requestsPerSecond: Int = 1,
-    val burstPerMinute: Int = 30,
-    val rampEventThreshold: Long = 500L,
-    val rampWindowMinutes: Long = 10L,
+data class CountersConfig(
+    val kThreshold: Int = 5,
+    val maxDistinctCellsPerMetric: Int = 500,
 )
 
 fun ApplicationConfig.toAppConfig(): AppConfig = AppConfig.from(this)

@@ -37,7 +37,7 @@ val signupFunnel = Funnel(
 QuietMetrix.init(
     QuietMetrixConfig(
         storageKeyPrefix = "myapp_",
-        trackingEndpoint = "https://your-server.com/api/v1/track",
+        trackingEndpoint = "https://your-server.com/api/v1",
         apiKey = "qm_ak_your_api_key",
         funnels = listOf(signupFunnel),
     )
@@ -171,8 +171,7 @@ storage (or bump the funnel's definition) to force a retry.
 
 **A funnel shows zero entries even though the app is definitely sending the step events.**
 The most common causes: the step's `event` name doesn't exactly match what's sent (case- and
-character-sensitive), the project has `strict_schema` enabled and the event isn't in the
-allowlist, or the user declined tracking consent so nothing was ever sent.
+character-sensitive), or the user declined tracking consent so nothing was ever recorded.
 
 **Conversion looks lower than I'd expect.**
 Check `counted_by` in the results — `"session"` means some or all of the matched events

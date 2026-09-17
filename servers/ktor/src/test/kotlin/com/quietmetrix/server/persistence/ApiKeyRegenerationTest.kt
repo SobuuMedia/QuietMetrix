@@ -1,13 +1,10 @@
 package com.quietmetrix.server.persistence
 
-import com.quietmetrix.server.persistence.tables.InstallMeta
 import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -19,7 +16,7 @@ class ApiKeyRegenerationTest {
 
     private fun db(name: String): Database {
         val db = Database.connect("jdbc:h2:mem:$name;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, InstallMeta) }
+        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers) }
         return db
     }
 

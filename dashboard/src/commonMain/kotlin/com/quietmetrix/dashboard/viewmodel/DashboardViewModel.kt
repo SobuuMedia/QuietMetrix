@@ -8,18 +8,17 @@ import com.quietmetrix.dashboard.api.ApiManagedUser
 import com.quietmetrix.dashboard.api.ApiMember
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.ApiUser
-import com.quietmetrix.dashboard.api.CreateFunnelRequest
 import com.quietmetrix.dashboard.api.CreateProjectResponse
-import com.quietmetrix.dashboard.api.EventRow
 import com.quietmetrix.dashboard.api.FunnelDto
+import com.quietmetrix.dashboard.api.FrictionResponse
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
-import com.quietmetrix.dashboard.api.FunnelStepDto
 import com.quietmetrix.dashboard.api.RegenerateKeyResponse
+import com.quietmetrix.dashboard.api.RetentionResponse
+import com.quietmetrix.dashboard.api.SearchResponse
 import com.quietmetrix.dashboard.api.SessionsResponse
 import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.api.TransitionsResponse
 import com.quietmetrix.dashboard.api.UiError
-import com.quietmetrix.dashboard.api.UpdateFunnelRequest
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.api.decodeUserFromJwt
 import com.quietmetrix.dashboard.api.toUiError
@@ -48,7 +47,6 @@ data class DashboardState(
     val projects: List<ApiProject> = emptyList(),
     val currentProjectId: String? = null,
     val aggregates: AggregatesResponse? = null,
-    val recentEvents: List<EventRow> = emptyList(),
     val range: TimeRange = TimeRange.Default,
     val loading: Boolean = false,
     val refreshing: Boolean = false,
@@ -64,14 +62,12 @@ data class DashboardState(
     val showInfo: NavDestination? = null,
     val transitions: TransitionsResponse? = null,
     val sessions: SessionsResponse? = null,
+    val retention: RetentionResponse? = null,
+    val search: SearchResponse? = null,
+    val friction: FrictionResponse? = null,
     val funnels: List<FunnelDto> = emptyList(),
     val selectedFunnelKey: String? = null,
     val funnelResults: FunnelResultsResponse? = null,
-    /** null | "country" | "platform" | "device_class" | "language". */
-    val funnelBreakdownDimension: String? = null,
-    val liveEvents: List<EventRow> = emptyList(),
-    /** The event whose detail panel is open on the Events screen, if any. */
-    val selectedEvent: EventRow? = null,
     // User management + API-key UX
     val users: List<ApiManagedUser> = emptyList(),
     val members: Map<String, List<ApiMember>> = emptyMap(),
@@ -96,7 +92,7 @@ data class DashboardState(
 }
 
 /** One background data panel that can fail independently without blanking the dashboard. */
-enum class DataSection { Aggregates, Events, Transitions, Sessions, Funnels, FunnelResults }
+enum class DataSection { Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults }
 
 /** Records [error] for [section] without touching the global banner or any other section. */
 internal fun DashboardState.withSectionError(section: DataSection, error: UiError): DashboardState =
@@ -224,8 +220,9 @@ class DashboardViewModel {
                 _state.update { it.copy(projects = res.projects, currentProjectId = currentId, loading = false) }
                 if (currentId != null) {
                     loadAggregates()
-                    loadEvents()
                     loadTransitions()
+                    loadSearch()
+                    loadFriction()
                     loadSessions()
                     loadFunnelsOnce()
                 }
@@ -244,8 +241,9 @@ class DashboardViewModel {
                             _state.update { it.copy(projects = res.projects, currentProjectId = currentId, loading = false) }
                             if (currentId != null) {
                                 loadAggregates()
-                                loadEvents()
                                 loadTransitions()
+                                loadSearch()
+                                loadFriction()
                                 loadSessions()
                             }
                         } catch (e: Throwable) {
@@ -293,21 +291,20 @@ class DashboardViewModel {
     /** Suspending fetch for a destination, shared by navigation and refresh. */
     private suspend fun loadActive(destination: NavDestination) {
         when (destination) {
-            NavDestination.Overview -> { loadAggregates(); loadSessions() }
-            NavDestination.Events   -> loadEvents()
-            NavDestination.Flow     -> loadTransitions()
-            NavDestination.Live     -> loadLiveEventsOnce()
-            NavDestination.Projects -> loadProjects()
-            NavDestination.Users    -> loadUsersOnce()
-            NavDestination.Funnels  -> loadFunnelsOnce()
-            NavDestination.Settings -> { /* no fetch */ }
+            NavDestination.Overview  -> { loadAggregates(); loadSessions() }
+            NavDestination.Flow      -> { loadTransitions(); loadSearch(); loadFriction() }
+            NavDestination.Retention -> loadRetentionOnce()
+            NavDestination.Projects  -> loadProjects()
+            NavDestination.Users     -> loadUsersOnce()
+            NavDestination.Funnels   -> loadFunnelsOnce()
+            NavDestination.Settings  -> { /* no fetch */ }
         }
     }
 
     fun selectProject(projectId: String) {
         _state.update { it.copy(currentProjectId = projectId, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null) }
         TokenStorage.saveLastProjectId(projectId)
-        scope.launch { loadAggregates(); loadEvents(); loadTransitions(); loadSessions(); loadFunnelsOnce() }
+        scope.launch { loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadFunnelsOnce() }
     }
 
     fun selectRange(range: TimeRange) {
@@ -318,7 +315,7 @@ class DashboardViewModel {
     fun setDemoMode(enabled: Boolean) {
         if (!_state.value.serverDebug) return
         _state.update { it.copy(demoMode = enabled) }
-        scope.launch { loadAggregates(); loadEvents() }
+        scope.launch { loadAggregates() }
     }
 
     fun createProject(name: String, description: String? = null) {
@@ -519,7 +516,7 @@ class DashboardViewModel {
             return
         }
         try {
-            val res = api.funnelResults(projectId, funnelKey, s.range, s.funnelBreakdownDimension, trend = true)
+            val res = api.funnelResults(projectId, funnelKey, s.range)
             _state.update { it.copy(funnelResults = res).clearingSectionError(DataSection.FunnelResults) }
         } catch (e: Throwable) {
             _state.update {
@@ -531,36 +528,6 @@ class DashboardViewModel {
     fun selectFunnel(funnelKey: String) {
         _state.update { it.copy(selectedFunnelKey = funnelKey) }
         scope.launch { loadFunnelResultsOnce() }
-    }
-
-    fun selectFunnelBreakdown(dimension: String?) {
-        _state.update { it.copy(funnelBreakdownDimension = dimension) }
-        scope.launch { loadFunnelResultsOnce() }
-    }
-
-    fun createFunnel(funnelKey: String, name: String, steps: List<FunnelStepDto>, windowSeconds: Long) {
-        val projectId = _state.value.currentProjectId ?: return
-        scope.launch {
-            try {
-                val created = api.createFunnel(projectId, CreateFunnelRequest(funnelKey, name, steps = steps, windowSeconds = windowSeconds))
-                _state.update { it.copy(selectedFunnelKey = created.funnelKey) }
-                loadFunnelsOnce()
-            } catch (e: Throwable) {
-                _state.update { it.copy(error = e.toUiError("POST /projects/{id}/funnels")) }
-            }
-        }
-    }
-
-    fun updateFunnel(funnelKey: String, name: String, steps: List<FunnelStepDto>, windowSeconds: Long) {
-        val projectId = _state.value.currentProjectId ?: return
-        scope.launch {
-            try {
-                api.updateFunnel(projectId, funnelKey, UpdateFunnelRequest(name = name, steps = steps, windowSeconds = windowSeconds))
-                loadFunnelsOnce()
-            } catch (e: Throwable) {
-                _state.update { it.copy(error = e.toUiError("PATCH /projects/{id}/funnels/{key}")) }
-            }
-        }
     }
 
     fun deleteFunnel(funnelKey: String) {
@@ -620,17 +587,6 @@ class DashboardViewModel {
         }
     }
 
-    private suspend fun loadEvents() {
-        val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
-        try {
-            val res = api.events(s.currentProjectId.orEmpty(), s.demoMode)
-            _state.update { it.copy(recentEvents = res.events).clearingSectionError(DataSection.Events) }
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Events, e.toUiError("GET /projects/{id}/events")) }
-        }
-    }
-
     private suspend fun loadTransitions() {
         val s = _state.value
         if (!s.demoMode && s.currentProjectId == null) return
@@ -639,6 +595,28 @@ class DashboardViewModel {
             _state.update { it.copy(transitions = res).clearingSectionError(DataSection.Transitions) }
         } catch (e: Throwable) {
             _state.update { it.withSectionError(DataSection.Transitions, e.toUiError("GET /projects/{id}/transitions")) }
+        }
+    }
+
+    private suspend fun loadSearch() {
+        val s = _state.value
+        if (!s.demoMode && s.currentProjectId == null) return
+        try {
+            val res = api.search(s.currentProjectId.orEmpty(), (s.range.seconds / 86_400).toInt().coerceAtLeast(1))
+            _state.update { it.copy(search = res).clearingSectionError(DataSection.Search) }
+        } catch (e: Throwable) {
+            _state.update { it.withSectionError(DataSection.Search, e.toUiError("GET /projects/{id}/search")) }
+        }
+    }
+
+    private suspend fun loadFriction() {
+        val s = _state.value
+        if (!s.demoMode && s.currentProjectId == null) return
+        try {
+            val res = api.friction(s.currentProjectId.orEmpty(), (s.range.seconds / 86_400).toInt().coerceAtLeast(1))
+            _state.update { it.copy(friction = res).clearingSectionError(DataSection.Friction) }
+        } catch (e: Throwable) {
+            _state.update { it.withSectionError(DataSection.Friction, e.toUiError("GET /projects/{id}/friction")) }
         }
     }
 
@@ -653,27 +631,14 @@ class DashboardViewModel {
         }
     }
 
-    /** Opens the detail panel for [event] on the Events screen. */
-    fun selectEvent(event: EventRow) {
-        _state.update { it.copy(selectedEvent = event) }
-    }
-
-    /** Closes the event detail panel. */
-    fun clearSelectedEvent() {
-        _state.update { it.copy(selectedEvent = null) }
-    }
-
-    fun loadLiveEvents() {
-        scope.launch { loadLiveEventsOnce() }
-    }
-
-    private suspend fun loadLiveEventsOnce() {
+    private suspend fun loadRetentionOnce() {
         val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
+        if (s.currentProjectId == null) return
         try {
-            val res = api.events(s.currentProjectId.orEmpty(), s.demoMode)
-            _state.update { it.copy(liveEvents = res.events) }
-        } catch (_: Throwable) {
+            val res = api.retention(s.currentProjectId, (s.range.seconds / 86_400).toInt().coerceAtLeast(1))
+            _state.update { it.copy(retention = res).clearingSectionError(DataSection.Retention) }
+        } catch (e: Throwable) {
+            _state.update { it.withSectionError(DataSection.Retention, e.toUiError("GET /projects/{id}/retention")) }
         }
     }
 }

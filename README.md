@@ -27,7 +27,7 @@ Everything is MIT-licensed. No vendor lock-in.
   - [Tracking Events](#tracking-events)
   - [Consent & Privacy Controls](#consent--privacy-controls)
   - [Funnels](#funnels)
-  - [Offline & Queue Management](#offline--queue-management)
+  - [Counter Flushing](#counter-flushing)
   - [Device Context](#device-context)
 - [API Reference](#api-reference)
   - [Authentication](#authentication)
@@ -75,7 +75,8 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 
 **Key design decisions:**
 - API keys are bcrypt-hashed in the database — never stored in plaintext
-- Events go through an async inbox → processing → rollup pipeline
+- Aggregate-only ingest: the device computes `(metric, dims) -> n` counters itself and sends
+  only those — no raw event or per-session trail ever leaves it, and none is stored
 - Fully self-hosted and unlimited: no quotas, no per-plan caps, no telemetry
 
 ---
@@ -88,7 +89,7 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 // 1. Add dependency (KMP project, build.gradle.kts)
 implementation(project(":quietmetrix-sdk"))
 // or from Maven Central when published:
-// implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+// implementation("com.quietmetrix:quietmetrix-sdk:0.5.0")
 
 // 2. Initialize once at app startup
 import com.quietmetrix.analytics.*
@@ -96,7 +97,7 @@ import com.quietmetrix.analytics.*
 QuietMetrix.init(
     QuietMetrixConfig(
         storageKeyPrefix = "myapp_",
-        trackingEndpoint = "https://your-server.com/api/v1/track",
+        trackingEndpoint = "https://your-server.com/api/v1",
         apiKey = "qm_ak_your_api_key_here",
     )
 )
@@ -166,7 +167,7 @@ QuietMetrix/
 │   └── src/
 │       ├── commonMain/            # Shared business logic
 │       ├── commonTest/            # Shared unit tests
-│       ├── androidMain/           # Android-specific (ConnectivityMonitor, etc.)
+│       ├── androidMain/           # Android-specific (foreground/background callbacks, etc.)
 │       ├── jvmMain/               # JVM desktop
 │       ├── iosMain/               # iOS (Darwin)
 │       ├── macosMain/             # macOS (Darwin)
@@ -182,12 +183,12 @@ QuietMetrix/
 │       └── src/main/kotlin/.../
 │           ├── Application.kt     # Entry point
 │           ├── config/            # AppConfig, DiModule (Koin)
-│           ├── domain/            # Event, Project, User, Plan, ProjectMember
-│           ├── ingest/            # EventValidator, EventNormalizer, IngestChannel
+│           ├── domain/            # Project, User, Plan, ProjectMember, counter DTOs
+│           ├── counters/          # CounterRegistry, CounterIngestProcessor, analyzers
 │           ├── persistence/       # Exposed tables + repositories
 │           ├── plugins/           # CORS, Monitoring, Security, RateLimiting
 │           ├── ratelimit/         # RateLimiter, QuotaEnforcer (unlimited self-host)
-│           └── routes/            # Track, Auth, Project, Dashboard, Funnels
+│           └── routes/            # Counters, Auth, Project, Dashboard, Funnels
 │
 ├── php-hosting/                  # PHP + MySQL server (flat IONOS / shared-host variant)
 │   ├── index.php                 # Front controller
@@ -257,35 +258,38 @@ QuietMetrix/
                         HTTPS (X-QM-Api-Key)
 ┌──────────────────┐ ───────────────────────────► ┌──────────────────────────┐
 │   KMP SDK        │                               │  Ktor Server (JVM)       │
-│ • Android        │                               │  • POST /api/v1/track    │
-│ • iOS            │                               │  • POST /track/batch     │
-│ • macOS          │                               │  • JWT auth + rate limit │
-│ • Windows        │                               │  • Postgres 16           │
-│ • Linux          │ ◄───────────────────────────  │  • Flyway migrations     │
-│ • Web (Wasm)     │  202 Accepted {ok, queued}    │  • Serves the dashboard  │
-│ • JVM Desktop    │                               └──────────────────────────┘
-│                  │
-│ • Event Queue    │                                          ▲
-│ • Offline buffer │                                          │ same API contract
-│ • Consent gate   │                                          ▼
-│ • Auto-flush     │                               ┌──────────────────────────┐
-│ • Backoff retry  │                               │  PHP Server (php-hosting)│
-└──────────────────┘                               │  • Same routes & schemas │
-                                                   │  • MySQL 8               │
+│ • Android        │                               │  • POST /api/v1/counters │
+│ • iOS            │                               │  • JWT auth + rate limit │
+│ • macOS          │                               │  • Postgres 16           │
+│ • Windows        │                               │  • Flyway migrations     │
+│ • Linux          │ ◄───────────────────────────  │  • Serves the dashboard  │
+│ • Web (Wasm)     │ 202 Accepted {ok, accepted,   └──────────────────────────┘
+│ • JVM Desktop    │              quarantined}
+│                  │                                          ▲
+│ • On-device      │                                          │ same API contract
+│   counter        │                                          ▼
+│   recorder       │                               ┌──────────────────────────┐
+│ • Consent gate   │                               │  PHP Server (php-hosting)│
+│ • Periodic flush │                               │  • Same routes & schemas │
+└──────────────────┘                               │  • MySQL 8               │
                                                    │  • schema.sql auto-apply │
-                                                   │  • Synchronous inserts   │
+                                                   │  • Synchronous upserts   │
                                                    └──────────────────────────┘
 ```
 
-**Event flow:**
-1. SDK enqueues event → local `EventQueue` (memory + connectivity check)
-2. `FlushManager` fires every `flushIntervalMs` (default 30s) or when connectivity returns
-3. Event batch POSTed to `/api/v1/track` or `/api/v1/track/batch`
-4. Server validates API key → validates schema
-5. **Ktor:** enqueues to an in-process `events_inbox` channel; a background worker processes
-   it → inserts to `events` → updates `event_counts_daily`.
-   **php-hosting:** inserts directly to `events` within the request — no inbox, no worker.
-6. Dashboard queries read from `events`, `event_counts_daily`, `usage_counters`
+**Counter flow** — the device does the analysis; the server only ever receives counters:
+1. `trackEvent`/`trackScreen`/on-device funnel and session tracking each record a
+   `(metric, dims) -> n` delta locally (see `internal/counters/MetricRecorder`) — no raw event
+   or per-session trail is built anywhere.
+2. `CounterFlusher` drains the recorder every `flushIntervalMs` (default 30s) and POSTs the
+   batch to `/api/v1/counters`. Fire-and-forget: a failed send simply drops that batch rather
+   than queuing for retry (unlike the old event queue, pending counters are in-memory only).
+3. The server validates each item against a fixed per-metric dimension registry
+   (`CounterRegistry.kt` / `counterRegistry.php`) and upserts it into the `counters` table —
+   `n = n + delta`, `devices = devices + (1 if first flush of this cell today else 0)`.
+   Anything that fails validation or a per-metric cardinality cap is quarantined instead.
+4. Every read path (Overview, Flow, Funnels, Retention, Sessions) filters a cell out until at
+   least `k` distinct devices have contributed to it (k-anonymity; default 5).
 
 ---
 
@@ -335,12 +339,12 @@ curl -X POST http://localhost:8080/api/v1/projects \
 # Response: {"api_key":"qm_ak_abc123...",
 #             "message":"Project created. Store it securely — it will not be shown again."}
 
-# Send a test event
-curl -X POST http://localhost:8080/api/v1/track \
+# Send a test counter batch
+curl -X POST http://localhost:8080/api/v1/counters \
   -H "Content-Type: application/json" \
   -H "X-QM-Api-Key: qm_ak_abc123..." \
-  -d '{"event":"page_view","screen":"home"}'
-# → 202 {"ok":true,"queued":1}
+  -d '{"day":"2026-09-04","counters":[{"m":"event","d":{"name":"page_view"},"n":1,"u":1}]}'
+# → 202 {"ok":true,"accepted":1,"quarantined":0}
 ```
 
 #### Docker Compose services
@@ -429,13 +433,8 @@ Full IONOS-specific instructions (panel screenshots, mod_rewrite checks, trouble
 | `QM_RATE_LIMIT_RPS` | `10` | Request per second limit |
 | `QM_RATE_LIMIT_BURST` | `60` | Burst per minute |
 | `QM_INGEST_IP_ENABLED` | `true` | Per-IP ingest throttling (abuse defense for the publishable key) |
-| `QM_INGEST_IP_RPS` | `5` | Per-IP requests/second on `/track` + `/track/batch` |
+| `QM_INGEST_IP_RPS` | `5` | Per-IP requests/second on `/counters` |
 | `QM_INGEST_IP_BURST` | `60` | Per-IP burst tokens |
-| `QM_INGEST_INSTALL_ENABLED` | `true` | Per-install (`anonymousId`) ingest throttling |
-| `QM_INGEST_INSTALL_RPS` | `1` | Per-install requests/second |
-| `QM_INGEST_INSTALL_BURST` | `30` | Per-install burst tokens |
-| `QM_INGEST_INSTALL_RAMP_EVENTS` | `500` | Auto-revoke an install that sends this many events in the ramp window |
-| `QM_INGEST_INSTALL_RAMP_MINUTES` | `10` | Ramp-up window length (minutes) |
 
 #### PHP server (`php-hosting/config.php`)
 
@@ -452,9 +451,8 @@ Not environment variables — plain PHP `define()` constants in `config.php` (co
 | `ALLOWED_ORIGIN` | `*` | CORS origin allowed to call the API from a browser |
 | `CSP_CONNECT_SRC` | `'self'` | CSP `connect-src` directive |
 | `DEBUG` | `false` | `true` enables verbose errors + demo-data endpoints; always `false` in production |
-| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `true` / `10` / `60` | Per-API-key rate limiting on `/track*` |
+| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `true` / `10` / `60` | Per-API-key rate limiting on `/counters` |
 | `INGEST_IP_ENABLED` / `INGEST_IP_RPS` / `INGEST_IP_BURST` | `true` / `5` / `60` | Per-IP ingest throttling (abuse defense) |
-| `INGEST_INSTALL_ENABLED` / `INGEST_INSTALL_RPS` / `INGEST_INSTALL_BURST` | `true` / `1` / `30` | Per-install ingest throttling |
 | `TRUSTED_PROXIES` | `[]` | IPs whose `X-Forwarded-For` is trusted |
 
 See `php-hosting/config.example.php` for the full, commented list.
@@ -468,6 +466,12 @@ Migrations run automatically on Ktor server startup. Files live in `servers/ktor
 ```
 V1__init.sql           — users, projects, events_inbox, events, event_counts_daily, usage_counters
 V2__project_members.sql — project_members table, deleted_at on projects, plan_id on users
+...
+V18__counters.sql      — counters, counters_quarantine (aggregate-only ingest)
+V19__drop_events.sql   — drops events, events_inbox, events_quarantine, ingest_audit,
+                          install_meta, sessions, and the
+                          install_salt/analytics_salt/strict_schema/allowed_events columns on
+                          projects — the raw event-stream ingest path, /track, is gone
 ```
 
 To run manually:
@@ -519,7 +523,7 @@ repositories { mavenCentral() }
 
 // module build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.5.0")
 }
 ```
 
@@ -532,7 +536,7 @@ import QuietMetrix
 
 let config = QuietMetrixConfig(
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_..."
 )
 QuietMetrix.shared.initialize(config: config)
@@ -544,7 +548,7 @@ QuietMetrix.shared.trackEvent(event: "page_view", screen: "home")
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+    implementation("com.quietmetrix:quietmetrix-sdk:0.5.0")
 }
 ```
 
@@ -555,7 +559,7 @@ import com.quietmetrix.analytics.*
 fun main() {
     QuietMetrix.init(QuietMetrixConfig(
         storageKeyPrefix = "myapp_",
-        trackingEndpoint = "https://your-server.com/api/v1/track",
+        trackingEndpoint = "https://your-server.com/api/v1",
         apiKey = "qm_ak_..."
     ))
     trackEvent("app_start", screen = "main")
@@ -576,7 +580,7 @@ import { init, trackEvent } from "@sobuumedia/quietmetrix-sdk";
 
 init({
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_...",
 });
 trackEvent("page_view", { screen: "home" });
@@ -603,8 +607,7 @@ data class QuietMetrixConfig(
     val storageKeyPrefix: String,           // Unique prefix per app (e.g. "myapp_")
     val trackingEndpoint: String? = null,   // Server URL (null = no network sending)
     val apiKey: String? = null,           // Project API key
-    val flushIntervalMs: Long = 30_000L,    // Auto-flush interval (ms)
-    val maxQueueSize: Int = 1000,           // Max buffered events (oldest dropped when full)
+    val flushIntervalMs: Long = 30_000L,    // Counter-flush interval (ms)
     val autoTrackInitialPageView: Boolean = true, // Fire page_view on init?
     val trackingAllowedByDefault: Boolean = false, // Track before consent?
     val userAgent: String? = null,          // Custom User-Agent header
@@ -681,7 +684,7 @@ val signupFunnel = Funnel(
 
 QuietMetrix.init(QuietMetrixConfig(
     storageKeyPrefix = "myapp_",
-    trackingEndpoint = "https://your-server.com/api/v1/track",
+    trackingEndpoint = "https://your-server.com/api/v1",
     apiKey = "qm_ak_your_api_key",
     funnels = listOf(signupFunnel),
 ))
@@ -696,35 +699,28 @@ counted per **install** (a per-project, salted, non-reversible hash of a device-
 See the [Funnels developer guide](docs/sdk/funnels.md) for matching rules, the dashboard
 editing/locking workflow, and a worked example of the results payload.
 
-### Offline & Queue Management
+### Counter Flushing
 
-The SDK buffers events locally when offline and flushes them when connectivity returns.
+`trackEvent`/`trackScreen` and on-device funnel/session tracking each record a
+`(metric, dims) -> n` delta locally, in memory (`internal/counters/MetricRecorder`) — no
+network call happens inline, and no raw event or per-session trail is ever built.
 
 ```kotlin
-// Events are enqueued locally — no network call happens inline
-trackEvent("page_view")  // Enqueued, not sent yet
+// Recorded locally — no network call happens inline
+trackEvent("page_view")
 
-// Force flush all buffered events (suspend function)
+// Force an immediate flush of the pending counters (suspend function)
 QuietMetrix.flush()
 
 // Flush interval is configurable
 QuietMetrixConfig(flushIntervalMs = 10_000L)  // Flush every 10 seconds
-
-// Max queue size prevents unbounded memory growth
-QuietMetrixConfig(maxQueueSize = 500)  // Keep max 500 events in memory
-
-// When offline, events are buffered with was_offline=true flag
-// When connectivity returns, FlushManager triggers an immediate drain
 ```
 
-**Connectivity monitoring** is platform-specific:
-- Android: `ConnectivityManager` API
-- iOS/macOS: `NWPathMonitor`
-- JVM: Always assumes online
-- Web: `navigator.onLine` + `online`/`offline` events
-- Linux/Windows: Always assumes online
-
-**Exponential backoff:** After failed flushes (5xx errors), the FlushManager accumulates a backoff delay — `1s → 2s → 4s → 8s → 16s → 32s → 60s (cap)`. Backoff resets on the first successful flush or when connectivity returns.
+Pending counters are **in-memory only** — there is no offline queue, no persistence across a
+process restart, and no connectivity monitoring or retry backoff. `CounterFlusher` simply
+POSTs whatever is pending to `/api/v1/counters` every `flushIntervalMs`; a failed send (offline,
+5xx, timeout) drops that batch rather than queuing it for retry. An app killed between flushes
+loses whatever was recorded since the last successful one.
 
 ### Device Context
 
@@ -759,54 +755,31 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 
 ### Tracking Endpoints
 
-#### `POST /api/v1/track` — Track a single event
+#### `POST /api/v1/counters` — Submit a batch of counter deltas
 
 Auth: API key
 
 **Request:**
 ```json
 {
-  "event": "page_view",
-  "screen": "home",
-  "props": { "language": "en", "theme": "dark" },
-  "sid": "abc123def456",
-  "ts": "2026-04-30T12:34:56Z",
-  "was_offline": false,
-  "sdk": { "platform": "android", "version": "0.4.0" },
-  "ctx": {
-    "language": "en",
-    "ua": "Mozilla/5.0 ...",
-    "viewport": "412x914",
-    "referrer": "https://google.com"
-  }
-}
-```
-
-**Response:** `202 Accepted`
-```json
-{ "ok": true, "queued": 1 }
-```
-
-Only `event` is required. The server adjusts `ts` if >7 days from server time.
-
-#### `POST /api/v1/track/batch` — Track up to 100 events
-
-Auth: API key
-
-**Request:**
-```json
-{
-  "events": [
-    { "event": "page_view", "screen": "home" },
-    { "event": "click", "screen": "home", "props": { "target": "logo" } }
+  "sdk": { "platform": "android", "version": "0.5.0" },
+  "app": { "version": "2.4.0", "country": "US" },
+  "day": "2026-09-04",
+  "counters": [
+    { "m": "screen_transition", "d": { "from": "Library", "to": "BookDetail" }, "n": 3, "u": 1 },
+    { "m": "event", "d": { "name": "page_view" }, "n": 5, "u": 0 }
   ]
 }
 ```
 
 **Response:** `202 Accepted`
 ```json
-{ "ok": true, "queued": 2 }
+{ "ok": true, "accepted": 2, "quarantined": 0 }
 ```
+
+`day` is the device's local date; the server clamps it to `[today-2, today]` UTC. Each item's
+`m` (metric) and `d` (dims) are validated against a fixed per-metric registry — an unknown
+metric or undeclared dimension is quarantined rather than rejecting the whole batch.
 
 #### `GET /api/v1/health` — Health check
 
@@ -838,17 +811,18 @@ No auth required.
 }
 ```
 
-#### `GET /api/v1/projects/:id/events` — Paginated raw events
-
-Auth: Bearer Token
-
-Query params: `limit` (1–1000, default 100), `offset`, `event`, `screen`, `from`, `to` (ISO 8601)
-
 #### `GET /api/v1/projects/:id/aggregates` — Aggregated metrics
 
-Auth: Bearer Token
+Auth: Bearer Token or a PAT with `analytics:read`
 
 Query params: `from`, `to` (required, ISO 8601), `granularity` (day, default)
+
+#### `GET /api/v1/projects/:id/transitions` / `/sessions` / `/retention`
+
+Auth: Bearer Token or a PAT with `analytics:read`
+
+Screen-to-screen navigation flow, session counts/average duration, and cohort retention —
+all read from `counters`. Query params: `days` (1–90, default 30).
 
 ### Project Management
 

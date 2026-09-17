@@ -17,13 +17,14 @@ internal fun JWTPrincipal.roleClaim(): String =
 
 /**
  * Scope slugs a personal access token (`qm_pat_…`) can carry. Deliberately least-privilege:
- * a PAT can create and list projects but can never delete a project, regenerate a key, read
- * analytics, or manage users — those stay dashboard-session (JWT) only.
+ * a PAT can create/list projects and read analytics (with the matching scope) but can never
+ * delete a project, regenerate a key, or manage users — those stay dashboard-session (JWT) only.
  */
 object TokenScopes {
     const val PROJECTS_CREATE = "projects:create"
     const val PROJECTS_READ = "projects:read"
-    val ALL = setOf(PROJECTS_CREATE, PROJECTS_READ)
+    const val ANALYTICS_READ = "analytics:read"
+    val ALL = setOf(PROJECTS_CREATE, PROJECTS_READ, ANALYTICS_READ)
 }
 
 /**
@@ -50,6 +51,12 @@ fun ApiPrincipal.canCreateProjects(): Boolean = when (this) {
 fun ApiPrincipal.canReadProjects(): Boolean = when (this) {
     is ApiPrincipal.Session -> true
     is ApiPrincipal.Token -> TokenScopes.PROJECTS_READ in scopes || TokenScopes.PROJECTS_CREATE in scopes
+}
+
+/** Gates read access to event/funnel analytics — a PAT needs the explicit analytics:read scope. */
+fun ApiPrincipal.canReadAnalytics(): Boolean = when (this) {
+    is ApiPrincipal.Session -> true
+    is ApiPrincipal.Token -> TokenScopes.ANALYTICS_READ in scopes
 }
 
 /**

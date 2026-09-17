@@ -88,12 +88,11 @@ function handleProjectsCreate(): void {
 
     $id      = uuid4();
     $apiKey  = randomToken();
-    $installSalt = bin2hex(random_bytes(32));
 
     getDb()->prepare(
-        'INSERT INTO projects (id, name, description, owner_user_id, api_key_hash, api_key_last4, install_salt, plan_id, idempotency_key, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)'
-    )->execute([$id, $name, $description, $session['sub'], tokenHash($apiKey), substr($apiKey, -4), $installSalt, $idempotencyKey !== '' ? $idempotencyKey : null, now()]);
+        'INSERT INTO projects (id, name, description, owner_user_id, api_key_hash, api_key_last4, plan_id, idempotency_key, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)'
+    )->execute([$id, $name, $description, $session['sub'], tokenHash($apiKey), substr($apiKey, -4), $idempotencyKey !== '' ? $idempotencyKey : null, now()]);
 
     jsonResponse(201, [
         'id'            => $id,
@@ -122,14 +121,9 @@ function handleProjectRegenerateKey(string $projectId): void {
     }
 
     $apiKey = randomToken();
-    $installSalt = bin2hex(random_bytes(32));
     getDb()->prepare(
-        'UPDATE projects SET api_key_hash = ?, api_key_last4 = ?, install_salt = ? WHERE id = ?'
-    )->execute([tokenHash($apiKey), substr($apiKey, -4), $installSalt, $projectId]);
-
-    // Discard old install rows — their hashes cannot be recomputed against the new salt,
-    // and key rotation is an abuse-response action. See docs/security/publishable-api-key.md.
-    getDb()->prepare('DELETE FROM install_meta WHERE project_id = ?')->execute([$projectId]);
+        'UPDATE projects SET api_key_hash = ?, api_key_last4 = ? WHERE id = ?'
+    )->execute([tokenHash($apiKey), substr($apiKey, -4), $projectId]);
 
     jsonResponse(200, [
         'api_key'       => $apiKey,    // returned once, in plaintext

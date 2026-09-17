@@ -23,10 +23,9 @@ class MyApp : Application() {
         super.onCreate()
         QuietMetrix.init(QuietMetrixConfig(
             storageKeyPrefix = "myapp_",
-            trackingEndpoint = "https://your-server.com/api/v1/track",
+            trackingEndpoint = "https://your-server.com/api/v1",
             apiKey = "qm_ak_your_api_key",
             flushIntervalMs = 30_000L,
-            maxQueueSize = 1000,
         ))
     }
 }
@@ -60,7 +59,7 @@ val signupFunnel = Funnel(
 
 QuietMetrix.init(QuietMetrixConfig(
     storageKeyPrefix = "myapp_",
-    trackingEndpoint = "https://your-server.com/api/v1/track",
+    trackingEndpoint = "https://your-server.com/api/v1",
     apiKey = "qm_ak_your_api_key",
     funnels = listOf(signupFunnel),
 ))
@@ -86,4 +85,8 @@ lifecycleScope.launch {
 
 ## Offline Support
 
-Events are automatically buffered locally when the device is offline and sent when connectivity is restored. The `was_offline` flag is set on events captured while disconnected.
+Pending counters are in-memory only — there is no offline buffer, no connectivity detection, and no retry backoff. A flush that fails (offline, 5xx, timeout) simply drops that batch rather than queuing it. An app killed between flushes loses whatever was recorded since the last successful one.
+
+## Friction (Rage-tap Detection)
+
+QuietMetrix automatically detects "rage taps" — repeated fast taps in roughly the same spot, usually a sign the user is stuck or the UI didn't respond — and reports them as a `friction` counter, broken down by screen. No setup is required: the SDK wraps each `Activity`'s `Window.Callback` from the same lifecycle hook it already uses for screen-dwell tracking. (iOS requires a one-line opt-in — see [the iOS guide](ios.md#friction-rage-tap-detection); JVM/Linux/Windows/Web have no tap-capture signal at all.)

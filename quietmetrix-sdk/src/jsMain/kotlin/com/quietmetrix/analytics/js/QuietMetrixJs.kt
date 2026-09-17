@@ -33,7 +33,6 @@ external interface QuietMetrixInitOptions {
     var trackingEndpoint: String?
     var apiKey: String?
     var flushIntervalMs: Int?
-    var maxQueueSize: Int?
     var autoTrackInitialPageView: Boolean?
     var trackingAllowedByDefault: Boolean?
     var userAgent: String?
@@ -77,7 +76,6 @@ fun init(options: QuietMetrixInitOptions) {
             trackingEndpoint = options.trackingEndpoint,
             apiKey = options.apiKey,
             flushIntervalMs = (options.flushIntervalMs ?: 30_000).toLong(),
-            maxQueueSize = options.maxQueueSize ?: 1000,
             autoTrackInitialPageView = options.autoTrackInitialPageView ?: true,
             trackingAllowedByDefault = options.trackingAllowedByDefault ?: false,
             userAgent = options.userAgent,

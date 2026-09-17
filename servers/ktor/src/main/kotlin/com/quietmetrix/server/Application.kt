@@ -2,7 +2,6 @@ package com.quietmetrix.server
 
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.config.appModule
-import com.quietmetrix.server.ingest.IngestChannel
 import com.quietmetrix.server.plugins.configureCors
 import com.quietmetrix.server.plugins.configureDefaultHeaders
 import com.quietmetrix.server.plugins.configureMonitoring
@@ -37,9 +36,6 @@ fun Application.module() {
     if (seedAdminUser(userRepo, config.auth.adminEmail, config.auth.adminPassword)) {
         environment.log.info("Seeded initial admin user: ${config.auth.adminEmail}")
     }
-
-    val ingestChannel: IngestChannel = get()
-    ingestChannel.start(this)
 
     routing {
         configureAllRoutes(config)

@@ -23,6 +23,7 @@ nav:
       - Web (Wasm): sdk/web.md
       - JVM: sdk/jvm.md
       - Funnels: sdk/funnels.md
+      - Debug overlay: sdk/debug-overlay.md
   - Self-hosting:
       - Shared hosting (PHP): self-hosting/shared-hosting-php.md
       - Docker: self-hosting/docker.md

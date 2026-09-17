@@ -50,6 +50,14 @@ class FormatTest {
     }
 
     @Test
+    fun formatMinorUnitsToTwoDecimals() {
+        assertEquals("4.99", formatMinorUnits(499))
+        assertEquals("0.00", formatMinorUnits(0))
+        assertEquals("100.00", formatMinorUnits(10000))
+        assertEquals("-4.99", formatMinorUnits(-499))
+    }
+
+    @Test
     fun formatFloatOneDecimal() {
         assertEquals("0.0", formatFloat(0f))
         assertEquals("3.5", formatFloat(3.5f))

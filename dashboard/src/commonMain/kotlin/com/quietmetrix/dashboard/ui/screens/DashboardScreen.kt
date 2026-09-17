@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,17 +51,23 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.AccessTokenDto
 import com.quietmetrix.dashboard.api.ApiProject
-import com.quietmetrix.dashboard.api.EventRow
+import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.api.ScreenDuration
+import com.quietmetrix.dashboard.api.FrictionScreenItem
+import com.quietmetrix.dashboard.api.SearchScreenItem
 import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.api.TopEvent
 import com.quietmetrix.dashboard.api.TopScreen
+import com.quietmetrix.dashboard.api.TopValue
 import com.quietmetrix.dashboard.api.Transition
 import com.quietmetrix.dashboard.format.formatBucketLabel
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatDateOnly
 import com.quietmetrix.dashboard.format.formatDuration
-import com.quietmetrix.dashboard.format.formatFloat
+import com.quietmetrix.dashboard.format.formatMinorUnits
+import com.quietmetrix.dashboard.format.formatPercent
+import com.quietmetrix.dashboard.format.formatWilsonRange
+import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_close
@@ -75,19 +82,25 @@ import com.quietmetrix.dashboard.resources.card_daily_volume
 import com.quietmetrix.dashboard.resources.card_device_classes
 import com.quietmetrix.dashboard.resources.card_platforms
 import com.quietmetrix.dashboard.resources.card_screen_time
+import com.quietmetrix.dashboard.resources.card_friction
+import com.quietmetrix.dashboard.resources.card_search_zero_result
 import com.quietmetrix.dashboard.resources.card_sessions_trend
 import com.quietmetrix.dashboard.resources.card_top_events
 import com.quietmetrix.dashboard.resources.card_top_screens
+import com.quietmetrix.dashboard.resources.card_top_values
+import com.quietmetrix.dashboard.resources.col_cohort
+import com.quietmetrix.dashboard.resources.col_cohort_size
 import com.quietmetrix.dashboard.resources.col_count
-import com.quietmetrix.dashboard.resources.col_country
-import com.quietmetrix.dashboard.resources.col_device
-import com.quietmetrix.dashboard.resources.col_duration
-import com.quietmetrix.dashboard.resources.col_event
-import com.quietmetrix.dashboard.resources.col_from
-import com.quietmetrix.dashboard.resources.col_platform
 import com.quietmetrix.dashboard.resources.col_screen
-import com.quietmetrix.dashboard.resources.col_session
-import com.quietmetrix.dashboard.resources.col_time
+import com.quietmetrix.dashboard.resources.col_rage_taps
+import com.quietmetrix.dashboard.resources.col_zero_result_rate
+import com.quietmetrix.dashboard.resources.col_day1
+import com.quietmetrix.dashboard.resources.col_day14
+import com.quietmetrix.dashboard.resources.col_day3
+import com.quietmetrix.dashboard.resources.col_day30
+import com.quietmetrix.dashboard.resources.col_activation
+import com.quietmetrix.dashboard.resources.col_day7
+import com.quietmetrix.dashboard.resources.col_from
 import com.quietmetrix.dashboard.resources.col_to
 import com.quietmetrix.dashboard.resources.create_app_action
 import com.quietmetrix.dashboard.resources.create_project_button
@@ -95,16 +108,6 @@ import com.quietmetrix.dashboard.resources.create_project_cancel
 import com.quietmetrix.dashboard.resources.create_project_description_label
 import com.quietmetrix.dashboard.resources.create_project_dialog_title
 import com.quietmetrix.dashboard.resources.create_project_name_label
-import com.quietmetrix.dashboard.resources.detail_no_props
-import com.quietmetrix.dashboard.resources.detail_props
-import com.quietmetrix.dashboard.resources.detail_title
-import com.quietmetrix.dashboard.resources.event_meta_country
-import com.quietmetrix.dashboard.resources.event_meta_language
-import com.quietmetrix.dashboard.resources.event_meta_platform
-import com.quietmetrix.dashboard.resources.event_meta_screen
-import com.quietmetrix.dashboard.resources.event_meta_session
-import com.quietmetrix.dashboard.resources.events_live
-import com.quietmetrix.dashboard.resources.filter_all
 import com.quietmetrix.dashboard.resources.ic_copy
 import com.quietmetrix.dashboard.resources.ic_delete
 import com.quietmetrix.dashboard.resources.ic_events
@@ -115,20 +118,17 @@ import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.ic_plus
 import com.quietmetrix.dashboard.resources.ic_projects
 import com.quietmetrix.dashboard.resources.ic_refresh
+import com.quietmetrix.dashboard.resources.ic_retention
 import com.quietmetrix.dashboard.resources.ic_search
 import com.quietmetrix.dashboard.resources.invite_link_body
 import com.quietmetrix.dashboard.resources.invite_link_title
 import com.quietmetrix.dashboard.resources.kpi_avg_duration
 import com.quietmetrix.dashboard.resources.kpi_errors
 import com.quietmetrix.dashboard.resources.kpi_events
-import com.quietmetrix.dashboard.resources.kpi_events_per_session
 import com.quietmetrix.dashboard.resources.kpi_offline_captured
 import com.quietmetrix.dashboard.resources.kpi_sessions
 import com.quietmetrix.dashboard.resources.label_language
 import com.quietmetrix.dashboard.resources.label_sdk
-import com.quietmetrix.dashboard.resources.page_info
-import com.quietmetrix.dashboard.resources.page_next
-import com.quietmetrix.dashboard.resources.page_prev
 import com.quietmetrix.dashboard.resources.picker_no_projects
 import com.quietmetrix.dashboard.resources.picker_select_project
 import com.quietmetrix.dashboard.resources.project_created_api_key_label
@@ -142,7 +142,6 @@ import com.quietmetrix.dashboard.resources.projects_your
 import com.quietmetrix.dashboard.resources.regenerate_confirm_body
 import com.quietmetrix.dashboard.resources.regenerate_confirm_title
 import com.quietmetrix.dashboard.resources.regenerated_key_title
-import com.quietmetrix.dashboard.resources.search_events
 import com.quietmetrix.dashboard.resources.server_mode_debug
 import com.quietmetrix.dashboard.resources.server_mode_production
 import com.quietmetrix.dashboard.resources.settings_about_body
@@ -161,22 +160,15 @@ import com.quietmetrix.dashboard.resources.snackbar_api_key_copied
 import com.quietmetrix.dashboard.resources.snackbar_invite_link_copied
 import com.quietmetrix.dashboard.resources.snackbar_token_copied
 import com.quietmetrix.dashboard.resources.state_no_data
-import com.quietmetrix.dashboard.resources.state_no_events
 import com.quietmetrix.dashboard.resources.state_no_projects
+import com.quietmetrix.dashboard.resources.state_no_retention
 import com.quietmetrix.dashboard.resources.state_no_transitions
-import com.quietmetrix.dashboard.resources.state_waiting_live
-import com.quietmetrix.dashboard.resources.summary_offline
-import com.quietmetrix.dashboard.resources.summary_top_country
-import com.quietmetrix.dashboard.resources.summary_top_event
-import com.quietmetrix.dashboard.resources.summary_total
-import com.quietmetrix.dashboard.resources.summary_types
 import com.quietmetrix.dashboard.resources.tab_info_content_description
-import com.quietmetrix.dashboard.resources.tab_info_events
 import com.quietmetrix.dashboard.resources.tab_info_flow
 import com.quietmetrix.dashboard.resources.tab_info_funnels
-import com.quietmetrix.dashboard.resources.tab_info_live
 import com.quietmetrix.dashboard.resources.tab_info_overview
 import com.quietmetrix.dashboard.resources.tab_info_projects
+import com.quietmetrix.dashboard.resources.tab_info_retention
 import com.quietmetrix.dashboard.resources.tab_info_settings
 import com.quietmetrix.dashboard.resources.tab_info_users
 import com.quietmetrix.dashboard.resources.tokens_cancel_action
@@ -193,7 +185,12 @@ import com.quietmetrix.dashboard.resources.tokens_name_placeholder
 import com.quietmetrix.dashboard.resources.tokens_never_used
 import com.quietmetrix.dashboard.resources.tokens_new_action
 import com.quietmetrix.dashboard.resources.tokens_revoke_action
+import com.quietmetrix.dashboard.resources.tokens_scope_create_projects
 import com.quietmetrix.dashboard.resources.tokens_scope_label
+import com.quietmetrix.dashboard.resources.tokens_scope_picker_label
+import com.quietmetrix.dashboard.resources.tokens_scope_read_analytics
+import com.quietmetrix.dashboard.resources.tokens_scope_read_analytics_hint
+import com.quietmetrix.dashboard.resources.tokens_scope_read_projects
 import com.quietmetrix.dashboard.resources.tokens_title
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
@@ -244,14 +241,13 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
         snackbarState = snackbarState,
     ) { sizeClass ->
         when (state.activeDestination) {
-            AppTab.Overview -> OverviewTab(viewModel, state, sizeClass)
-            AppTab.Events   -> EventsTab(viewModel, state, sizeClass)
-            AppTab.Flow     -> FlowTab(viewModel, state, sizeClass)
-            AppTab.Live     -> LiveTab(viewModel, state)
-            AppTab.Projects -> ProjectsTab(viewModel, state, sizeClass)
-            AppTab.Funnels  -> FunnelsTab(viewModel, state, sizeClass)
-            AppTab.Users    -> UsersTab(viewModel, state, sizeClass)
-            AppTab.Settings -> SettingsTab(viewModel, state)
+            AppTab.Overview  -> OverviewTab(viewModel, state, sizeClass)
+            AppTab.Flow      -> FlowTab(viewModel, state, sizeClass)
+            AppTab.Retention -> RetentionTab(viewModel, state, sizeClass)
+            AppTab.Projects  -> ProjectsTab(viewModel, state, sizeClass)
+            AppTab.Funnels   -> FunnelsTab(viewModel, state, sizeClass)
+            AppTab.Users     -> UsersTab(viewModel, state, sizeClass)
+            AppTab.Settings  -> SettingsTab(viewModel, state)
         }
     }
 
@@ -446,14 +442,13 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
 
     state.showInfo?.let { tab ->
         val infoText = when (tab) {
-            AppTab.Overview -> stringResource(Res.string.tab_info_overview)
-            AppTab.Events   -> stringResource(Res.string.tab_info_events)
-            AppTab.Flow     -> stringResource(Res.string.tab_info_flow)
-            AppTab.Live     -> stringResource(Res.string.tab_info_live)
-            AppTab.Projects -> stringResource(Res.string.tab_info_projects)
-            AppTab.Funnels  -> stringResource(Res.string.tab_info_funnels)
-            AppTab.Users    -> stringResource(Res.string.tab_info_users)
-            AppTab.Settings -> stringResource(Res.string.tab_info_settings)
+            AppTab.Overview  -> stringResource(Res.string.tab_info_overview)
+            AppTab.Flow      -> stringResource(Res.string.tab_info_flow)
+            AppTab.Retention -> stringResource(Res.string.tab_info_retention)
+            AppTab.Projects  -> stringResource(Res.string.tab_info_projects)
+            AppTab.Funnels   -> stringResource(Res.string.tab_info_funnels)
+            AppTab.Users     -> stringResource(Res.string.tab_info_users)
+            AppTab.Settings  -> stringResource(Res.string.tab_info_settings)
         }
         AlertDialog(
             onDismissRequest = { viewModel.dismissTabInfo() },
@@ -532,11 +527,9 @@ private fun OverviewTab(viewModel: DashboardViewModel, state: DashboardState, si
                     ContentState.Loading -> {
                         KpiSkeleton(Modifier.fillSlot())
                         KpiSkeleton(Modifier.fillSlot())
-                        KpiSkeleton(Modifier.fillSlot())
                     }
                     else -> {
                         KpiCard(stringResource(Res.string.kpi_sessions), formatCount((sess?.totalSessions ?: 0).toLong()), Modifier.fillSlot())
-                        KpiCard(stringResource(Res.string.kpi_events_per_session), formatFloat(sess?.avgEvents ?: 0f), Modifier.fillSlot())
                         KpiCard(stringResource(Res.string.kpi_avg_duration), formatDuration(sess?.avgDurationSec ?: 0), Modifier.fillSlot())
                     }
                 }
@@ -625,6 +618,22 @@ private fun OverviewTab(viewModel: DashboardViewModel, state: DashboardState, si
                         }
                     }
                 }
+                Card(modifier = Modifier.fillSlot()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            stringResource(Res.string.card_top_values),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        val topValues = agg?.topValues ?: emptyList()
+                        if (topValues.isEmpty()) {
+                            EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+                        } else {
+                            topValues.forEach { TopValueRow(it) }
+                        }
+                    }
+                }
             }
         }
     }
@@ -636,6 +645,16 @@ private fun TopEventRow(item: TopEvent) {
         Text(item.eventName, modifier = Modifier.weight(1f),
              style = MaterialTheme.typography.bodyMedium)
         Text(item.count.toString(), style = MaterialTheme.typography.bodyMedium,
+             color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun TopValueRow(item: TopValue) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(item.name, modifier = Modifier.weight(1f),
+             style = MaterialTheme.typography.bodyMedium)
+        Text(formatMinorUnits(item.totalMinorUnits), style = MaterialTheme.typography.bodyMedium,
              color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -667,374 +686,6 @@ private fun formatDwell(ms: Long): String {
     val minutes = totalSec / 60
     val seconds = totalSec % 60
     return if (seconds == 0) "${minutes}m" else "${minutes}m ${seconds}s"
-}
-
-// ---------------------------------------------------------------------------
-// Events tab
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun EventsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // --- Live polling: while enabled, refresh the live feed every few seconds ---
-            var live by remember { mutableStateOf(false) }
-            LaunchedEffect(live, state.currentProjectId, state.demoMode) {
-                while (live) {
-                    viewModel.loadLiveEvents()
-                    delay(4000)
-                }
-            }
-            val source = if (live) state.liveEvents else state.recentEvents
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                if (state.demoMode) DemoBadge()
-                IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Events) },
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.tab_info_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Text(stringResource(Res.string.events_live), style = MaterialTheme.typography.labelLarge)
-                Switch(checked = live, onCheckedChange = { live = it }, modifier = Modifier.handCursor())
-            }
-
-            state.sectionErrors[DataSection.Events]?.let {
-                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
-            }
-
-            // --- Summary header: stats derived from the loaded events ---
-            val summary = remember(source) { eventsSummary(source) }
-            val none = stringResource(Res.string.value_none)
-            ResponsiveRowOrColumn(sizeClass) {
-                KpiCard(stringResource(Res.string.summary_total), formatCount(summary.total.toLong()), Modifier.fillSlot())
-                KpiCard(stringResource(Res.string.summary_offline), formatCount(summary.offline.toLong()), Modifier.fillSlot())
-                KpiCard(stringResource(Res.string.summary_types), formatCount(summary.distinctEvents.toLong()), Modifier.fillSlot())
-                KpiCard(stringResource(Res.string.summary_top_event), summary.topEvent ?: none, Modifier.fillSlot())
-                KpiCard(stringResource(Res.string.summary_top_country), summary.topCountry ?: none, Modifier.fillSlot())
-            }
-
-            // --- Filters: text search + event / platform / country facets ---
-            var query by remember { mutableStateOf("") }
-            var eventFilter by remember { mutableStateOf<String?>(null) }
-            var platformFilter by remember { mutableStateOf<String?>(null) }
-            var countryFilter by remember { mutableStateOf<String?>(null) }
-            val facets = remember(source) { distinctFacets(source) }
-            // Drop a stale facet selection if the underlying data no longer contains it.
-            if (eventFilter != null && eventFilter !in facets.events) eventFilter = null
-            if (platformFilter != null && platformFilter !in facets.platforms) platformFilter = null
-            if (countryFilter != null && countryFilter !in facets.countries) countryFilter = null
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text(stringResource(Res.string.search_events)) },
-                leadingIcon = {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_search),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FacetDropdown(stringResource(Res.string.col_event), facets.events, eventFilter) { eventFilter = it }
-                FacetDropdown(stringResource(Res.string.col_platform), facets.platforms, platformFilter) { platformFilter = it }
-                FacetDropdown(stringResource(Res.string.col_country), facets.countries, countryFilter) { countryFilter = it }
-            }
-
-            val filtered = remember(source, query, eventFilter, platformFilter, countryFilter) {
-                val byFacets = applyEventFilters(source, eventFilter, platformFilter, countryFilter)
-                filterItems(byFacets, query) {
-                    listOf(it.eventName, it.screen, it.platform, it.country, it.sessionId)
-                }
-            }
-
-            // Sort the FULL filtered dataset before paginating, so a header click orders every page
-            // — not just the rows currently visible. DataTable runs in controlled-sort mode.
-            var sort by remember { mutableStateOf(SortColumn(0, ascending = true)) }
-            val sorted = remember(filtered, sort) { sortEvents(filtered, sort.index, sort.ascending) }
-
-            var page by remember { mutableIntStateOf(1) }
-            LaunchedEffect(query, eventFilter, platformFilter, countryFilter) { page = 1 }
-            val pageSize = 20
-            val paged = remember(sorted, page) { paginate(sorted, page, pageSize) }
-
-            Card(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                    if (filtered.isEmpty()) {
-                        EmptyState(
-                            Res.drawable.ic_events,
-                            Res.string.state_no_events,
-                            Modifier.weight(1f),
-                        )
-                    } else {
-                        DataTable(
-                            columns = eventColumns(),
-                            rows = paged.items,
-                            sizeClass = sizeClass,
-                            sort = sort,
-                            onSortChange = { sort = it; page = 1 },
-                            rowKey = { ev -> ev.id ?: (ev.eventName to ev.ts) },
-                            selectedRowKey = state.selectedEvent?.let { it.id ?: (it.eventName to it.ts) },
-                            onRowClick = { ev -> viewModel.selectEvent(ev) },
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                        )
-                    }
-                    PaginationControls(paged, onPrev = { page = (page - 1).coerceAtLeast(1) }, onNext = { page++ })
-                }
-            }
-        }
-    }
-
-    state.selectedEvent?.let { ev ->
-        EventDetailDialog(ev, onClose = { viewModel.clearSelectedEvent() })
-    }
-}
-
-/** A single facet filter: button shows the active value, or [label] when unset. */
-@Composable
-private fun FacetDropdown(
-    label: String,
-    options: List<String>,
-    selected: String?,
-    onSelect: (String?) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    OutlinedButton(
-        onClick = { expanded = true },
-        enabled = options.isNotEmpty(),
-        modifier = Modifier.handCursor(),
-    ) {
-        Text(selected ?: label)
-    }
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        DropdownMenuItem(
-            text = { Text(stringResource(Res.string.filter_all)) },
-            onClick = { onSelect(null); expanded = false },
-            modifier = Modifier.handCursor(),
-        )
-        options.forEach { opt ->
-            DropdownMenuItem(
-                text = { Text(opt) },
-                onClick = { onSelect(opt); expanded = false },
-                modifier = Modifier.handCursor(),
-            )
-        }
-    }
-}
-
-@Composable
-private fun EventDetailDialog(ev: EventRow, onClose: () -> Unit) {
-    val prettyProps = remember(ev.props) {
-        ev.props?.let {
-            runCatching { Json { prettyPrint = true }.encodeToString(JsonElement.serializer(), it) }.getOrNull()
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onClose,
-        confirmButton = {
-            TextButton(onClick = onClose, modifier = Modifier.handCursor()) {
-                Text(stringResource(Res.string.action_close))
-            }
-        },
-        title = { Text(ev.eventName.ifBlank { stringResource(Res.string.detail_title) }) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                DetailRow(stringResource(Res.string.col_time), ev.ts)
-                DetailRow(stringResource(Res.string.col_screen), ev.screen)
-                DetailRow(stringResource(Res.string.col_duration), ev.durationMs?.let { formatDwell(it) })
-                DetailRow(stringResource(Res.string.col_country), ev.country)
-                DetailRow(stringResource(Res.string.col_platform), ev.platform)
-                DetailRow(stringResource(Res.string.col_device), ev.deviceClass)
-                DetailRow(stringResource(Res.string.label_language), ev.language)
-                DetailRow(stringResource(Res.string.label_sdk), ev.sdkVersion)
-                DetailRow(stringResource(Res.string.col_session), ev.sessionId)
-                HorizontalDivider()
-                Text(
-                    stringResource(Res.string.detail_props),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        prettyProps ?: stringResource(Res.string.detail_no_props),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(8.dp),
-                    )
-                }
-            }
-        },
-    )
-}
-
-@Composable
-private fun DetailRow(label: String, value: String?) {
-    val none = stringResource(Res.string.value_none)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(96.dp),
-        )
-        Text(value?.ifBlank { none } ?: none, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-@Composable
-private fun eventColumns(): List<Column<EventRow>> {
-    val none = stringResource(Res.string.value_none)
-    // Column order MUST match `eventSortSelectors` (EventsLogic.kt): each column's sortSelector is
-    // taken from that shared list by index, so the header's sort index and the full-dataset
-    // `sortEvents(index)` call in EventsTab always resolve to the same selector.
-    return listOf(
-        Column(
-            title = stringResource(Res.string.col_event),
-            weight = 1.6f,
-            cell = { ev ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(ev.eventName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    if (ev.wasOffline) DemoBadgeSmall(stringResource(Res.string.badge_offline))
-                }
-            },
-            sortSelector = eventSortSelectors[0],
-        ),
-        Column(
-            title = stringResource(Res.string.col_screen),
-            weight = 1.2f,
-            cell = { ev -> Text(ev.screen ?: none, style = MaterialTheme.typography.bodySmall) },
-            sortSelector = eventSortSelectors[1],
-            hideOnCompact = true,
-        ),
-        Column(
-            title = stringResource(Res.string.col_duration),
-            weight = 1.0f,
-            cell = { ev ->
-                Text(
-                    ev.durationMs?.let { formatDwell(it) } ?: none,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            sortSelector = eventSortSelectors[2],
-        ),
-        Column(
-            title = stringResource(Res.string.col_platform),
-            weight = 0.9f,
-            cell = { ev -> Text(ev.platform ?: none, style = MaterialTheme.typography.bodySmall) },
-            sortSelector = eventSortSelectors[3],
-            hideOnCompact = true,
-        ),
-        Column(
-            title = stringResource(Res.string.col_device),
-            weight = 0.8f,
-            cell = { ev -> Text(ev.deviceClass ?: none, style = MaterialTheme.typography.bodySmall) },
-            sortSelector = eventSortSelectors[4],
-            hideOnCompact = true,
-        ),
-        Column(
-            title = stringResource(Res.string.col_country),
-            weight = 0.7f,
-            cell = { ev -> Text(ev.country ?: none, style = MaterialTheme.typography.bodySmall) },
-            sortSelector = eventSortSelectors[5],
-            hideOnCompact = true,
-        ),
-        Column(
-            title = stringResource(Res.string.label_language),
-            weight = 0.7f,
-            cell = { ev -> Text(ev.language ?: none, style = MaterialTheme.typography.bodySmall) },
-            sortSelector = eventSortSelectors[6],
-            hideOnCompact = true,
-        ),
-        Column(
-            title = stringResource(Res.string.col_session),
-            weight = 0.9f,
-            cell = { ev -> Text(ev.sessionId?.take(8) ?: none, style = MaterialTheme.typography.bodySmall) },
-            sortSelector = eventSortSelectors[7],
-            hideOnCompact = true,
-        ),
-        Column(
-            title = stringResource(Res.string.col_time),
-            weight = 1.1f,
-            cell = { ev -> Text(ev.ts, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            sortSelector = eventSortSelectors[8],
-        ),
-    )
-}
-
-@Composable
-private fun PaginationControls(
-    page: com.quietmetrix.dashboard.ui.components.table.Page<*>,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-) {
-    if (page.totalPages <= 1) return
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OutlinedButton(onClick = onPrev, enabled = page.page > 1) {
-            Text(stringResource(Res.string.page_prev))
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            stringResource(Res.string.page_info, page.page, page.totalPages),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(12.dp))
-        OutlinedButton(onClick = onNext, enabled = page.page < page.totalPages) {
-            Text(stringResource(Res.string.page_next))
-        }
-    }
-}
-
-@Composable
-private fun EventRowItem(ev: EventRow) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(ev.eventName, modifier = Modifier.weight(1f),
-                 style = MaterialTheme.typography.bodyMedium)
-            if (ev.wasOffline) DemoBadgeSmall(stringResource(Res.string.badge_offline))
-            Spacer(Modifier.width(8.dp))
-            Text(ev.ts, style = MaterialTheme.typography.bodySmall,
-                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        val sub = listOfNotNull(
-            ev.screen?.let { stringResource(Res.string.event_meta_screen, it) },
-            ev.platform?.let { stringResource(Res.string.event_meta_platform, it) },
-            ev.country?.let { stringResource(Res.string.event_meta_country, it) },
-            ev.language?.let { stringResource(Res.string.event_meta_language, it) },
-            ev.sessionId?.let { stringResource(Res.string.event_meta_session, it) },
-        ).joinToString("  ")
-        if (sub.isNotEmpty()) {
-            Text(sub, style = MaterialTheme.typography.bodySmall,
-                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        HorizontalDivider(modifier = Modifier.padding(top = 6.dp),
-                          color = MaterialTheme.colorScheme.surfaceVariant)
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1116,6 +767,105 @@ private fun FlowTab(viewModel: DashboardViewModel, state: DashboardState, sizeCl
                 }
             }
 
+            val searchScreens = state.search?.screens ?: emptyList()
+            if (searchScreens.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            stringResource(Res.string.card_search_zero_result),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
+                        )
+                        DataTable(
+                            columns = listOf(
+                                Column(
+                                    title = stringResource(Res.string.col_screen),
+                                    weight = 1f,
+                                    cell = { s: SearchScreenItem -> Text(s.screen, style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.screen },
+                                ),
+                                Column(
+                                    title = stringResource(Res.string.col_count),
+                                    weight = 0.6f,
+                                    cell = { s: SearchScreenItem -> Text(formatCount(s.total), style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.total },
+                                ),
+                                Column<SearchScreenItem>(
+                                    title = stringResource(Res.string.col_zero_result_rate),
+                                    weight = 0.9f,
+                                    cell = { s ->
+                                        val rate = s.rate
+                                        if (rate == null) {
+                                            Text(stringResource(Res.string.value_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        } else {
+                                            val interval = wilsonInterval(s.zeroResult, s.total)
+                                            Column {
+                                                Text(formatPercent(rate), style = MaterialTheme.typography.bodyMedium)
+                                                if (interval != null) {
+                                                    Text(
+                                                        formatWilsonRange(interval),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                    sortSelector = { it.rate ?: -1.0 },
+                                ),
+                            ),
+                            rows = searchScreens,
+                            sizeClass = sizeClass,
+                            initialSort = SortColumn(2, ascending = false),
+                            rowKey = { it.screen },
+                            modifier = Modifier.heightIn(max = 400.dp).fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            val frictionScreens = state.friction?.screens ?: emptyList()
+            if (frictionScreens.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            stringResource(Res.string.card_friction),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
+                        )
+                        DataTable(
+                            columns = listOf(
+                                Column(
+                                    title = stringResource(Res.string.col_screen),
+                                    weight = 1f,
+                                    cell = { f: FrictionScreenItem -> Text(f.screen, style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.screen },
+                                ),
+                                Column(
+                                    title = stringResource(Res.string.col_rage_taps),
+                                    weight = 0.6f,
+                                    cell = { f: FrictionScreenItem ->
+                                        Text(
+                                            formatCount(f.rageTaps),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    sortSelector = { it.rageTaps },
+                                ),
+                            ),
+                            rows = frictionScreens,
+                            sizeClass = sizeClass,
+                            initialSort = SortColumn(1, ascending = false),
+                            rowKey = { it.screen },
+                            modifier = Modifier.heightIn(max = 400.dp).fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
             val agg2 = state.aggregates
             ResponsiveRowOrColumn(sizeClass) {
                 Card(modifier = Modifier.fillSlot()) {
@@ -1166,29 +916,23 @@ private fun FlowTab(viewModel: DashboardViewModel, state: DashboardState, sizeCl
 }
 
 // ---------------------------------------------------------------------------
-// Live tab
+// Retention tab
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun LiveTab(viewModel: DashboardViewModel, state: DashboardState) {
-    // Poll the recent-events endpoint every 5s while the tab is composed so the
-    // "auto-refreshes every few seconds" claim in the info dialog is true.
-    LaunchedEffect(state.currentProjectId) {
-        while (true) {
-            viewModel.loadLiveEvents()
-            kotlinx.coroutines.delay(5_000)
-        }
-    }
-
+private fun RetentionTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
     MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
                 IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Live) },
+                    onClick = { viewModel.showTabInfo(AppTab.Retention) },
                     modifier = Modifier.handCursor(),
                 ) {
                     Icon(
@@ -1200,20 +944,85 @@ private fun LiveTab(viewModel: DashboardViewModel, state: DashboardState) {
                 }
             }
 
-            Card(modifier = Modifier.fillMaxSize()) {
-                if (state.liveEvents.isEmpty()) {
-                    EmptyState(Res.drawable.ic_live, Res.string.state_waiting_live, Modifier.padding(24.dp))
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
-                        contentPadding = PaddingValues(8.dp),
-                    ) {
-                        items(state.liveEvents) { ev -> EventRowItem(ev) }
+            state.sectionErrors[DataSection.Retention]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
+            }
+
+            val cohorts = state.retention?.cohorts ?: emptyList()
+            if (cohorts.isEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    EmptyState(Res.drawable.ic_retention, Res.string.state_no_retention, Modifier.padding(16.dp))
+                }
+            } else {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        DataTable(
+                            columns = listOf(
+                                Column<RetentionCohort>(
+                                    title = stringResource(Res.string.col_cohort),
+                                    weight = 1f,
+                                    cell = { c -> Text(c.cohortDate, style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.cohortDate },
+                                ),
+                                Column<RetentionCohort>(
+                                    title = stringResource(Res.string.col_cohort_size),
+                                    weight = 0.6f,
+                                    cell = { c -> Text(formatCount(c.size.toLong()), style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.size },
+                                ),
+                                retentionDayColumn(stringResource(Res.string.col_day1)) { it.day1 },
+                                retentionDayColumn(stringResource(Res.string.col_day3)) { it.day3 },
+                                retentionDayColumn(stringResource(Res.string.col_day7)) { it.day7 },
+                                retentionDayColumn(stringResource(Res.string.col_day14)) { it.day14 },
+                                retentionDayColumn(stringResource(Res.string.col_day30)) { it.day30 },
+                                retentionDayColumn(stringResource(Res.string.col_activation)) { it.activationRate },
+                            ),
+                            rows = cohorts,
+                            sizeClass = sizeClass,
+                            initialSort = SortColumn(0, ascending = false),
+                            rowKey = { it.cohortDate },
+                            modifier = Modifier.heightIn(max = 500.dp).fillMaxWidth(),
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * One day-N retention column: the observed percentage, with its Wilson score interval shown
+ * as a smaller range underneath — the honest-error-bars default every rate in this dashboard
+ * is shown with (see [wilsonInterval]'s doc comment). Null (not yet observable at this cohort's
+ * age) renders as [value_none]; a zero-size cohort has no interval to show either.
+ */
+@Composable
+private fun retentionDayColumn(title: String, dayValue: (RetentionCohort) -> Double?): Column<RetentionCohort> {
+    val none = stringResource(Res.string.value_none)
+    return Column(
+        title = title,
+        weight = 0.9f,
+        cell = { c ->
+            val fraction = dayValue(c)
+            if (fraction == null || c.size <= 0) {
+                Text(none, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                val successes = kotlin.math.round(fraction * c.size).toLong()
+                val interval = wilsonInterval(successes, c.size.toLong())
+                Column {
+                    Text(formatPercent(fraction), style = MaterialTheme.typography.bodyMedium)
+                    if (interval != null) {
+                        Text(
+                            formatWilsonRange(interval),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        sortSelector = { dayValue(it) },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1646,8 +1455,8 @@ private fun AccessTokensCard(viewModel: DashboardViewModel, state: DashboardStat
     if (showCreate) {
         CreateTokenDialog(
             onDismiss = { showCreate = false },
-            onCreate = { name ->
-                viewModel.createToken(name, listOf("projects:create"))
+            onCreate = { name, scopes ->
+                viewModel.createToken(name, scopes)
                 showCreate = false
             },
         )
@@ -1677,25 +1486,59 @@ private fun AccessTokensCard(viewModel: DashboardViewModel, state: DashboardStat
 }
 
 @Composable
-private fun CreateTokenDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+private fun CreateTokenDialog(onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("") }
+    var canCreateProjects by remember { mutableStateOf(true) }
+    var canReadProjects by remember { mutableStateOf(false) }
+    var canReadAnalytics by remember { mutableStateOf(false) }
+    val selectedScopes = buildList {
+        if (canCreateProjects) add("projects:create")
+        if (canReadProjects) add("projects:read")
+        if (canReadAnalytics) add("analytics:read")
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.tokens_new_action)) },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(Res.string.tokens_name_label)) },
-                placeholder = { Text(stringResource(Res.string.tokens_name_placeholder)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(Res.string.tokens_name_label)) },
+                    placeholder = { Text(stringResource(Res.string.tokens_name_placeholder)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(Res.string.tokens_scope_picker_label),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.handCursor()) {
+                    Checkbox(checked = canCreateProjects, onCheckedChange = { canCreateProjects = it })
+                    Text(stringResource(Res.string.tokens_scope_create_projects))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.handCursor()) {
+                    Checkbox(checked = canReadProjects, onCheckedChange = { canReadProjects = it })
+                    Text(stringResource(Res.string.tokens_scope_read_projects))
+                }
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.handCursor()) {
+                        Checkbox(checked = canReadAnalytics, onCheckedChange = { canReadAnalytics = it })
+                        Text(stringResource(Res.string.tokens_scope_read_analytics))
+                    }
+                    Text(
+                        stringResource(Res.string.tokens_scope_read_analytics_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 40.dp),
+                    )
+                }
+            }
         },
         confirmButton = {
             TextButton(
-                onClick = { if (name.isNotBlank()) onCreate(name.trim()) },
-                enabled = name.isNotBlank(),
+                onClick = { if (name.isNotBlank() && selectedScopes.isNotEmpty()) onCreate(name.trim(), selectedScopes) },
+                enabled = name.isNotBlank() && selectedScopes.isNotEmpty(),
                 modifier = Modifier.handCursor(),
             ) { Text(stringResource(Res.string.tokens_create_action)) }
         },

@@ -5,7 +5,7 @@ import io.ktor.server.routing.Routing
 
 fun Routing.configureAllRoutes(config: AppConfig) {
     configureMetaRoutes()
-    configureTrackRoutes()
+    configureCounterRoutes()
     configureAuthRoutes(config)
     configureUserRoutes(config)
     configureProjectRoutes()

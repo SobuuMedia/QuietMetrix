@@ -68,15 +68,23 @@ paths:
                     ok: true
                     version: "0.1.0"
 
-  /api/v1/track:
+  /api/v1/counters:
     post:
       tags: [Tracking]
-      operationId: trackEvent
-      summary: Track a single event
+      operationId: postCounters
+      summary: Submit a batch of counter deltas (aggregate-only ingest)
       description: |
-        Ingest a single analytics event. Events are queued asynchronously; the server
-        returns 202 as soon as the event is accepted into the inbox. The server may
-        adjust the `ts` timestamp if it is more than 7 days from the server's clock.
+        The aggregate-only ingest path: the device computes its own analysis (screen
+        transitions, funnel step reached, retention bucket, ...) and sends only
+        `(metric, dims) -> n` deltas. No install identifier is ever accepted on this route —
+        `u` is the SDK's own "first flush of this cell today" signal, summed server-side into
+        a distinct-device count with no identifier ever existing. `day` is the device's local
+        date and is clamped server-side to `[today - 2, today]`.
+
+        Each item is independently validated against a fixed per-metric dimension registry
+        (unknown metric, wrong dimension set, or a value outside the allowed charset) and, if
+        invalid, is quarantined rather than failing the whole batch — see `quarantined` in the
+        response.
       security:
         - ApiKey: []
       requestBody:
@@ -84,52 +92,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrackEventRequest"
+              $ref: "#/components/schemas/CounterBatchRequest"
             examples:
-              pageView:
-                summary: A page view event
+              screenFlowAndFunnel:
+                summary: A screen transition and a funnel-step counter
                 value:
-                  event: page_view
-                  screen: home
-                  props:
-                    referrer: "https://google.com"
-                    language: en
-                  sid: abc123def456
-                  ts: "2026-04-30T12:34:56Z"
                   sdk:
                     platform: android
-                    version: "0.4.0"
-                  ctx:
-                    language: en
-                    ua: "Mozilla/5.0 (Linux; Android 14)"
-                    viewport: "412x914"
-              customEvent:
-                summary: A custom event with properties
-                value:
-                  event: button_click
-                  screen: settings
-                  props:
-                    button_id: save
-                    section: profile
-                  sid: abc123def456
-                  ts: "2026-04-30T12:34:56Z"
-                  was_offline: false
-                  sdk:
-                    platform: wasmJs
-                    version: "0.4.0"
-                  ctx:
-                    language: en
-                    ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-                    viewport: "1920x1080"
+                    version: "0.5.0"
+                  app:
+                    version: "2.4.0"
+                    country: us
+                  day: "2026-09-04"
+                  counters:
+                    - m: screen_transition
+                      d: { from: Library, to: BookDetail }
+                      n: 3
+                      u: 1
+                    - m: funnel_step
+                      d: { f: checkout, rev: "7", step: "3" }
+                      n: 1
+                      u: 0
       responses:
         "202":
-          description: Event accepted into the ingest queue
+          description: Batch processed (some items may have been quarantined; see `quarantined`)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AcceptedResponse"
+                $ref: "#/components/schemas/CounterBatchResponse"
         "400":
-          description: Invalid request body or schema violation
+          description: Invalid request body or empty batch
           content:
             application/json:
               schema:
@@ -139,10 +131,10 @@ paths:
                   value:
                     error: invalid_json
                     message: "Request body is not valid JSON"
-                schemaViolation:
+                emptyBatch:
                   value:
-                    error: schema_violation
-                    message: "Field 'event' is required and must be a non-empty string"
+                    error: empty_batch
+                    message: "counters must be non-empty"
         "401":
           description: Missing or invalid API key
           content:
@@ -154,23 +146,6 @@ paths:
                 message: "Invalid or missing API key"
         "429":
           description: Rate limit exceeded
-          headers:
-            X-RateLimit-Limit:
-              schema:
-                type: integer
-              description: The maximum number of requests allowed in the current window
-            X-RateLimit-Remaining:
-              schema:
-                type: integer
-              description: Remaining requests in the current window
-            X-RateLimit-Reset:
-              schema:
-                type: integer
-              description: Seconds until the rate limit window resets
-            Retry-After:
-              schema:
-                type: integer
-              description: Seconds until the client should retry
           content:
             application/json:
               schema:
@@ -187,97 +162,6 @@ paths:
               example:
                 error: payload_too_large
                 message: "Request body exceeds the maximum allowed size"
-        "503":
-          description: Server is under backpressure, retry later
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: service_unavailable
-                message: "Server is temporarily unavailable. Please retry."
-
-  /api/v1/track/batch:
-    post:
-      tags: [Tracking]
-      operationId: trackBatch
-      summary: Track a batch of events
-      description: |
-        Ingest up to 100 events in a single request. Each event in the batch is validated
-        individually; the entire batch is rejected if any single event fails schema validation.
-        Events are queued asynchronously.
-      security:
-        - ApiKey: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TrackBatchRequest"
-            example:
-              events:
-                - event: page_view
-                  screen: home
-                  props:
-                    language: en
-                  sid: abc123def456
-                  ts: "2026-04-30T12:34:56Z"
-                  sdk:
-                    platform: android
-                    version: "0.4.0"
-                - event: button_click
-                  screen: home
-                  props:
-                    button_id: hero_cta
-                  sid: abc123def456
-                  ts: "2026-04-30T12:34:57Z"
-                  was_offline: true
-                  sdk:
-                    platform: android
-                    version: "0.4.0"
-      responses:
-        "202":
-          description: All events accepted into the ingest queue
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AcceptedResponse"
-              example:
-                ok: true
-                queued: 2
-        "400":
-          description: Invalid request body or schema violation in one or more events
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Missing or invalid API key
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "413":
-          description: Batch exceeds 100 events or payload too large
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: batch_too_large
-                message: "Batch exceeds maximum of 100 events"
-        "429":
-          description: Rate limit exceeded
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "503":
-          description: Server is under backpressure
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/auth/login:
     post:
@@ -801,73 +685,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/projects/{projectId}/events:
-    get:
-      tags: [Dashboard]
-      operationId: getProjectEvents
-      summary: Get raw events for a project
-      description: Returns paginated raw events, ordered by received time descending.
-      security:
-        - BearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 100
-            minimum: 1
-            maximum: 1000
-          description: Maximum number of events to return
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
-          description: Number of events to skip
-        - name: event
-          in: query
-          schema:
-            type: string
-          description: Filter to a specific event name
-        - name: screen
-          in: query
-          schema:
-            type: string
-          description: Filter to a specific screen name
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: Start of time range (inclusive)
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: End of time range (inclusive)
-      responses:
-        "200":
-          description: Paginated events
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventListResponse"
-        "401":
-          description: Invalid or missing session token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Project not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/v1/projects/{projectId}/aggregates:
     get:
       tags: [Dashboard]
@@ -1254,90 +1071,85 @@ components:
           pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+"
           description: SDK version (semver)
 
-    EventContext:
-      type: object
-      description: |
-        Automatically collected device/browser context. Sent by the SDK; the server
-        enriches it (IP → country) and strips PII before persisting.
-      properties:
-        referrer:
-          type: string
-          format: uri
-          nullable: true
-          description: Referring URL (null if direct)
-        language:
-          type: string
-          nullable: true
-          maxLength: 10
-          description: Browser/device language code (e.g. "en")
-        ua:
-          type: string
-          nullable: true
-          maxLength: 512
-          description: User-Agent string (stored for device classification, not analytics)
-        viewport:
-          type: string
-          nullable: true
-          pattern: "^[0-9]+x[0-9]+$"
-          description: Screen or viewport dimensions (e.g. "412x914")
-
-    TrackEventRequest:
+    CounterItem:
       type: object
       required:
-        - event
+        - m
+        - n
       properties:
-        event:
+        m:
           type: string
-          minLength: 1
-          maxLength: 255
-          description: Event name (e.g. "page_view", "button_click")
-        screen:
-          type: string
-          nullable: true
-          maxLength: 255
-          description: Screen or page name (e.g. "home", "settings")
-        props:
+          description: Metric name (a fixed, server-declared registry — see docs/architecture/counters.md)
+          example: screen_transition
+        d:
           type: object
-          description: Arbitrary key-value properties. Values can be strings, numbers, booleans, or null.
-          additionalProperties: true
-          maxProperties: 50
-        sid:
-          type: string
-          maxLength: 128
+          additionalProperties:
+            type: string
           description: |
-            Session ID generated by the SDK. Used to group events from the same session.
-            If omitted, the server generates one.
-        ts:
-          type: string
-          format: date-time
+            Dimensions. Must exactly match the metric's declared required-dimension set —
+            no more, no fewer — and each key/value must match the allowed charset
+            (`^[a-z0-9_]{1,32}$` for keys, `^[A-Za-z0-9_.:/-]{1,128}$` for values). A
+            violation quarantines this item without failing the rest of the batch.
+        n:
+          type: integer
+          description: Occurrence count since the last flush
+          example: 3
+        u:
+          type: integer
+          enum: [0, 1]
+          default: 0
           description: |
-            Client-side timestamp (ISO 8601). The server validates this is within ±7 days
-            of receive time; if not, the server replaces it with receive time and sets
-            `clock_skew = true` in props.
-        was_offline:
-          type: boolean
-          default: false
-          description: |
-            True if the event was captured while the device had no network connectivity
-            (set by the SDK when the device was offline or the most recent flush failed
-            with a network error).
+            1 only on the first flush that touched this exact cell today (the SDK's own
+            signal). Summed server-side into a distinct-device count — no identifier is
+            ever sent or stored.
+
+    CounterBatchRequest:
+      type: object
+      required:
+        - day
+        - counters
+      properties:
         sdk:
           $ref: "#/components/schemas/SdkInfo"
-        ctx:
-          $ref: "#/components/schemas/EventContext"
-
-    TrackBatchRequest:
-      type: object
-      required:
-        - events
-      properties:
-        events:
+        app:
+          type: object
+          properties:
+            version:
+              type: string
+              example: "2.4.0"
+            country:
+              type: string
+              maxLength: 2
+              example: us
+        day:
+          type: string
+          format: date
+          description: The device's local date. Clamped server-side to [today - 2, today].
+          example: "2026-09-04"
+        counters:
           type: array
           minItems: 1
-          maxItems: 100
           items:
-            $ref: "#/components/schemas/TrackEventRequest"
-          description: Array of events to track (maximum 100)
+            $ref: "#/components/schemas/CounterItem"
+
+    CounterBatchResponse:
+      type: object
+      required:
+        - ok
+        - accepted
+      properties:
+        ok:
+          type: boolean
+          example: true
+        accepted:
+          type: integer
+          description: Number of items validated and written
+          example: 2
+        quarantined:
+          type: integer
+          default: 0
+          description: Number of items rejected by the dimension registry or the per-metric cardinality cap
+          example: 0
 
     HealthResponse:
       type: object
@@ -1791,8 +1603,9 @@ components:
             type: string
           description: >-
             If set, only events whose props exactly match ALL of these key-value pairs match
-            this step. Unlike an event's own `props` (which accepts any JSON scalar — see
-            `TrackEventRequest.props`), a funnel step's `props` are always string-keyed,
+            this step. Unlike the SDK's `trackEvent(event, screen, props)` call (whose `props`
+            accepts any JSON scalar, though it is never sent past the device — see the SDK's
+            aggregate-only ingest), a funnel step's `props` are always string-keyed,
             string-valued exact filters compared against the event's props as strings, so a
             numeric or boolean event prop still matches a filter of the same value written as a
             string. An empty filter always serializes as `{}`, never `[]`.

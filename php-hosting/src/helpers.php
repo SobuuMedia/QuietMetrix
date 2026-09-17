@@ -83,3 +83,31 @@ function clientIp(): ?string {
     }
     return $remoteAddr;
 }
+
+/** Stage 5 — origin/referer check for non-mobile traffic, shared by every ingest route. */
+function checkOrigin(): void {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? ($_SERVER['HTTP_REFERER'] ?? null);
+    if ($origin === null) return; // mobile / no origin — skip
+
+    if (!defined('ALLOWED_ORIGINS')) return;
+    $configured = constant('ALLOWED_ORIGINS');
+    if (is_array($configured)) {
+        $allowed = $configured;
+    } elseif (is_string($configured)) {
+        // Older shared-hosting configs used serialize([...]); current configs use a
+        // comma-separated string. Support both during an in-place upgrade.
+        $legacy = @unserialize($configured);
+        $allowed = is_array($legacy) ? $legacy : explode(',', $configured);
+    } else {
+        return;
+    }
+    $allowed = array_values(array_filter(array_map(
+        static fn($value) => is_string($value) ? trim($value) : '',
+        $allowed,
+    ), static fn($value) => $value !== ''));
+    if (empty($allowed)) return;
+    if (!in_array($origin, $allowed, true)) {
+        errorResponse(403, 'origin_forbidden', 'Origin not allowed');
+        exit;
+    }
+}

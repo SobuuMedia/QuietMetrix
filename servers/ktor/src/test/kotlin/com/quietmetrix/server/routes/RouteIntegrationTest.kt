@@ -2,11 +2,7 @@ package com.quietmetrix.server.routes
 
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
-import com.quietmetrix.server.persistence.tables.EventCountsDaily
-import com.quietmetrix.server.persistence.tables.Events
-import com.quietmetrix.server.persistence.tables.EventsInbox
 import com.quietmetrix.server.persistence.tables.Projects
-import com.quietmetrix.server.persistence.tables.UsageCounters
 import com.quietmetrix.server.persistence.tables.Users
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -26,9 +22,8 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -55,15 +50,15 @@ class RouteIntegrationTest {
     }
 
     @Test
-    fun `track without api key returns 401`() = testApplication {
+    fun `an api-key-gated route without a key returns 401`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:test1;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users) }
         val projectRepo = ProjectRepository(testDb)
 
         application {
             install(ContentNegotiation) { json(Json { encodeDefaults = true; ignoreUnknownKeys = true }) }
             routing {
-                post("/track") {
+                post("/api-key-gated") {
                     val key = call.request.headers["X-QM-Api-Key"]
                     if (key.isNullOrBlank()) {
                         call.respondText("""{"error":"unauthorized","message":"Missing API key"}""", ContentType.Application.Json, HttpStatusCode.Unauthorized)
@@ -78,7 +73,7 @@ class RouteIntegrationTest {
                 }
             }
         }
-        val response = client.post("/track") {
+        val response = client.post("/api-key-gated") {
             contentType(ContentType.Application.Json)
             setBody("""{"event":"page_view"}""")
         }
@@ -86,9 +81,9 @@ class RouteIntegrationTest {
     }
 
     @Test
-    fun `track with valid api key returns 202`() = testApplication {
+    fun `an api-key-gated route with a valid key returns 202`() = testApplication {
         val testDb = Database.connect("jdbc:h2:mem:test2;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(testDb) { SchemaUtils.create(Projects, Users, Events, EventsInbox, EventCountsDaily, UsageCounters) }
+        transaction(testDb) { SchemaUtils.create(Projects, Users) }
         val projectRepo = ProjectRepository(testDb)
         val userRepo = UserRepository(testDb)
         userRepo.create("test@quietmetrix.com", "password123")
@@ -97,7 +92,7 @@ class RouteIntegrationTest {
         application {
             install(ContentNegotiation) { json(Json { encodeDefaults = true; ignoreUnknownKeys = true }) }
             routing {
-                post("/track") {
+                post("/api-key-gated") {
                     val key = call.request.headers["X-QM-Api-Key"] ?: ""
                     val pid = projectRepo.validateApiKey(key)
                     if (pid == null) {
@@ -108,7 +103,7 @@ class RouteIntegrationTest {
                 }
             }
         }
-        val response = client.post("/track") {
+        val response = client.post("/api-key-gated") {
             header("X-QM-Api-Key", apiKey)
             contentType(ContentType.Application.Json)
             setBody("""{"event":"page_view"}""")

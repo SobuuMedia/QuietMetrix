@@ -47,7 +47,7 @@ Privacy-respecting analytics for every platform. Open-source, self-hostable, GDP
 ```kotlin
 QuietMetrix.init(QuietMetrixConfig(
     storageKeyPrefix = "myapp_",
-    trackingEndpoint = "https://your-server.com/api/v1/track",
+    trackingEndpoint = "https://your-server.com/api/v1",
     apiKey = "qm_ak_your_api_key_here",
 ))
 
@@ -68,7 +68,7 @@ automatically.
 ### iOS (Swift)
 
 ```swift
-let config = QuietMetrixConfig(storageKeyPrefix: "myapp_", trackingEndpoint: "https://your-server.com/api/v1/track", apiKey: "qm_ak_...")
+let config = QuietMetrixConfig(storageKeyPrefix: "myapp_", trackingEndpoint: "https://your-server.com/api/v1", apiKey: "qm_ak_...")
 QuietMetrix.shared.initialize(config: config)
 QuietMetrix.shared.trackEvent(event: "button_click", screen: "settings")
 ```
@@ -78,7 +78,7 @@ QuietMetrix.shared.trackEvent(event: "button_click", screen: "settings")
 ```html
 <script src="quietmetrix.js"></script>
 <script>
-  QuietMetrix.init({ storageKeyPrefix: 'myapp_', trackingEndpoint: 'https://your-server.com/api/v1/track', apiKey: 'qm_ak_...' });
+  QuietMetrix.init({ storageKeyPrefix: 'myapp_', trackingEndpoint: 'https://your-server.com/api/v1', apiKey: 'qm_ak_...' });
   QuietMetrix.trackEvent('page_view', { screen: 'home' });
 </script>
 ```

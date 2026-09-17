@@ -1,15 +1,17 @@
 package com.quietmetrix.server.routes
 
+import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.domain.ErrorResponse
 import com.quietmetrix.server.funnels.CreateFunnelRequest
-import com.quietmetrix.server.funnels.FunnelAnalyzer
 import com.quietmetrix.server.funnels.FunnelBreakdownDto
 import com.quietmetrix.server.funnels.FunnelBreakdownValueDto
+import com.quietmetrix.server.funnels.FunnelCounterAnalyzer
 import com.quietmetrix.server.funnels.FunnelDefinition
 import com.quietmetrix.server.funnels.FunnelRangeDto
 import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.funnels.FunnelResponse
 import com.quietmetrix.server.funnels.FunnelResultsResponse
+import com.quietmetrix.server.funnels.FunnelStepCell
 import com.quietmetrix.server.funnels.FunnelStepResult
 import com.quietmetrix.server.funnels.FunnelStepResultDto
 import com.quietmetrix.server.funnels.FunnelSummaryDto
@@ -20,7 +22,8 @@ import com.quietmetrix.server.funnels.FunnelsResponse
 import com.quietmetrix.server.funnels.RegisterFunnelsRequest
 import com.quietmetrix.server.funnels.RegisterFunnelsResponse
 import com.quietmetrix.server.funnels.UpdateFunnelRequest
-import com.quietmetrix.server.persistence.EventRepository
+import com.quietmetrix.server.persistence.AccessTokenRepository
+import com.quietmetrix.server.persistence.CounterRepository
 import com.quietmetrix.server.persistence.FunnelRecord
 import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
@@ -43,8 +46,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.inject
 
-private const val FUNNEL_RESULTS_ROW_CAP = 50_000
-
 private fun parseRangeSeconds(range: String?): Long = when (range) {
     "1h" -> 3_600L
     "1d" -> 86_400L
@@ -58,13 +59,16 @@ fun Routing.configureFunnelRoutes() {
     val projectRepo by inject<ProjectRepository>()
     val memberRepo by inject<ProjectMemberRepository>()
     val registrationService by inject<FunnelRegistrationService>()
-    val eventRepo by inject<EventRepository>()
+    val counterRepo by inject<CounterRepository>()
     val rateLimiter by inject<RateLimiter>()
+    val accessTokenRepo by inject<AccessTokenRepository>()
+    val config by inject<AppConfig>()
 
     /**
      * Resolves `{projectId}` (the `proj_<id>` form used everywhere else) and checks the
      * caller has access — admin, owner, or project member. Responds and returns null on any
      * failure so callers can `?: return@get` etc. Mirrors the inline checks in ProjectRoutes.kt.
+     * JWT-only: used by the write endpoints (create/edit/delete), which a PAT can never reach.
      */
     suspend fun ApplicationCall.resolveProjectId(): Long? {
         val projectIdStr = parameters["projectId"] ?: run {
@@ -84,6 +88,36 @@ fun Routing.configureFunnelRoutes() {
         val isAdmin = principal.roleClaim() == "admin"
         val isOwner = project["ownerUserId"].toString() == userId
         val membership = if (!isAdmin && !isOwner) memberRepo.findMembership(id, userId.toLong()) else null
+        if (!isAdmin && !isOwner && membership == null) {
+            respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+            return null
+        }
+        return id
+    }
+
+    /**
+     * Same resolution as [resolveProjectId] but generalized to an already-resolved
+     * [ApiPrincipal], so the read-only funnel endpoints (list, results) can accept either a
+     * dashboard session or a `qm_pat_…` token scoped `analytics:read`. A PAT is never admin
+     * (see [isAdmin]), so it only reaches projects it owns or is a member of — same as a
+     * non-admin session would.
+     */
+    suspend fun ApplicationCall.resolveProjectIdForRead(principal: ApiPrincipal): Long? {
+        val projectIdStr = parameters["projectId"] ?: run {
+            respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Missing projectId"))
+            return null
+        }
+        val id = projectIdStr.removePrefix("proj_").toLongOrNull() ?: run {
+            respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid projectId format"))
+            return null
+        }
+        val project = projectRepo.findById(id) ?: run {
+            respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+            return null
+        }
+        val isAdmin = principal.isAdmin()
+        val isOwner = project["ownerUserId"].toString() == principal.userId.toString()
+        val membership = if (!isAdmin && !isOwner) memberRepo.findMembership(id, principal.userId) else null
         if (!isAdmin && !isOwner && membership == null) {
             respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
             return null
@@ -114,23 +148,41 @@ fun Routing.configureFunnelRoutes() {
     )
 
     route("/api/v1/projects/{projectId}/funnels") {
-        authenticate("auth-jwt") {
-            get {
-                val projectId = call.resolveProjectId() ?: return@get
-                call.respond(FunnelsResponse(funnelRepo.listActive(projectId).map { it.toResponse() }))
+        // Read-only: accepts either a dashboard session JWT or a `qm_pat_…` token scoped
+        // analytics:read. Deliberately NOT inside authenticate("auth-jwt") — see
+        // resolveApiPrincipal's doc comment. Write endpoints (create/edit/delete) below stay
+        // JWT-only, inside authenticate("auth-jwt").
+        get {
+            val principal = resolveApiPrincipal(call, config, accessTokenRepo) ?: run {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Missing or invalid Authorization header"))
+                return@get
+            }
+            if (!principal.canReadAnalytics()) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
+                return@get
+            }
+            val projectId = call.resolveProjectIdForRead(principal) ?: return@get
+            call.respond(FunnelsResponse(funnelRepo.listActive(projectId).map { it.toResponse() }))
+        }
+
+        get("/{funnelKey}/results") {
+            val principal = resolveApiPrincipal(call, config, accessTokenRepo) ?: run {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Missing or invalid Authorization header"))
+                return@get
+            }
+            if (!principal.canReadAnalytics()) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
+                return@get
+            }
+            val projectId = call.resolveProjectIdForRead(principal) ?: return@get
+            val userId = principal.userId.toString()
+            if (!rateLimiter.tryConsume("dashboard:$userId")) {
+                call.response.header("Retry-After", "60")
+                call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("rate_limit_exceeded", "Dashboard rate limit exceeded"))
+                return@get
             }
 
-            get("/{funnelKey}/results") {
-                val projectId = call.resolveProjectId() ?: return@get
-                val principal = call.principal<JWTPrincipal>() ?: return@get
-                val userId = principal.payload.getClaim("userId").asString()
-                if (!rateLimiter.tryConsume("dashboard:$userId")) {
-                    call.response.header("Retry-After", "60")
-                    call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("rate_limit_exceeded", "Dashboard rate limit exceeded"))
-                    return@get
-                }
-
-                val funnelKey = call.parameters["funnelKey"] ?: run {
+            val funnelKey = call.parameters["funnelKey"] ?: run {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Missing funnelKey"))
                     return@get
                 }
@@ -140,36 +192,26 @@ fun Routing.configureFunnelRoutes() {
                 }
 
                 val rangeSeconds = parseRangeSeconds(call.parameters["range"])
-                val breakdownDimension = call.parameters["breakdown"]
-                    ?.takeIf { it in setOf("country", "platform", "device_class", "language") }
-                val withTrend = call.parameters["trend"] == "1"
+                // Breakdown/trend query params are accepted (unrecognized query params are
+                // otherwise ignored across this API) but no longer honored: aggregate-only
+                // ingest doesn't carry per-step timing or a dimensional breakdown any more —
+                // see FunnelCounterAnalyzer's class doc for what's gone versus deferred.
 
                 val nowEpochSeconds = java.time.Instant.now().epochSecond
                 val fromEpochSeconds = nowEpochSeconds - rangeSeconds
                 val fromJava = java.time.Instant.ofEpochSecond(fromEpochSeconds)
                 val toJava = java.time.Instant.ofEpochSecond(nowEpochSeconds)
-                // Widened upper bound: a completion just after the requested range still
-                // counts for an actor who entered inside it (see FunnelAnalyzer's entry-time
-                // filter, which excludes anyone whose ENTRY falls outside [from, to)).
-                val widenedToJava = java.time.Instant.ofEpochSecond(nowEpochSeconds + funnel.windowSeconds)
 
-                val eventNames = funnel.steps.map { it.event }.toSet()
-                val rows = eventRepo.findFunnelEvents(projectId, eventNames, fromJava, widenedToJava, FUNNEL_RESULTS_ROW_CAP)
-                val truncated = rows.size >= FUNNEL_RESULTS_ROW_CAP
+                val fromDay = fromJava.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                val toDay = toJava.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                val cells = counterRepo.readCells(projectId, "funnel_step", fromDay, toDay)
+                    .filter { it.dims["f"] == funnel.funnelKey }
+                    .mapNotNull { cell -> cell.dims["step"]?.toIntOrNull()?.let { step -> FunnelStepCell(step, cell.n) } }
 
-                val fromKotlin = kotlinx.datetime.Instant.fromEpochSeconds(fromEpochSeconds)
-                val toKotlin = kotlinx.datetime.Instant.fromEpochSeconds(nowEpochSeconds)
-                val analyzed = FunnelAnalyzer.analyze(
+                val analyzed = FunnelCounterAnalyzer.analyze(
                     steps = funnel.steps,
-                    windowSeconds = funnel.windowSeconds,
-                    rows = rows,
-                    from = fromKotlin,
-                    to = toKotlin,
+                    cells = cells,
                     countMode = funnel.countMode,
-                    identityScope = funnel.identityScope,
-                    correlationProperty = funnel.correlationProperty,
-                    breakdownDimension = breakdownDimension,
-                    withTrend = withTrend,
                 )
 
                 call.respond(
@@ -188,11 +230,16 @@ fun Routing.configureFunnelRoutes() {
                             })
                         },
                         trend = analyzed.trend?.map { FunnelTrendPointDto(it.bucket, it.entered, it.converted, it.conversion) },
-                        truncated = truncated,
+                        // No row cap under an aggregate read — counters are already the
+                        // rolled-up result, not a set of rows that can overflow.
+                        truncated = false,
                     )
                 )
             }
 
+            // Write endpoints (create/edit/delete) stay JWT-only — a PAT can never modify a
+            // funnel, regardless of scope.
+            authenticate("auth-jwt") {
             post {
                 val projectId = call.resolveProjectId() ?: return@post
                 val principal = call.principal<JWTPrincipal>() ?: return@post

@@ -98,21 +98,6 @@ class ApiModelsTest {
     }
 
     @Test
-    fun eventRowDecodesPerVisitDuration() {
-        val e = json.decodeFromString<EventRow>(
-            """{"event_name":"screen_view","screen":"Home","duration_ms":8200}"""
-        )
-        assertEquals("Home", e.screen)
-        assertEquals(8200L, e.durationMs)
-    }
-
-    @Test
-    fun eventRowWithoutDurationIsNull() {
-        val e = json.decodeFromString<EventRow>("""{"event_name":"tap"}""")
-        assertNull(e.durationMs)
-    }
-
-    @Test
     fun totalsDecodesErrorsAndDefaultsToZero() {
         val withErrors = json.decodeFromString<Totals>("""{"events":10,"offline":2,"errors":3}""")
         assertEquals(3L, withErrors.errors)

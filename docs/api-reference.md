@@ -41,28 +41,24 @@ Authorization: Bearer qm_pat_9f3c1a2b4e5d6f708192a3b4c5d6e7f8
 
 `GET /api/v1/health` — No auth required.
 
-### Track Single Event
+### Submit Counters
 
-`POST /api/v1/track` — API key auth.
+`POST /api/v1/counters` — API key auth. The device computes `(metric, dims) -> n` deltas
+itself and sends only those; there is no raw event or install identifier on this route. See
+[`openapi.yaml`](openapi.yaml) for the full request/response shape.
 
 ```json
 {
-  "event": "page_view",
-  "screen": "home",
-  "props": {"language": "en"},
-  "sid": "abc123",
-  "ts": "2026-04-30T12:34:56Z",
-  "was_offline": false,
-  "sdk": {"platform": "android", "version": "0.4.0"},
-  "ctx": {"language": "en", "ua": "...", "viewport": "412x914"}
+  "sdk": {"platform": "android", "version": "0.5.0"},
+  "app": {"version": "2.4.0"},
+  "day": "2026-09-04",
+  "counters": [
+    {"m": "screen_transition", "d": {"from": "Library", "to": "BookDetail"}, "n": 3, "u": 1}
+  ]
 }
 ```
 
-Response: `202 Accepted` with `{ "ok": true, "queued": 1 }`
-
-### Track Batch
-
-`POST /api/v1/track/batch` — Up to 100 events per request.
+Response: `202 Accepted` with `{ "ok": true, "accepted": 1, "quarantined": 0 }`
 
 ### Admin Login
 
@@ -111,8 +107,10 @@ Roles: `owner` (full control), `admin` (manage members and settings), `viewer` (
 
 ### Dashboard
 
-- `GET /api/v1/projects/:id/events` — Paginated raw events
 - `GET /api/v1/projects/:id/aggregates` — Aggregated metrics
+- `GET /api/v1/projects/:id/transitions` — Screen-to-screen navigation flow counts
+- `GET /api/v1/projects/:id/sessions` — Session counts and average duration
+- `GET /api/v1/projects/:id/retention` — Cohort retention (day 1/3/7/14/30)
 
 ### Funnels
 

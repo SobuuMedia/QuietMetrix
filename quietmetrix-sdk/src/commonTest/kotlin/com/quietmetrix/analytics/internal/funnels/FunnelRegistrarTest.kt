@@ -11,8 +11,7 @@ import kotlin.test.assertNotEquals
  * [FunnelRegistrar.canonicalPayload] is the change-detection fingerprint compared across app
  * launches — SDK registration should fire once per meaningful change, not once per launch and
  * not spuriously when nothing changed. These tests exercise that pure function directly,
- * without touching the network (mirrors how EventNormalizer/EventValidator keep pure logic
- * separate from I/O for testability).
+ * without touching the network.
  */
 class FunnelRegistrarTest {
 

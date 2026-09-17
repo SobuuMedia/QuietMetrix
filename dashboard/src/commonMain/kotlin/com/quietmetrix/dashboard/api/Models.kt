@@ -2,7 +2,6 @@ package com.quietmetrix.dashboard.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)
@@ -151,6 +150,7 @@ data class AggregatesResponse(
     @SerialName("top_events")  val topEvents:  List<TopEvent>  = emptyList(),
     @SerialName("top_screens") val topScreens: List<TopScreen> = emptyList(),
     @SerialName("screen_durations") val screenDurations: List<ScreenDuration> = emptyList(),
+    @SerialName("top_values") val topValues: List<TopValue> = emptyList(),
     val daily: List<DailyPoint> = emptyList(),
     val countries: List<BreakdownItem> = emptyList(),
     val platforms: List<BreakdownItem> = emptyList(),
@@ -175,9 +175,37 @@ data class Transition(
 )
 
 @Serializable
+data class SearchResponse(
+    val screens: List<SearchScreenItem> = emptyList(),
+)
+
+/** The search query itself is never sent — see the SDK's `trackSearch` — only whether it came
+ *  back empty. [rate] is null when [total] is 0, never a fake 0.0. */
+@Serializable
+data class SearchScreenItem(
+    val screen: String,
+    val total: Long = 0,
+    @SerialName("zero_result") val zeroResult: Long = 0,
+    val rate: Double? = null,
+)
+
+@Serializable
+data class FrictionResponse(
+    val screens: List<FrictionScreenItem> = emptyList(),
+)
+
+/** [rageTaps] is an absolute count of rage-tap bursts, not a per-view rate. Captured
+ *  automatically on Android; requires a one-line integration on iOS ([QuietMetrixWindow]);
+ *  no signal at all from JVM/Linux/Windows/Web — an honest platform gap. */
+@Serializable
+data class FrictionScreenItem(
+    val screen: String,
+    @SerialName("rage_taps") val rageTaps: Long = 0,
+)
+
+@Serializable
 data class SessionsResponse(
     @SerialName("total_sessions") val totalSessions: Int = 0,
-    @SerialName("avg_events") val avgEvents: Float = 0f,
     @SerialName("avg_duration_sec") val avgDurationSec: Int = 0,
     @SerialName("daily_sessions") val dailySessions: List<DailyPoint> = emptyList(),
 )
@@ -187,6 +215,8 @@ data class RetentionResponse(
     val cohorts: List<RetentionCohort> = emptyList(),
 )
 
+/** [activationRate] is null when the project's app hasn't configured an activation event —
+ *  not zero, which would claim a real 0% rather than "not tracked". */
 @Serializable
 data class RetentionCohort(
     @SerialName("cohort_date") val cohortDate: String,
@@ -196,6 +226,7 @@ data class RetentionCohort(
     val day7: Double? = null,
     val day14: Double? = null,
     val day30: Double? = null,
+    @SerialName("activation_rate") val activationRate: Double? = null,
 )
 
 @Serializable
@@ -203,6 +234,10 @@ data class Totals(val events: Long = 0, val offline: Long = 0, val errors: Long 
 
 @Serializable
 data class TopEvent(@SerialName("event_name") val eventName: String, val count: Long)
+
+/** [totalMinorUnits] is a summed amount (e.g. cents), not an occurrence count. */
+@Serializable
+data class TopValue(val name: String, @SerialName("total_minor_units") val totalMinorUnits: Long = 0)
 
 @Serializable
 data class TopScreen(val screen: String? = null, val count: Long)
@@ -220,12 +255,6 @@ data class DailyPoint(
     val day: String,
     val total: Long = 0,
     @SerialName("offline_total") val offlineTotal: Long = 0,
-)
-
-@Serializable
-data class EventsResponse(
-    val demo: Boolean = false,
-    val events: List<EventRow> = emptyList(),
 )
 
 @Serializable
@@ -336,21 +365,4 @@ data class FunnelResultsResponse(
     val breakdown: FunnelBreakdownDto? = null,
     val trend: List<FunnelTrendPointDto>? = null,
     val truncated: Boolean = false,
-)
-
-@Serializable
-data class EventRow(
-    val id: Long? = null,
-    @SerialName("event_name")   val eventName:   String  = "",
-    val screen: String? = null,
-    @SerialName("session_id")   val sessionId:   String? = null,
-    @SerialName("duration_ms")  val durationMs:  Long?   = null,
-    val ts: String = "",
-    @SerialName("was_offline")  val wasOffline:  Boolean = false,
-    val country: String? = null,
-    @SerialName("device_class") val deviceClass: String? = null,
-    val language:    String? = null,
-    val platform:    String? = null,
-    @SerialName("sdk_version")  val sdkVersion:  String? = null,
-    val props:       JsonElement? = null,
 )

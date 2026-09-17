@@ -1,9 +1,9 @@
 package com.quietmetrix.server.persistence.tables
 
 import com.quietmetrix.server.funnels.FunnelValidation
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.javatime.date
-import org.jetbrains.exposed.sql.javatime.datetime
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.javatime.date
+import org.jetbrains.exposed.v1.javatime.datetime
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -35,19 +35,6 @@ object Projects : Table("projects") {
     // Non-sensitive last 4 chars of the plaintext key, for masked display in the
     // dashboard. The full key is never recoverable (only hashes are stored).
     val apiKeyLast4 = varchar("api_key_last4", 4).nullable()
-    // Per-project salt used to hash install `anonymousId` values before storage in
-    // `install_meta` / audit tables. Rotated on API-key regeneration (old install rows are
-    // discarded at rotation). See docs/security/publishable-api-key.md — Privacy note.
-    val installSalt = varchar("install_salt", 64).nullable()
-    // Separate per-project salt for funnel/analytics identity (events.install_hash). Unlike
-    // installSalt, this is NEVER rotated on API-key regeneration — funnel and retention history
-    // must survive a key rotation. See docs/security/publishable-api-key.md — Privacy note.
-    val analyticsSalt = varchar("analytics_salt", 64).nullable()
-    // Stage 3 — opt-in event-name allowlist. When `strict_schema` is true, ingest rejects
-    // events whose name is not in `allowed_events` (JSON array). Bounded blast radius for
-    // a publishable API key. See docs/security/publishable-api-key.md.
-    val strictSchema = bool("strict_schema").default(false)
-    val allowedEvents = text("allowed_events").nullable()
     val planId = varchar("plan_id", 50).nullable()
     // Optional client-supplied dedup key for POST /projects. A retry of a timed-out create
     // with the same (owner, key) finds the earlier project instead of minting a second one.
@@ -63,56 +50,48 @@ object Projects : Table("projects") {
     }
 }
 
-object EventsInbox : Table("events_inbox") {
+/**
+ * One counter cell: `(project, day, metric, platform, app_version, country, dims_hash) -> n`.
+ * `dimsHash` is [com.quietmetrix.server.counters.CounterRegistry]'s sha256 of the canonicalized
+ * dims map; `dims` stores that same map as display JSON. `devices` is a running count of
+ * distinct installs that have ever contributed to this cell — no install identifier is ever
+ * stored. Every read path must filter `devices >= k` (k-anonymity threshold); see
+ * `CounterRepository`.
+ */
+object Counters : Table("counters") {
+    val projectId = long("project_id").references(Projects.id)
+    val day = date("day")
+    val metric = varchar("metric", 64)
+    val platform = varchar("platform", 20).default("")
+    val appVersion = varchar("app_version", 32).default("")
+    val country = char("country", 2).default("")
+    val dimsHash = char("dims_hash", 64)
+    val dims = text("dims")
+    val n = long("n").default(0L)
+    val devices = long("devices").default(0L)
+    val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
+
+    override val primaryKey = PrimaryKey(projectId, day, metric, platform, appVersion, country, dimsHash)
+
+    init {
+        index(false, projectId, metric, day)
+    }
+}
+
+/** Counter cells rejected by CounterRegistry or by the per-metric distinct-cell cardinality
+ *  cap. Kept for operator review. */
+object CountersQuarantine : Table("counters_quarantine") {
     val id = long("id").autoIncrement()
     val projectId = long("project_id").references(Projects.id)
     val payload = text("payload")
-    val receivedAt = datetime("received_at").clientDefault { LocalDateTime.now() }
-    val processed = bool("processed").default(false)
-
-    override val primaryKey = PrimaryKey(id)
-}
-
-object Events : Table("events") {
-    val id = long("id").autoIncrement()
-    val projectId = long("project_id").references(Projects.id)
-    val eventName = varchar("event_name", 255)
-    val screen = varchar("screen", 255).nullable()
-    val props = text("props").nullable()
-    val sessionId = varchar("session_id", 128).nullable()
-    val ts = datetime("ts").clientDefault { LocalDateTime.now() }
-    val wasOffline = bool("was_offline").default(false)
-    val country = char("country", 2).nullable()
-    val deviceClass = varchar("device_class", 20).nullable()
-    val language = varchar("language", 10).nullable()
-    val platform = varchar("platform", 20).nullable()
-    val sdkVersion = varchar("sdk_version", 20).nullable()
-    val receivedAt = datetime("received_at").clientDefault { LocalDateTime.now() }
-    // Per-project analytics-salt hash of the install id. Never the raw `anonymousId` — see
-    // docs/security/publishable-api-key.md — Privacy note.
-    val installHash = varchar("install_hash", 64).nullable()
-    val city = varchar("city", 100).nullable()
-    val region = varchar("region", 100).nullable()
-    val browser = varchar("browser", 50).nullable()
-    val browserVersion = varchar("browser_version", 50).nullable()
-    val eventOs = varchar("os", 50).nullable()
-    val osVersion = varchar("os_version", 50).nullable()
-    val screenWidth = integer("screen_width").nullable()
-    val screenHeight = integer("screen_height").nullable()
-    val durationMs = long("duration_ms").nullable()
-    val referrer = varchar("referrer", 500).nullable()
-    val sessionNumber = integer("session_number").nullable()
-    val isSessionStart = bool("is_session_start").default(false)
-    val isSessionEnd = bool("is_session_end").default(false)
+    val quarantineReason = varchar("quarantine_reason", 50)
+    val quarantineDetail = text("quarantine_detail").nullable()
+    val quarantinedAt = datetime("quarantined_at").clientDefault { LocalDateTime.now() }
 
     override val primaryKey = PrimaryKey(id)
 
     init {
-        // Non-unique: multiple events legitimately share (project_id, ts). This index only
-        // matched V1__init.sql's non-unique index by coincidence until fixed here.
-        index(false, projectId, ts)
-        index(false, projectId, eventName, ts)
-        index(false, projectId, installHash)
+        index(false, projectId, quarantinedAt)
     }
 }
 
@@ -133,25 +112,6 @@ object UsageCounters : Table("usage_counters") {
     override val primaryKey = PrimaryKey(projectId, period)
 }
 
-object InstallMeta : Table("install_meta") {
-    val id = long("id").autoIncrement()
-    val projectId = long("project_id").references(Projects.id)
-    // Salted SHA-256 hex of the SDK's `anonymousId`. Never the raw id. See
-    // docs/security/publishable-api-key.md — Privacy note.
-    val anonymousIdHash = varchar("anonymous_id_hash", 64)
-    val firstSeenAt = datetime("first_seen_at").clientDefault { LocalDateTime.now() }
-    val lastSeenAt = datetime("last_seen_at").clientDefault { LocalDateTime.now() }
-    val eventCount = long("event_count").default(0L)
-    val revoked = bool("revoked").default(false)
-
-    override val primaryKey = PrimaryKey(id)
-
-    init {
-        uniqueIndex(projectId, anonymousIdHash)
-        index(false, projectId, revoked)
-    }
-}
-
 object ProjectMembers : Table("project_members") {
     val id = long("id").autoIncrement()
     val projectId = long("project_id").references(Projects.id)
@@ -164,33 +124,6 @@ object ProjectMembers : Table("project_members") {
     init {
         uniqueIndex(projectId, userId)
     }
-}
-
-object EventsQuarantine : Table("events_quarantine") {
-    val id = long("id").autoIncrement()
-    val projectId = long("project_id").references(Projects.id)
-    val payload = text("payload")  // JSON-serialised TrackEventRequest, for replay on release
-    val quarantineReason = varchar("quarantine_reason", 50)
-    val quarantineDetail = text("quarantine_detail").nullable()
-    val clientIp = varchar("client_ip", 45).nullable()
-    val anonymousIdHash = varchar("anonymous_id_hash", 64).nullable()
-    val quarantinedAt = datetime("quarantined_at").clientDefault { LocalDateTime.now() }
-    override val primaryKey = PrimaryKey(id)
-    init { index(false, projectId, quarantinedAt) }
-}
-
-object IngestAudit : Table("ingest_audit") {
-    val id = long("id").autoIncrement()
-    val projectId = long("project_id").references(Projects.id)
-    val apiKeyLast4 = varchar("api_key_last4", 4).nullable()
-    val clientIp = varchar("client_ip", 45).nullable()
-    val anonymousIdHash = varchar("anonymous_id_hash", 64).nullable()
-    val eventName = varchar("event_name", 255)
-    val disposition = varchar("disposition", 20)
-    val reason = text("reason").nullable()
-    val auditedAt = datetime("audited_at").clientDefault { LocalDateTime.now() }
-    override val primaryKey = PrimaryKey(id)
-    init { index(false, projectId, auditedAt) }
 }
 
 object Funnels : Table("funnels") {
@@ -256,33 +189,3 @@ object AccessTokens : Table("access_tokens") {
     }
 }
 
-object Sessions : Table("sessions") {
-    val id = long("id").autoIncrement()
-    val projectId = long("project_id").references(Projects.id)
-    val sessionId = varchar("session_id", 128)
-    val startedAt = datetime("started_at").clientDefault { LocalDateTime.now() }
-    val endedAt = datetime("ended_at").nullable()
-    val durationSec = integer("duration_sec").nullable()
-    val eventCount = integer("event_count").default(0)
-    val country = char("country", 2).nullable()
-    val city = varchar("city", 100).nullable()
-    val region = varchar("region", 100).nullable()
-    val deviceClass = varchar("device_class", 20).nullable()
-    val browser = varchar("browser", 50).nullable()
-    val browserVersion = varchar("browser_version", 50).nullable()
-    val sessionOs = varchar("os", 50).nullable()
-    val sessionOsVersion = varchar("os_version", 50).nullable()
-    val platform = varchar("platform", 20).nullable()
-    val screenWidth = integer("screen_width").nullable()
-    val screenHeight = integer("screen_height").nullable()
-    val language = varchar("language", 10).nullable()
-    val referrer = varchar("referrer", 500).nullable()
-    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
-
-    override val primaryKey = PrimaryKey(id)
-
-    init {
-        index(false, projectId, sessionId)
-        index(false, projectId, startedAt)
-    }
-}

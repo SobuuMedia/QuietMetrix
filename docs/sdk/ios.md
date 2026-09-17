@@ -48,10 +48,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         let config = QuietMetrixConfig(
             storageKeyPrefix: "myapp_",
-            trackingEndpoint: "https://your-server.com/api/v1/track",
+            trackingEndpoint: "https://your-server.com/api/v1",
             apiKey: "qm_ak_your_api_key",
             flushIntervalMs: 30_000,
-            maxQueueSize: 1000
         )
         QuietMetrix.shared.initialize(config: config)
         return true
@@ -91,7 +90,7 @@ let signupFunnel = Funnel(
 
 let config = QuietMetrixConfig(
     storageKeyPrefix: "myapp_",
-    trackingEndpoint: "https://your-server.com/api/v1/track",
+    trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_your_api_key",
     funnels: [signupFunnel]
 )
@@ -127,7 +126,28 @@ func applicationDidEnterBackground(_ application: UIApplication) {
 
 ## Offline Support
 
-Events are automatically buffered locally when the device is offline and sent when connectivity is restored. The `was_offline` flag is set on events captured while disconnected. QuietMetrix uses `Reachability` to detect network changes and triggers a flush when the connection is re-established.
+Pending counters are in-memory only — there is no offline buffer, no connectivity detection, and no retry backoff. A flush that fails (offline, 5xx, timeout) simply drops that batch rather than queuing it; the next scheduled flush tries again with whatever has accumulated since. An app killed between flushes loses whatever was recorded since the last successful one.
+
+## Friction (Rage-tap Detection)
+
+QuietMetrix can automatically detect "rage taps" — repeated fast taps in roughly the same spot, usually a sign the user is stuck or the UI didn't respond — and report them as a `friction` counter, broken down by screen. **Unlike Android, this is not automatic on iOS**: there is no safe way to intercept touches without either an opt-in window subclass or fragile Objective-C method swizzling, which this SDK deliberately does not do.
+
+To enable it, use `QuietMetrixWindow` in place of a plain `UIWindow` wherever your app creates its window — typically your `SceneDelegate`:
+
+```swift
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
+        window = QuietMetrixWindow(windowScene: windowScene)
+        // ... set rootViewController, etc.
+        window?.makeKeyAndVisible()
+    }
+}
+```
+
+Skipping this step doesn't break anything — every other QuietMetrix feature works identically — `friction` counters simply never appear from iOS. Android requires no equivalent step; its tap capture is fully automatic.
 
 ## App Tracking Transparency
 
