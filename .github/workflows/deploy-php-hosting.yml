@@ -1,0 +1,102 @@
+name: Deploy PHP Backend (production)
+
+# Manual only, on purpose: this mirrors php-hosting/ onto quietmetrix.getsobuu.com
+# (IONOS shared hosting), which is the moment any already-installed client on an
+# older SDK loses analytics until it updates (the old /api/v1/track route is gone
+# in this codebase — see CHANGELOG.md's Breaking section). Never auto-run this on
+# push; trigger it deliberately when you're ready for that cutover.
+#
+# Mirrors the same lftp-over-SFTP pattern already used by the Sobuu website's own
+# deploy (GetSobuuV3/.gitlab-ci.yml) against the same IONOS account.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   QM_PROD_FTP_HOST   - SFTP host for the IONOS account
+#   QM_PROD_FTP_USER   - SFTP username
+#   QM_PROD_FTP_PASS   - SFTP password
+#   QM_PROD_REMOTE_PATH - remote path quietmetrix.getsobuu.com's doc root maps to
+#                         on this IONOS account (e.g. /quietmetrix/) - set this to
+#                         the real path before the first run; there is no safe
+#                         default to guess here.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Mirror php-hosting/ to quietmetrix.getsobuu.com
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Build the production dashboard bundle
+        # php-hosting/dashboard/ is gitignored (it's a build artifact, not source) -
+        # the checkout above does not have it, so it has to be built fresh here
+        # before the mirror step, the same way a local upgrade would run this task.
+        run: ./gradlew :dashboard:installDashboard
+
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Back up the production database first
+        run: |
+          echo "Before running this workflow, back up the production database per"
+          echo "docs/self-hosting/upgrade.md (mysqldump) and copy the live config.php"
+          echo "somewhere safe - this job does not do either for you, since it has"
+          echo "no database credentials and config.php is intentionally never in the repo."
+
+      - name: Mirror php-hosting/ over SFTP
+        env:
+          FTP_HOST: ${{ secrets.QM_PROD_FTP_HOST }}
+          FTP_USER: ${{ secrets.QM_PROD_FTP_USER }}
+          FTP_PASS: ${{ secrets.QM_PROD_FTP_PASS }}
+          REMOTE_PATH: ${{ secrets.QM_PROD_REMOTE_PATH }}
+        run: |
+          if [ -z "$REMOTE_PATH" ]; then
+            echo "::error::QM_PROD_REMOTE_PATH is not set. Set it to the real IONOS doc root for quietmetrix.getsobuu.com before running this workflow."
+            exit 1
+          fi
+          lftp -c "
+            set sftp:connect-program 'ssh -a -x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
+            set net:timeout 30;
+            set net:max-retries 3;
+            set net:reconnect-interval-base 5;
+            open -u \"$FTP_USER\",\"$FTP_PASS\" sftp://$FTP_HOST;
+
+            mirror --reverse --delete --verbose --parallel=4 \
+              --exclude-glob 'config.php'    \
+              --exclude-glob 'config.example.php' \
+              --exclude-glob 'tests/'        \
+              --exclude-glob '*.md'          \
+              php-hosting/ \
+              \"$REMOTE_PATH\";
+
+            quit
+          "
+
+      - name: Verify the health endpoint
+        run: |
+          sleep 5
+          curl -sf https://quietmetrix.getsobuu.com/api/v1/health | tee /tmp/health.json
+          grep -q '"ok":true' /tmp/health.json
+
+      - name: Verify /api/v1/track is retired and /api/v1/counters is live
+        run: |
+          track_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://quietmetrix.getsobuu.com/api/v1/track)
+          echo "POST /api/v1/track -> $track_status (expected 404 - this route is removed)"
+          counters_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://quietmetrix.getsobuu.com/api/v1/counters)
+          echo "POST /api/v1/counters -> $counters_status (expected 401 with no API key, not 404)"

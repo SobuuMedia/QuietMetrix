@@ -70,6 +70,20 @@ curl -s https://yourdomain.com/api/v1/health | jq .
 If you'd rather apply a specific new column by hand instead of loading a page, `SETUP.md`
 documents the equivalent `ALTER TABLE` statements for recent additions.
 
+### This repo's own production instance
+
+`quietmetrix.getsobuu.com` is deployed via `.github/workflows/deploy-php-hosting.yml`
+(`workflow_dispatch` only — it never runs on push, since it's a real production cutover, not a
+routine CI step). Before running it:
+
+1. Back up: `mysqldump -u <user> -p quietmetrix > backup_$(date +%Y%m%d).sql` against the
+   production database, and copy the live `config.php` off the host.
+2. Set the one-time repo secrets it needs (`QM_PROD_FTP_HOST`/`_USER`/`_PASS`/`_REMOTE_PATH`,
+   see the workflow file's header comment for what each one is).
+3. Run the workflow from the Actions tab (or `gh workflow run deploy-php-hosting.yml`). It
+   mirrors `php-hosting/` over SFTP (excluding `config.php` and `tests/`) and then verifies the
+   health endpoint plus that `/api/v1/track` is retired and `/api/v1/counters` is live.
+
 ## Version Compatibility
 
 | QuietMetrix Version | Min. Postgres | Min. MySQL | Notes |
