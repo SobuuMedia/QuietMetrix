@@ -25,6 +25,9 @@ AGENTS.md
 FOUND_ISSUES.md
 skills-lock.json
 
+# Holds a qm_pat_… personal access token once filled in — never commit.
+.mcp.json
+
 # Docker Compose local env — copy from docker/.env.example, never commit.
 .env
 

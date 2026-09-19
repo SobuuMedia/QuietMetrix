@@ -101,6 +101,41 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'projects', 'idempotency_key', 'VARCHAR(128) NULL');
     addIndexIfMissing($db, 'projects', 'idx_projects_owner_idempotency',
         'UNIQUE KEY idx_projects_owner_idempotency (owner_user_id, idempotency_key)');
+    // Aggregate-only counter ingest (see counters.php / counterRegistry.php). Every
+    // /aggregates, /transitions, /search, /friction, /sessions and /retention route reads
+    // through these; without this guard an existing install's counters table never gets
+    // created (schema.sql alone never runs against it) and every one of those routes 500s.
+    createTableIfMissing($db, 'counters', "
+        CREATE TABLE counters (
+            project_id   VARCHAR(36)  NOT NULL,
+            day          VARCHAR(10)  NOT NULL,
+            metric       VARCHAR(64)  NOT NULL,
+            platform     VARCHAR(20)  NOT NULL DEFAULT '',
+            app_version  VARCHAR(32)  NOT NULL DEFAULT '',
+            country      CHAR(2)      NOT NULL DEFAULT '',
+            dims_hash    CHAR(64)     NOT NULL,
+            dims         TEXT         NOT NULL,
+            n            BIGINT       NOT NULL DEFAULT 0,
+            devices      BIGINT       NOT NULL DEFAULT 0,
+            updated_at   VARCHAR(32)  NOT NULL,
+            PRIMARY KEY (project_id, day, metric, platform, app_version, country, dims_hash),
+            KEY idx_counters_project_metric_day (project_id, metric, day),
+            CONSTRAINT fk_counters_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    createTableIfMissing($db, 'counters_quarantine', "
+        CREATE TABLE counters_quarantine (
+            id                 BIGINT       NOT NULL AUTO_INCREMENT,
+            project_id         VARCHAR(36)  NOT NULL,
+            payload            TEXT         NOT NULL,
+            quarantine_reason  VARCHAR(50)  NOT NULL,
+            quarantine_detail  TEXT,
+            quarantined_at     VARCHAR(32)  NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_counters_quarantine_project (project_id, quarantined_at),
+            CONSTRAINT fk_counters_q_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 
     // 1d. Drop the raw event-stream ingest path (see the Ktor V19__drop_events.sql
     // migration): /track is gone, so nothing writes to these tables or reads these columns

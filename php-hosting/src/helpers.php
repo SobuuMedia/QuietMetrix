@@ -21,6 +21,26 @@ function now(): string {
     return gmdate('Y-m-d\TH:i:s\Z');
 }
 
+/**
+ * Name of the config file index.php/diag.php should require, relative to the
+ * php-hosting/ root. Defaults to 'config.php'; set the QM_CONFIG_FILE env var to
+ * point local/e2e testing at a distinctly-named file instead (e.g. config.e2e.php)
+ * so a file literally named config.php never needs to exist in a working copy used
+ * for manual testing -- see tests/configFilePathTest.php for why this matters.
+ * An empty value or one containing a path separator (accidental escape outside
+ * php-hosting/) is ignored and falls back to the safe default.
+ */
+function configFilePath(): string {
+    $override = getenv('QM_CONFIG_FILE');
+    if ($override === false || $override === '') {
+        return 'config.php';
+    }
+    if (strpos($override, '/') !== false || strpos($override, '\\') !== false) {
+        return 'config.php';
+    }
+    return $override;
+}
+
 /** Generates a 64-character random hex token, suitable for API keys. */
 function randomToken(): string {
     return bin2hex(random_bytes(32));

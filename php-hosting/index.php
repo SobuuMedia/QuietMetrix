@@ -1,20 +1,26 @@
 <?php
 
-// Prevent absolute path disclosure if config.php is missing.
+// helpers.php has no dependency on config.php's constants, so it's safe to load
+// first -- needed here for configFilePath(), which resolves which config file to
+// require (normally config.php; QM_CONFIG_FILE can point local/e2e testing at a
+// distinctly-named file instead, see tests/configFilePathTest.php).
+require_once __DIR__ . '/src/helpers.php';
+$configFile = configFilePath();
+
+// Prevent absolute path disclosure if the config file is missing.
 // The global exception handler is registered further down, so we
 // catch this explicitly first.
-if (!file_exists(__DIR__ . '/config.php')) {
+if (!file_exists(__DIR__ . '/' . $configFile)) {
     http_response_code(500);
     header('Content-Type: application/json');
     echo json_encode([
         'error'   => 'misconfigured',
-        'message' => 'config.php is missing. Copy config.example.php to config.php and fill in the values.',
+        'message' => "$configFile is missing. Copy config.example.php to $configFile and fill in the values.",
     ]);
     exit;
 }
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/src/helpers.php';
+require_once __DIR__ . '/' . $configFile;
 require_once __DIR__ . '/src/db.php';
 require_once __DIR__ . '/src/jwt.php';
 require_once __DIR__ . '/src/accessTokens.php';

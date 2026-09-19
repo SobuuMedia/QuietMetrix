@@ -3,6 +3,14 @@
 // QuietMetrix PHP backend — configuration
 // Copy this file to `config.php` and fill in the values for your hosting.
 // `config.php` is NOT committed to the repo. Keep it out of version control.
+//
+// For local/manual testing against a different database, DO NOT keep a second
+// working copy with its own `config.php` around -- that's how a test config
+// (test DB host, weak JWT secret, etc.) ends up FTP'd over the real production
+// one. Instead copy this file to a distinctly-named file (e.g. config.e2e.php)
+// and set QM_CONFIG_FILE=config.e2e.php in the environment php -S runs in; a
+// file literally named config.php then never has to exist in that checkout at
+// all. See php-hosting/tests/configFilePathTest.php.
 // ---------------------------------------------------------------------------
 
 // MySQL connection
