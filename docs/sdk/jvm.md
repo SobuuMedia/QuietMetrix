@@ -99,6 +99,21 @@ QuietMetrix.init(QuietMetrixConfig(
 ))
 ```
 
+## Experiments (A/B testing)
+
+Create an experiment in the dashboard's Experiments tab, then branch on it in code — no
+config to declare here, unlike funnels. See the [Experiments guide](experiments.md) for the
+full concept, timing, and country-targeting details.
+
+```kotlin
+import com.quietmetrix.analytics.getVariant
+import com.quietmetrix.analytics.trackExperimentInteraction
+
+val variant = getVariant("checkout_cta") // "a", "b", or "none"
+// ... on the interaction you're measuring:
+trackExperimentInteraction("checkout_cta")
+```
+
 ## Force Flush
 
 ```kotlin

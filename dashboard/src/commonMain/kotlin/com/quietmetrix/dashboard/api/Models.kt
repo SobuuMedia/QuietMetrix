@@ -366,3 +366,79 @@ data class FunnelResultsResponse(
     val trend: List<FunnelTrendPointDto>? = null,
     val truncated: Boolean = false,
 )
+
+// ---- Experiments (A/B testing) ----
+
+/** One variant's display name and its share (1-99) of enrolled devices; also used, unchanged,
+ *  as a variant's name+weight wherever the server's wire shape reuses it (see
+ *  servers/ktor/.../experiments/ExperimentModels.kt's VariantSpec, which this mirrors). */
+@Serializable
+data class VariantDto(val name: String, val weight: Int)
+
+@Serializable
+data class ExperimentDto(
+    val key: String,
+    val name: String,
+    val screen: String? = null,
+    val status: String = "draft",
+    @SerialName("traffic_percent") val trafficPercent: Int = 100,
+    val variants: List<VariantDto> = emptyList(),
+    val countries: List<String>? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("started_at") val startedAt: String? = null,
+    @SerialName("ended_at") val endedAt: String? = null,
+)
+
+/** `limit` is null when the project's plan has no cap on experiments (paid plan, or self-host). */
+@Serializable
+data class ExperimentsResponse(val experiments: List<ExperimentDto> = emptyList(), val limit: Int? = null)
+
+@Serializable
+data class CreateExperimentRequest(
+    val key: String,
+    val name: String,
+    val screen: String? = null,
+    @SerialName("traffic_percent") val trafficPercent: Int? = null,
+    val variants: List<VariantDto>? = null,
+    val countries: List<String>? = null,
+)
+
+@Serializable
+data class UpdateExperimentRequest(
+    val name: String? = null,
+    val screen: String? = null,
+    @SerialName("traffic_percent") val trafficPercent: Int? = null,
+    val status: String? = null,
+    val variants: List<VariantDto>? = null,
+    val countries: List<String>? = null,
+)
+
+@Serializable
+data class ExperimentRangeDto(val from: String = "", val to: String = "")
+
+@Serializable
+data class ExperimentVariantResultDto(
+    val name: String,
+    val impressions: Long? = null,
+    val interactions: Long? = null,
+    val rate: Double? = null,
+)
+
+@Serializable
+data class ExperimentComparisonDto(
+    val baseline: String,
+    val challenger: String,
+    val z: Double,
+    @SerialName("p_value") val pValue: Double,
+    val significant: Boolean,
+    val winner: String? = null,
+)
+
+@Serializable
+data class ExperimentResultsResponse(
+    val experiment: ExperimentDto,
+    val range: ExperimentRangeDto = ExperimentRangeDto(),
+    val unit: String = "sessions",
+    val variants: List<ExperimentVariantResultDto> = emptyList(),
+    val comparison: ExperimentComparisonDto? = null,
+)

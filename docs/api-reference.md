@@ -126,6 +126,23 @@ example of the results payload.
 
 A step's `props` are string→string exact-match filters compared against the matching event's own props (stringified), not the freeform, mixed-type `props` an event itself carries — an empty filter is always `{}` on the wire, never `[]`.
 
+### Experiments (A/B testing)
+
+See the [Experiments developer guide](sdk/experiments.md) for concepts, assignment timing, and
+country targeting. Unlike funnels, an experiment's definition lives entirely on the server —
+app code only asks `getVariant`/reports `trackExperimentInteraction`.
+
+- `GET /api/v1/projects/:id/experiments` — Bearer auth (session, or PAT with `analytics:read`). List the project's experiments, newest first. Response includes `limit` — the max non-ended experiments the project's plan allows, or `null` if unlimited.
+- `POST /api/v1/projects/:id/experiments` — Bearer auth, admin/developer role. Creates a `draft` experiment. `403 experiment_limit_reached` if the plan's limit is already met (cloud/free plan only — self-hosted and paid-plan projects are never capped).
+- `PATCH /api/v1/projects/:id/experiments/:experimentKey` — Bearer auth, admin/developer role. Partial update; also used for status transitions (`draft→active→paused→active→ended`). `variants`/`countries` may only change while `draft`; nothing changes once `ended`.
+- `DELETE /api/v1/projects/:id/experiments/:experimentKey` — Bearer auth, admin/developer role. Only a `draft` experiment may be deleted; end a live one instead.
+- `GET /api/v1/projects/:id/experiments/:experimentKey/results` — Bearer auth (session, or PAT with `analytics:read`). Query params: `range` (`1h`\|`1d`\|`7d`\|`30d`\|`90d`, default `7d`). Returns per-variant impressions/interactions/rate plus a two-proportion significance `comparison` (`null` until each variant has at least 30 impressions).
+- `GET /api/v1/experiments/config` — API key auth (`X-QM-Api-Key`). SDK-facing: returns only `active` experiments, with only the fields needed to assign a variant on-device (key, traffic percentage, variants, countries) — never a name, screen label, or timestamp.
+
+A device's variant assignment and its bucketing id never reach the server — only aggregate
+`experiment{exp, variant, action}` impression/interaction counters do, subject to the same
+k-anonymity gate as every other counter.
+
 ## Error Responses
 
 All errors follow `{ "error": "code", "message": "description" }`.

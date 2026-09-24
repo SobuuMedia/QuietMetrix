@@ -9,10 +9,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.promise
 import kotlin.js.Promise
+import com.quietmetrix.analytics.getVariant as coreGetVariant
 import com.quietmetrix.analytics.hasCookieConsent as coreHasCookieConsent
 import com.quietmetrix.analytics.isTrackingAllowed as coreIsTrackingAllowed
 import com.quietmetrix.analytics.setCookieConsent as coreSetCookieConsent
 import com.quietmetrix.analytics.trackEvent as coreTrackEvent
+import com.quietmetrix.analytics.trackExperimentInteraction as coreTrackExperimentInteraction
 import com.quietmetrix.analytics.trackScreen as coreTrackScreen
 
 /**
@@ -129,6 +131,21 @@ fun trackEvent(event: String, options: TrackOptions? = null): Promise<Unit> = fa
 @JsExport
 fun trackScreen(screen: String, props: Any? = null): Promise<Unit> = facadeScope.promise {
     coreTrackScreen(screen, jsObjectToMap(props))
+}
+
+/**
+ * The variant name to render for [experimentKey], or `"none"` when this device isn't
+ * enrolled in it. Synchronous (no Promise) — unlike `trackEvent`, this never touches the
+ * network or a suspend function. See docs/sdk/experiments.md.
+ */
+@JsExport
+fun getVariant(experimentKey: String): String = coreGetVariant(experimentKey)
+
+/** Records that the user interacted with whichever variant [getVariant] returned for
+ *  [experimentKey] this session. At most once per session; synchronous, fire-and-forget. */
+@JsExport
+fun trackExperimentInteraction(experimentKey: String) {
+    coreTrackExperimentInteraction(experimentKey)
 }
 
 /** Flush any queued events now. Useful on `beforeunload`. */

@@ -110,6 +110,23 @@ const signupFunnel = defineFunnel({
 await signupFunnel.step("submit", { plan: "pro" });
 ```
 
+## Experiments (A/B testing)
+
+Create an experiment in the dashboard's Experiments tab, then branch on it in code — no
+config to declare here, unlike funnels. See the [Experiments guide](experiments.md) for the
+full concept, timing, and country-targeting details. Both calls are synchronous — unlike
+`trackEvent`, they don't return a `Promise`.
+
+```typescript
+import { getVariant, trackExperimentInteraction } from "@sobuumedia/quietmetrix-sdk";
+
+const variant = getVariant("checkout_cta"); // "a", "b", or "none"
+
+button.addEventListener("click", () => {
+    trackExperimentInteraction("checkout_cta");
+});
+```
+
 ## Using it in Vue
 
 Initialize once in your entry file, then track route changes with the router:

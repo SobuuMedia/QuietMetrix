@@ -11,6 +11,7 @@ fun Routing.configureAllRoutes(config: AppConfig) {
     configureProjectRoutes()
     configureTokenRoutes()
     configureFunnelRoutes()
+    configureExperimentRoutes()
     configureDashboardRoutes()
     configureStaticDashboardRoutes()
 }

@@ -26,6 +26,7 @@ function counterMetricRegistry(): array {
         'search'             => ['screen'],
         'search_zero_result' => ['screen'],
         'friction'           => ['screen', 'kind'],
+        'experiment'         => ['exp', 'variant', 'action'],
     ];
 }
 

@@ -36,6 +36,7 @@ object CounterRegistry {
         MetricSpec("search", setOf("screen")),
         MetricSpec("search_zero_result", setOf("screen")),
         MetricSpec("friction", setOf("screen", "kind")),
+        MetricSpec("experiment", setOf("exp", "variant", "action")),
     ).associateBy { it.name }
 
     private val KEY_REGEX = Regex("^[a-z0-9_]{1,32}$")

@@ -334,4 +334,49 @@ class ApiClient(private val baseUrl: String) {
         ensureSuccess(res)
         return res.body()
     }
+
+    // ---- Experiments (A/B testing) ----
+
+    suspend fun listExperiments(projectId: String): ExperimentsResponse {
+        val res = client.get(url("/projects/$projectId/experiments")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun createExperiment(projectId: String, request: CreateExperimentRequest): ExperimentDto {
+        val res = client.post(url("/projects/$projectId/experiments")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(request)
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun updateExperiment(projectId: String, experimentKey: String, request: UpdateExperimentRequest): ExperimentDto {
+        val res = client.patch(url("/projects/$projectId/experiments/$experimentKey")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(request)
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun deleteExperiment(projectId: String, experimentKey: String) {
+        val res = client.delete(url("/projects/$projectId/experiments/$experimentKey")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+    }
+
+    suspend fun experimentResults(projectId: String, experimentKey: String, range: TimeRange): ExperimentResultsResponse {
+        val res = client.get(url("/projects/$projectId/experiments/$experimentKey/results?range=${range.token}")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
 }

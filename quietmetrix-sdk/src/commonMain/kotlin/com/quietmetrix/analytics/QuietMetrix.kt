@@ -6,6 +6,8 @@ import com.quietmetrix.analytics.internal.ScreenTracker
 import com.quietmetrix.analytics.internal.counters.CounterFlusher
 import com.quietmetrix.analytics.internal.counters.RetentionReporter
 import com.quietmetrix.analytics.internal.counters.SessionTracker
+import com.quietmetrix.analytics.internal.experiments.ExperimentClient
+import com.quietmetrix.analytics.internal.experiments.ExperimentTracker
 import com.quietmetrix.analytics.internal.funnels.FunnelEvaluator
 import com.quietmetrix.analytics.internal.funnels.FunnelRegistrar
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +28,9 @@ object QuietMetrix {
         ConfigHolder.set(config)
         platformInit(config)
         SessionTracker.start()
+        ExperimentTracker.reset()
+        ExperimentClient.loadSnapshot(config)
+        ExperimentClient.refreshInBackground(config)
         CounterFlusher.start(config)
         FunnelEvaluator.configure(config)
         FunnelRegistrar.registerIfChanged(config)

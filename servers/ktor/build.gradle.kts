@@ -79,6 +79,19 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// The dashboard's wasmJs bundle is synced into src/main/resources/dashboard/ by
+// :dashboard:copyDashboardToKtor (see dashboard/build.gradle.kts), then bundled into this
+// module's jar as a static resource (see StaticRoutesKt / configureStaticDashboardRoutes).
+// Gradle has no automatic way to know processResources (an input-snapshot of that directory)
+// must run AFTER that cross-project copy finishes -- without this, requesting both
+// :dashboard:installDashboard and this module's jar/buildFatJar task in the SAME invocation
+// (as the Docker build does, with org.gradle.parallel=true) races the two: processResources
+// can snapshot the directory's stale pre-build contents before the (much slower) wasmJs +
+// webpack build overwrites it, silently shipping an outdated dashboard with no build error.
+tasks.named("processResources") {
+    dependsOn(":dashboard:copyDashboardToKtor")
+}
+
 ktor {
     docker {
         jreVersion.set(JavaVersion.VERSION_21)

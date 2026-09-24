@@ -104,29 +104,73 @@ function clientIp(): ?string {
     return $remoteAddr;
 }
 
+/**
+ * Normalizes the ALLOWED_ORIGINS constant to a comma-separated string, whatever
+ * shape it was defined in. Older shared-hosting configs used serialize([...]);
+ * current configs use a plain comma-separated string. Returns '' if unset or
+ * unusable, which callers treat as "no allowlist configured".
+ */
+function allowedOriginsCsv(): string {
+    if (!defined('ALLOWED_ORIGINS')) return '';
+    $configured = constant('ALLOWED_ORIGINS');
+    if (is_array($configured)) {
+        return implode(',', $configured);
+    }
+    if (!is_string($configured)) return '';
+    $legacy = @unserialize($configured);
+    return is_array($legacy) ? implode(',', $legacy) : $configured;
+}
+
+/**
+ * Picks the Access-Control-Allow-Origin value for a response, given the
+ * request's Origin header, the legacy single pinned origin (ALLOWED_ORIGIN),
+ * and the Stage 5 allowlist (ALLOWED_ORIGINS, comma-separated). '*' on either
+ * config wins outright. With an allowlist configured, a matching request
+ * origin is echoed back (required for the browser to accept a non-wildcard
+ * CORS response); a non-matching or missing origin falls back to the pinned
+ * origin. With no allowlist, the pinned origin is always returned unchanged
+ * (legacy single-origin behaviour). Returns null when there is nothing safe
+ * to send, meaning callers should omit the header entirely.
+ */
+function resolveCorsOrigin(?string $requestOrigin, string $pinnedOrigin, string $allowlist): ?string {
+    $pinned = trim($pinnedOrigin);
+    if ($pinned === '*') return '*';
+
+    $allowed = array_values(array_filter(array_map(
+        static fn($value) => trim($value),
+        explode(',', $allowlist),
+    ), static fn($value) => $value !== ''));
+
+    if (in_array('*', $allowed, true)) return '*';
+
+    if (!empty($allowed) && $requestOrigin !== null && in_array($requestOrigin, $allowed, true)) {
+        return $requestOrigin;
+    }
+
+    return $pinned !== '' ? $pinned : null;
+}
+
+/**
+ * Stage 5 — true if a browser-originated request's Origin is allowed to post
+ * ingest events. No Origin header (mobile/native SDKs) is always allowed. An
+ * empty allowlist means the check isn't enforced; '*' allows any origin.
+ */
+function isIngestOriginAllowed(?string $requestOrigin, string $allowlist): bool {
+    if ($requestOrigin === null) return true;
+
+    $allowed = array_values(array_filter(array_map(
+        static fn($value) => trim($value),
+        explode(',', $allowlist),
+    ), static fn($value) => $value !== ''));
+
+    if (empty($allowed)) return true;
+    return in_array('*', $allowed, true) || in_array($requestOrigin, $allowed, true);
+}
+
 /** Stage 5 — origin/referer check for non-mobile traffic, shared by every ingest route. */
 function checkOrigin(): void {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? ($_SERVER['HTTP_REFERER'] ?? null);
-    if ($origin === null) return; // mobile / no origin — skip
-
-    if (!defined('ALLOWED_ORIGINS')) return;
-    $configured = constant('ALLOWED_ORIGINS');
-    if (is_array($configured)) {
-        $allowed = $configured;
-    } elseif (is_string($configured)) {
-        // Older shared-hosting configs used serialize([...]); current configs use a
-        // comma-separated string. Support both during an in-place upgrade.
-        $legacy = @unserialize($configured);
-        $allowed = is_array($legacy) ? $legacy : explode(',', $configured);
-    } else {
-        return;
-    }
-    $allowed = array_values(array_filter(array_map(
-        static fn($value) => is_string($value) ? trim($value) : '',
-        $allowed,
-    ), static fn($value) => $value !== ''));
-    if (empty($allowed)) return;
-    if (!in_array($origin, $allowed, true)) {
+    if (!isIngestOriginAllowed($origin, allowedOriginsCsv())) {
         errorResponse(403, 'origin_forbidden', 'Origin not allowed');
         exit;
     }

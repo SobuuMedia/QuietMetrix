@@ -121,6 +121,29 @@ CREATE TABLE IF NOT EXISTS funnel_manifests (
     CONSTRAINT fk_funnel_manifests_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- A/B testing experiment definitions. Exactly two variants; assignment happens entirely
+-- on-device (deterministic local hashing) -- this table only holds what an operator
+-- configured in the dashboard, never which device got which variant. See
+-- docs/sdk/experiments.md.
+CREATE TABLE IF NOT EXISTS experiments (
+    id               VARCHAR(36)  NOT NULL,
+    project_id       VARCHAR(36)  NOT NULL,
+    experiment_key   VARCHAR(32)  NOT NULL,
+    name             VARCHAR(255) NOT NULL,
+    screen           VARCHAR(128) NULL,
+    status           VARCHAR(16)  NOT NULL DEFAULT 'draft',
+    traffic_percent  INT          NOT NULL DEFAULT 100,
+    variants         JSON         NOT NULL,   -- [{name, weight}, {name, weight}]
+    countries        JSON         NULL,       -- ["ES","FR"] or NULL = all countries
+    created_at       VARCHAR(32)  NOT NULL,
+    updated_at       VARCHAR(32)  NOT NULL,
+    started_at       VARCHAR(32)  NULL,
+    ended_at         VARCHAR(32)  NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_experiments_project_key (project_id, experiment_key),
+    CONSTRAINT fk_experiments_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Counter-based ingest (aggregate-only analytics). A counter cell is
 -- (project, day, metric, platform, app_version, country, dims_hash) -> n. dims_hash is
 -- counterRegistry.php's sha256 of the canonicalized dims map; dims stores that same map as

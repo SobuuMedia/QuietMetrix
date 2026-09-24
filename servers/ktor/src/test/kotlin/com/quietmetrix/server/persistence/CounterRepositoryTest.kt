@@ -99,6 +99,32 @@ class CounterRepositoryTest {
     }
 
     @Test
+    fun `the same dims combination repeated across days and platforms does not count against the distinct-cell cap`() {
+        val (repo, pid) = seed(freshDb()) // maxDistinctCellsPerMetric = 2
+        val dims = mapOf("from" to "A", "to" to "B")
+        // Same logical dims combination, 5 different days -> 5 rows (day is part of the row key)
+        // but only ONE distinct combination, so this alone must never trip a cap of 2.
+        for (offset in 0L until 5L) {
+            val result = repo.upsert(pid, day.plusDays(offset), delta(dims = dims))
+            assertTrue(result is CounterRepository.UpsertResult.Applied, "day offset $offset should apply")
+        }
+
+        // A second distinct combination is still allowed (cap is 2 distinct combinations).
+        val second = repo.upsert(pid, day, delta(dims = mapOf("from" to "B", "to" to "C")))
+        assertTrue(second is CounterRepository.UpsertResult.Applied)
+
+        // A third distinct combination now exceeds the cap.
+        val third = repo.upsert(pid, day, delta(dims = mapOf("from" to "C", "to" to "D")))
+        assertTrue(third is CounterRepository.UpsertResult.Quarantined)
+        assertEquals("cardinality_cap", third.reason)
+
+        // The already-seen first combination can still be written on a brand-new day even
+        // after the cap has been reached by other combinations.
+        val again = repo.upsert(pid, day.plusDays(10), delta(dims = dims))
+        assertTrue(again is CounterRepository.UpsertResult.Applied)
+    }
+
+    @Test
     fun `k-anonymity read filter excludes cells below the threshold and includes cells at or above it`() {
         val (repo, pid) = seed(freshDb()) // kThreshold = 3
         // 2 distinct devices for one cell (below k=3)

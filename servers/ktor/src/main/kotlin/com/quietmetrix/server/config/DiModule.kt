@@ -3,6 +3,7 @@ package com.quietmetrix.server.config
 import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
+import com.quietmetrix.server.persistence.ExperimentRepository
 import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
@@ -40,6 +41,7 @@ fun appModule(config: AppConfig) = module {
     single { ProjectMemberRepository(get()) }
     single { FunnelRepository(get()) }
     single { FunnelRegistrationService(get()) }
+    single { ExperimentRepository(get()) }
     single { CounterRepository(get(), config.counters.kThreshold, config.counters.maxDistinctCellsPerMetric) }
 
     single { RateLimiter(config.rateLimit, kotlinx.coroutines.CoroutineScope(Dispatchers.Default + SupervisorJob())) }

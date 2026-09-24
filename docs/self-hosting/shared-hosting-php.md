@@ -72,3 +72,9 @@ php-hosting/
   return PHP source).
 - API keys are stored as bcrypt hashes in the database.
 - Always use HTTPS.
+
+## Limits
+
+Unlimited — including [experiments](../sdk/experiments.md), where the hosted/cloud offering
+caps a free-plan project at 2 at a time. This deployment target is exclusively self-host, so no
+such cap ever applies here.

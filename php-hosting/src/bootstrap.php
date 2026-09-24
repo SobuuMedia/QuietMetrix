@@ -76,6 +76,27 @@ function ensureInstalled(): void {
             CONSTRAINT fk_funnel_manifests_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    // A/B testing experiment definitions -- see docs/sdk/experiments.md.
+    createTableIfMissing($db, 'experiments', "
+        CREATE TABLE experiments (
+            id               VARCHAR(36)  NOT NULL,
+            project_id       VARCHAR(36)  NOT NULL,
+            experiment_key   VARCHAR(32)  NOT NULL,
+            name             VARCHAR(255) NOT NULL,
+            screen           VARCHAR(128) NULL,
+            status           VARCHAR(16)  NOT NULL DEFAULT 'draft',
+            traffic_percent  INT          NOT NULL DEFAULT 100,
+            variants         JSON         NOT NULL,
+            countries        JSON         NULL,
+            created_at       VARCHAR(32)  NOT NULL,
+            updated_at       VARCHAR(32)  NOT NULL,
+            started_at       VARCHAR(32)  NULL,
+            ended_at         VARCHAR(32)  NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_experiments_project_key (project_id, experiment_key),
+            CONSTRAINT fk_experiments_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
     // Personal access tokens (agents/CLIs) — see docs/agents/setup.md.
     createTableIfMissing($db, 'access_tokens', "
         CREATE TABLE access_tokens (

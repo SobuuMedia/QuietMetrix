@@ -147,6 +147,25 @@ class AnalyticsTokenAuthIntegrationTest {
         assertTrue(response.status != HttpStatusCode.Unauthorized && response.status != HttpStatusCode.Forbidden)
     }
 
+    /** Regression: the dashboard client only ever sends `range`, never explicit `from`/`to` —
+     *  requiring the latter unconditionally made every non-demo Overview load fail with
+     *  `400 bad_request: Parameter 'from' is required`. */
+    @Test
+    fun `aggregates accepts a range token without explicit from and to`() = testApplication {
+        val config = testConfig()
+        val db = freshDb("analytics_auth_range")
+        val userId = UserRepository(db).create("admin@test.com", "password")
+        val projectId = seedProject(db, userId)
+        val pat = AccessTokenRepository(db).create(userId, "agent", setOf("analytics:read"))
+        application { testModule(config, db) }
+
+        val response = client.get("/api/v1/projects/proj_$projectId/aggregates?range=7d") {
+            header("Authorization", "Bearer ${pat.token}")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(!response.bodyAsText().contains("Parameter 'from' is required"))
+    }
+
     @Test
     fun `PAT without analytics read scope is forbidden from aggregates`() = testApplication {
         val config = testConfig()

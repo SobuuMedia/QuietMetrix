@@ -8,6 +8,7 @@ import com.quietmetrix.analytics.internal.createPersistentStore
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -57,5 +58,50 @@ class IdentityUtilsTest {
         val second = generateAnonymousId()
 
         assertEquals(first, second)
+    }
+
+    @Test
+    fun loadOrCreateBucketingId_isStableAcrossCalls() {
+        ConfigHolder.set(QuietMetrixConfig(storageKeyPrefix = "bkttest1_", collectAnonymousId = true))
+
+        val first = loadOrCreateBucketingId()
+        val second = loadOrCreateBucketingId()
+
+        assertEquals(first, second)
+    }
+
+    @Test
+    fun loadOrCreateBucketingId_startsWithBktPrefix() {
+        ConfigHolder.set(QuietMetrixConfig(storageKeyPrefix = "bkttest2_", collectAnonymousId = true))
+
+        val id = loadOrCreateBucketingId()
+
+        assertNotNull(id)
+        assertTrue(id.startsWith("qm_bkt_"))
+    }
+
+    @Test
+    fun loadOrCreateBucketingId_isCreatedRegardlessOfCollectAnonymousId() {
+        ConfigHolder.set(QuietMetrixConfig(storageKeyPrefix = "bkttest3_", collectAnonymousId = false))
+
+        val id = loadOrCreateBucketingId()
+
+        assertNotNull(id)
+        assertTrue(id.isNotBlank())
+    }
+
+    @Test
+    fun loadOrCreateBucketingId_differsFromTheAnonymousId() {
+        ConfigHolder.set(QuietMetrixConfig(storageKeyPrefix = "bkttest4_", collectAnonymousId = true))
+
+        val anonymousId = generateAnonymousId()
+        val bucketingId = loadOrCreateBucketingId()
+
+        assertTrue(anonymousId != bucketingId, "bucketingId must be a separate identifier, not an alias of the anonymous id")
+    }
+
+    @Test
+    fun loadOrCreateBucketingId_isNullBeforeInit() {
+        assertNull(loadOrCreateBucketingId())
     }
 }

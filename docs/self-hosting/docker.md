@@ -62,3 +62,9 @@ git pull
 docker compose up --build -d
 # The migrate service applies any new Flyway migrations before Ktor restarts.
 ```
+
+## Limits
+
+A self-hosted instance is unlimited — including [experiments](../sdk/experiments.md), where the
+hosted/cloud offering caps a free-plan project at 2 at a time. Self-host has no such cap
+regardless of plan.

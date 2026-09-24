@@ -165,6 +165,7 @@ import com.quietmetrix.dashboard.resources.state_no_retention
 import com.quietmetrix.dashboard.resources.state_no_transitions
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.tab_info_flow
+import com.quietmetrix.dashboard.resources.tab_info_experiments
 import com.quietmetrix.dashboard.resources.tab_info_funnels
 import com.quietmetrix.dashboard.resources.tab_info_overview
 import com.quietmetrix.dashboard.resources.tab_info_projects
@@ -246,6 +247,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
             AppTab.Retention -> RetentionTab(viewModel, state, sizeClass)
             AppTab.Projects  -> ProjectsTab(viewModel, state, sizeClass)
             AppTab.Funnels   -> FunnelsTab(viewModel, state, sizeClass)
+            AppTab.Experiments -> ExperimentsTab(viewModel, state, sizeClass)
             AppTab.Users     -> UsersTab(viewModel, state, sizeClass)
             AppTab.Settings  -> SettingsTab(viewModel, state)
         }
@@ -440,6 +442,8 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
         )
     }
 
+    ExperimentsGuide(viewModel, state)
+
     state.showInfo?.let { tab ->
         val infoText = when (tab) {
             AppTab.Overview  -> stringResource(Res.string.tab_info_overview)
@@ -447,6 +451,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
             AppTab.Retention -> stringResource(Res.string.tab_info_retention)
             AppTab.Projects  -> stringResource(Res.string.tab_info_projects)
             AppTab.Funnels   -> stringResource(Res.string.tab_info_funnels)
+            AppTab.Experiments -> stringResource(Res.string.tab_info_experiments)
             AppTab.Users     -> stringResource(Res.string.tab_info_users)
             AppTab.Settings  -> stringResource(Res.string.tab_info_settings)
         }

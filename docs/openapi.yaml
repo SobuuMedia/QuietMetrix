@@ -47,6 +47,10 @@ tags:
     description: Aggregated analytics data
   - name: Funnels
     description: Step-conversion funnels — SDK-declared or dashboard-managed
+  - name: Experiments
+    description: |
+      A/B testing experiments — dashboard-managed, on-device assignment. See
+      docs/sdk/experiments.md.
 
 paths:
   /api/v1/health:
@@ -1011,6 +1015,257 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/projects/{projectId}/experiments:
+    get:
+      tags: [Experiments]
+      operationId: listExperiments
+      summary: List experiments
+      description: |
+        Returns all of the project's experiments (any status), newest first. `limit` is the
+        max non-ended experiments the project's plan allows, or `null` if unlimited (any
+        non-free plan, or a self-hosted server — self-hosted is always unlimited).
+      security:
+        - BearerAuth: []
+        - PersonalAccessToken: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: List of experiments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentsResponse"
+        "401":
+          description: Invalid or missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags: [Experiments]
+      operationId: createExperiment
+      summary: Create an experiment
+      description: |
+        Creates an experiment in `draft` status. Requires the admin or developer role.
+        Exactly 2 variants, weights summing to 100. See
+        [the Experiments guide](sdk/experiments.md) for the full field rules.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExperimentRequest"
+            example:
+              key: checkout_cta
+              name: Checkout button colour
+              screen: Checkout
+              traffic_percent: 100
+              variants:
+                - name: a
+                  weight: 50
+                - name: b
+                  weight: 50
+      responses:
+        "201":
+          description: Experiment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: Invalid experiment definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin or developer on this project, OR the free plan's experiment limit was reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: experiment_limit_reached
+                message: "You have reached the maximum number of experiments allowed for your plan."
+        "409":
+          description: An experiment with this key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/experiments/{experimentKey}:
+    patch:
+      tags: [Experiments]
+      operationId: updateExperiment
+      summary: Update an experiment
+      description: |
+        Partial update; also used for status transitions (`status` field). Requires the admin
+        or developer role. `variants`/`countries` may only change while `draft`; `ended`
+        accepts no edits at all. An invalid status transition returns 409 `invalid_transition`;
+        editing a frozen field returns 409 `not_editable`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ExperimentKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExperimentRequest"
+      responses:
+        "200":
+          description: Updated experiment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: Invalid experiment definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin or developer on this project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Invalid status transition, or the field isn't editable in the current status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Experiments]
+      operationId: deleteExperiment
+      summary: Delete an experiment
+      description: Only a `draft` experiment may be deleted; end a live one instead.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ExperimentKey"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+        "404":
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The experiment is not a draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectId}/experiments/{experimentKey}/results:
+    get:
+      tags: [Experiments]
+      operationId: experimentResults
+      summary: Get an experiment's results
+      description: |
+        Per-variant impressions/interactions/rate, plus a two-proportion significance
+        `comparison` (null until each variant has at least 30 impressions, or either
+        variant's cell is still hidden by the k-anonymity gate). See
+        [the Experiments guide](sdk/experiments.md#what-gets-measured).
+      security:
+        - BearerAuth: []
+        - PersonalAccessToken: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ExperimentKey"
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [1h, 1d, 7d, 30d, 90d]
+            default: 7d
+      responses:
+        "200":
+          description: Experiment results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResultsResponse"
+        "401":
+          description: Invalid or missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/experiments/config:
+    get:
+      tags: [Experiments]
+      operationId: getExperimentsConfig
+      summary: Fetch active-experiment config (SDK-facing)
+      description: |
+        Called by the SDK once per app launch. Returns only `active` experiments, with only
+        the fields needed to assign a variant on-device — never a name, screen label, or
+        timestamp. Stateless and cacheable (`Cache-Control: public, max-age=300`); no
+        per-device data is returned or accepted.
+      security:
+        - ApiKey: []
+      responses:
+        "200":
+          description: Active experiment config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentConfigResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     ApiKey:
@@ -1054,6 +1309,15 @@ components:
         type: string
         pattern: "^[a-z0-9_-]{1,64}$"
       description: The funnel's slug key
+
+    ExperimentKey:
+      name: experimentKey
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9_]{1,32}$"
+      description: The experiment's slug key
 
   schemas:
     SdkInfo:
@@ -1920,6 +2184,272 @@ components:
         truncated:
           type: boolean
           description: True if the underlying event scan hit its internal row cap; narrow the range for complete results
+
+    VariantWeight:
+      type: object
+      required:
+        - name
+        - weight
+      properties:
+        name:
+          type: string
+          pattern: "^[a-z0-9_]{1,32}$"
+          example: "b"
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 99
+          example: 50
+
+    ExperimentResponse:
+      type: object
+      required:
+        - key
+        - name
+        - status
+        - traffic_percent
+        - variants
+        - created_at
+      properties:
+        key:
+          type: string
+          example: "checkout_cta"
+        name:
+          type: string
+          example: "Checkout button colour"
+        screen:
+          type: string
+          nullable: true
+          description: Display-only metadata; has no effect on targeting
+        status:
+          type: string
+          enum: [draft, active, paused, ended]
+        traffic_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        variants:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/VariantWeight"
+        countries:
+          type: array
+          nullable: true
+          items:
+            type: string
+            pattern: "^[A-Z]{2}$"
+          description: ISO-3166 alpha-2 codes; null means all countries
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ExperimentsResponse:
+      type: object
+      required:
+        - experiments
+      properties:
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentResponse"
+        limit:
+          type: integer
+          nullable: true
+          description: Max non-ended experiments this project's plan allows, or null if unlimited
+
+    CreateExperimentRequest:
+      type: object
+      required:
+        - key
+        - name
+      properties:
+        key:
+          type: string
+          pattern: "^[a-z0-9_]{1,32}$"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        screen:
+          type: string
+          nullable: true
+        traffic_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        variants:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/VariantWeight"
+          default:
+            - name: a
+              weight: 50
+            - name: b
+              weight: 50
+        countries:
+          type: array
+          nullable: true
+          items:
+            type: string
+
+    UpdateExperimentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        screen:
+          type: string
+          nullable: true
+        traffic_percent:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+        status:
+          type: string
+          nullable: true
+          enum: [draft, active, paused, ended]
+        variants:
+          type: array
+          nullable: true
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/VariantWeight"
+        countries:
+          type: array
+          nullable: true
+          items:
+            type: string
+
+    ExperimentVariantResult:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        impressions:
+          type: integer
+          format: int64
+          nullable: true
+          description: Null when hidden by the k-anonymity gate, or no data yet — never a fake 0
+        interactions:
+          type: integer
+          format: int64
+          nullable: true
+        rate:
+          type: number
+          format: double
+          nullable: true
+          description: interactions / impressions; null unless both are present and impressions > 0
+
+    ExperimentComparison:
+      type: object
+      required:
+        - baseline
+        - challenger
+        - z
+        - p_value
+        - significant
+      properties:
+        baseline:
+          type: string
+        challenger:
+          type: string
+        z:
+          type: number
+          format: double
+        p_value:
+          type: number
+          format: double
+        significant:
+          type: boolean
+          description: "p_value < 0.05"
+        winner:
+          type: string
+          nullable: true
+          description: Set only when significant is true
+
+    ExperimentResultsResponse:
+      type: object
+      required:
+        - experiment
+        - range
+        - unit
+        - variants
+      properties:
+        experiment:
+          $ref: "#/components/schemas/ExperimentResponse"
+        range:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        unit:
+          type: string
+          enum: [sessions]
+          description: Every count here is per-session, not per-person
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentVariantResult"
+        comparison:
+          allOf:
+            - $ref: "#/components/schemas/ExperimentComparison"
+          nullable: true
+
+    ExperimentConfigItem:
+      type: object
+      required:
+        - key
+        - traffic_percent
+        - variants
+      description: The minimal, SDK-facing shape — no name, screen, or timestamp
+      properties:
+        key:
+          type: string
+        traffic_percent:
+          type: integer
+        variants:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/VariantWeight"
+        countries:
+          type: array
+          nullable: true
+          items:
+            type: string
+
+    ExperimentConfigResponse:
+      type: object
+      required:
+        - experiments
+      properties:
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentConfigItem"
 
     AggregatesResponse:
       type: object

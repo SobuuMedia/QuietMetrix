@@ -44,12 +44,27 @@ function counterUpsert(
     $exists = $existsStmt->fetchColumn() !== false;
 
     if (!$exists) {
-        $countStmt = $db->prepare('SELECT COUNT(*) FROM counters WHERE project_id = ? AND metric = ?');
-        $countStmt->execute([$projectId, $metric]);
-        $distinctCells = (int)$countStmt->fetchColumn();
-        if ($distinctCells >= $maxDistinctCellsPerMetric) {
-            counterQuarantine($projectId, $metric, $dims, $n, 'cardinality_cap', "metric $metric already has $distinctCells distinct cells");
-            return ['applied' => false, 'reason' => 'cardinality_cap'];
+        // The cap limits distinct DIMS COMBINATIONS (dims_hash) per metric, not rows. A
+        // single combination produces one row per (day, platform, app_version, country), so
+        // counting rows here would trip the cap on a single popular metric within weeks even
+        // with no new combinations. Only check the cap when this dims_hash has never been
+        // seen before for this metric (on any day/platform/version/country).
+        $hashSeenStmt = $db->prepare(
+            'SELECT 1 FROM counters WHERE project_id = ? AND metric = ? AND dims_hash = ? LIMIT 1'
+        );
+        $hashSeenStmt->execute([$projectId, $metric, $dimsHash]);
+        $hashSeenBefore = $hashSeenStmt->fetchColumn() !== false;
+
+        if (!$hashSeenBefore) {
+            $countStmt = $db->prepare(
+                'SELECT COUNT(DISTINCT dims_hash) FROM counters WHERE project_id = ? AND metric = ?'
+            );
+            $countStmt->execute([$projectId, $metric]);
+            $distinctCombinations = (int)$countStmt->fetchColumn();
+            if ($distinctCombinations >= $maxDistinctCellsPerMetric) {
+                counterQuarantine($projectId, $metric, $dims, $n, 'cardinality_cap', "metric $metric already has $distinctCombinations distinct dims combinations");
+                return ['applied' => false, 'reason' => 'cardinality_cap'];
+            }
         }
     }
 

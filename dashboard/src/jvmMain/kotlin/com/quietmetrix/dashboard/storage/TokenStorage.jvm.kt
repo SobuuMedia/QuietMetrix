@@ -12,6 +12,7 @@ actual object TokenStorage {
     private const val KEY_REFRESH = "qm_refresh_token"
     private const val KEY_LAST_PROJECT = "qm_last_project_id"
     private const val KEY_USER = "qm_user"
+    private const val KEY_EXPERIMENTS_GUIDE_SEEN = "qm_experiments_guide_seen"
 
     actual fun save(token: String) { store[KEY_TOKEN] = token }
     actual fun get(): String? = store[KEY_TOKEN]
@@ -28,4 +29,7 @@ actual object TokenStorage {
     actual fun saveLastProjectId(projectId: String) { store[KEY_LAST_PROJECT] = projectId }
     actual fun getLastProjectId(): String? = store[KEY_LAST_PROJECT]
     actual fun clearLastProjectId() { store.remove(KEY_LAST_PROJECT) }
+
+    actual fun saveExperimentsGuideSeen() { store[KEY_EXPERIMENTS_GUIDE_SEEN] = "1" }
+    actual fun isExperimentsGuideSeen(): Boolean = store[KEY_EXPERIMENTS_GUIDE_SEEN] == "1"
 }

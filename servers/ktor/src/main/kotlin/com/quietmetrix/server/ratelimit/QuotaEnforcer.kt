@@ -17,4 +17,16 @@ class QuotaEnforcer(@Suppress("unused") private val projectRepository: ProjectRe
     fun checkQuota(planId: String?, currentUsage: Long): Boolean = true
 
     fun checkProjectLimit(planId: String?, currentProjectCount: Long): Boolean = true
+
+    /**
+     * Max non-ended experiments allowed per project for [planId]; null means unlimited. Unlike
+     * [checkProjectLimit], this DOES enforce a real limit — but only when [isCloud] is true.
+     * A self-hosted instance (the default) is always unlimited, same philosophy as every other
+     * limit in this class; see ProjectRoutesIntegrationTest's self-host regression test for the
+     * invariant this preserves.
+     */
+    fun experimentLimit(planId: String?, isCloud: Boolean): Int? {
+        if (!isCloud) return null
+        return if (planId == null || planId == "free") 2 else null
+    }
 }

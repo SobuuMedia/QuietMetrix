@@ -8,8 +8,16 @@ import com.quietmetrix.server.counters.FrictionCounterAnalyzer
 import com.quietmetrix.server.counters.SearchCounterAnalyzer
 import com.quietmetrix.server.counters.SessionCounterAnalyzer
 import com.quietmetrix.server.counters.ValueCounterAnalyzer
+import com.quietmetrix.server.domain.AggregatesResponse
+import com.quietmetrix.server.domain.AggregatesTotals
+import com.quietmetrix.server.domain.BreakdownItem
+import com.quietmetrix.server.domain.DailyPointItem
 import com.quietmetrix.server.domain.DailySessionItem
 import com.quietmetrix.server.domain.ErrorResponse
+import com.quietmetrix.server.domain.ScreenDurationItem
+import com.quietmetrix.server.domain.TopEventItem
+import com.quietmetrix.server.domain.TopScreenItem
+import com.quietmetrix.server.domain.TopValueItem
 import com.quietmetrix.server.domain.RetentionCohort
 import com.quietmetrix.server.domain.RetentionResponse
 import com.quietmetrix.server.domain.SessionsResponse
@@ -76,16 +84,14 @@ fun Routing.configureDashboardRoutes() {
                 return@get
             }
 
-            val from = call.parameters["from"] ?: run {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Parameter 'from' is required"))
-                return@get
-            }
-            val to = call.parameters["to"] ?: run {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Parameter 'to' is required"))
-                return@get
-            }
-            val fromInstant = Instant.parse(from)
-            val toInstant = Instant.parse(to)
+            // Either explicit `from`/`to` (ISO-8601 instants), or a `range` token
+            // (1h|1d|7d|30d|90d, default 7d) like every other analytics endpoint — the
+            // dashboard client only ever sends `range`, so `from`/`to` alone must not be
+            // required. Explicit `from`/`to` still wins when both are given.
+            val toParam = call.parameters["to"]
+            val fromParam = call.parameters["from"]
+            val toInstant = toParam?.let { Instant.parse(it) } ?: Instant.now()
+            val fromInstant = fromParam?.let { Instant.parse(it) } ?: toInstant.minusSeconds(parseRangeSeconds(call.parameters["range"]))
 
             val rangeDays = Duration.between(fromInstant, toInstant).toDays()
             if (rangeDays > 90) {
@@ -104,43 +110,45 @@ fun Routing.configureDashboardRoutes() {
             // always 0 for the same reason. See OverviewCounterAnalyzer's doc comment.
             val eventCells = counterRepo.readCells(id, "event", fromDay, toDay)
             val topEvents = eventCells.sortedByDescending { it.n }.take(10)
-                .map { mapOf("event_name" to it.dims["name"], "count" to it.n.toInt()) }
+                .map { TopEventItem(eventName = it.dims["name"], count = it.n) }
 
             val transitionCells = counterRepo.readCells(id, "screen_transition", fromDay, toDay)
             val topScreens = OverviewCounterAnalyzer.topScreens(transitionCells, limit = 10)
-                .map { (screen, count) -> mapOf("screen" to screen, "count" to count.toInt()) }
+                .map { (screen, count) -> TopScreenItem(screen = screen, count = count) }
 
             val dwellCells = counterRepo.readCells(id, "screen_dwell", fromDay, toDay)
             val screenDurations = OverviewCounterAnalyzer.screenDurations(dwellCells).take(10)
-                .map { mapOf("screen" to it.screen, "count" to it.count.toInt(), "avg_ms" to it.avgMs, "total_ms" to it.totalMs) }
+                .map { ScreenDurationItem(screen = it.screen, count = it.count, avgMs = it.avgMs, totalMs = it.totalMs) }
 
             val dailyTotals = counterRepo.dailyTotals(id, "event", fromDay, toDay)
-                .map { mapOf("day" to it.day.toString(), "total" to it.n.toInt(), "offline_total" to 0) }
+                .map { DailyPointItem(day = it.day.toString(), total = it.n) }
 
             val platforms = counterRepo.totalsByPlatform(id, "event", fromDay, toDay)
-                .map { mapOf("name" to it.platform, "count" to it.n.toInt()) }
+                .map { BreakdownItem(name = it.platform, count = it.n) }
 
             val valueCells = counterRepo.readCells(id, "value", fromDay, toDay)
             val topValues = ValueCounterAnalyzer.analyze(valueCells).take(10)
-                .map { mapOf("name" to it.name, "total_minor_units" to it.totalMinorUnits) }
+                .map { TopValueItem(name = it.name, totalMinorUnits = it.totalMinorUnits) }
 
             val totalEvents = eventCells.sumOf { it.n }
             val errorCount = eventCells
                 .filter { it.dims["name"]?.lowercase() in setOf("error", "crash", "exception") }
                 .sumOf { it.n }
 
-            call.respond(mapOf(
-                "window_days" to (rangeDays.toInt().coerceAtLeast(1)),
-                "totals" to mapOf("events" to totalEvents, "offline" to 0, "errors" to errorCount),
-                "top_events" to topEvents,
-                "top_screens" to topScreens,
-                "screen_durations" to screenDurations,
-                "top_values" to topValues,
-                "daily" to dailyTotals,
-                "countries" to emptyList<Map<String, Any?>>(),
-                "platforms" to platforms,
-                "device_classes" to emptyList<Map<String, Any?>>(),
-            ))
+            call.respond(
+                AggregatesResponse(
+                    windowDays = rangeDays.toInt().coerceAtLeast(1),
+                    totals = AggregatesTotals(events = totalEvents, offline = 0, errors = errorCount),
+                    topEvents = topEvents,
+                    topScreens = topScreens,
+                    screenDurations = screenDurations,
+                    topValues = topValues,
+                    daily = dailyTotals,
+                    countries = emptyList(),
+                    platforms = platforms,
+                    deviceClasses = emptyList(),
+                ),
+            )
         }
     }
 

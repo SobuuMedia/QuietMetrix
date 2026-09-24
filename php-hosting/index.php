@@ -121,7 +121,13 @@ header("Content-Security-Policy: default-src 'self'; "
      . "connect-src $cspConnectSrc; "
      . "frame-ancestors 'none'; "
      . "base-uri 'self'");
-header('Access-Control-Allow-Origin: ' . ALLOWED_ORIGIN);
+$corsOrigin = resolveCorsOrigin($_SERVER['HTTP_ORIGIN'] ?? null, ALLOWED_ORIGIN, allowedOriginsCsv());
+if ($corsOrigin !== null) {
+    header('Access-Control-Allow-Origin: ' . $corsOrigin);
+    if ($corsOrigin !== '*') {
+        header('Vary: Origin');
+    }
+}
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Authorization, Content-Type, X-QM-Api-Key');
 header('Access-Control-Max-Age: 86400');
@@ -201,6 +207,11 @@ if ($method === 'POST' && $uri === '/api/v1/counters') {
 if ($method === 'POST' && $uri === '/api/v1/funnels/register') {
     require_once __DIR__ . '/src/routes/funnels.php';
     handleFunnelsRegister();
+    exit;
+}
+if ($method === 'GET' && $uri === '/api/v1/experiments/config') {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentsConfig();
     exit;
 }
 
@@ -288,6 +299,35 @@ if ($method === 'PATCH' && preg_match('#^/api/v1/projects/([^/]+)/funnels/([^/]+
 if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)/funnels/([^/]+)$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/funnels.php';
     handleFunnelDelete($m[1], $m[2]);
+    exit;
+}
+
+// ---- A/B testing experiments (session auth for CRUD; see handleExperimentsConfig() above
+// for the SDK-facing, api-key-authenticated config fetch) ----
+
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/experiments/([^/]+)/results$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentResults($m[1], $m[2]);
+    exit;
+}
+if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/experiments$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentsList($m[1]);
+    exit;
+}
+if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/experiments$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentsCreate($m[1]);
+    exit;
+}
+if ($method === 'PATCH' && preg_match('#^/api/v1/projects/([^/]+)/experiments/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentUpdate($m[1], $m[2]);
+    exit;
+}
+if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)/experiments/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentDelete($m[1], $m[2]);
     exit;
 }
 

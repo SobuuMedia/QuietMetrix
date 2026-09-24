@@ -102,10 +102,43 @@ class CounterRegistryTest {
             "search" to mapOf("screen" to "Library"),
             "search_zero_result" to mapOf("screen" to "Library"),
             "friction" to mapOf("screen" to "Checkout", "kind" to "rage_tap"),
+            "experiment" to mapOf("exp" to "checkout_cta", "variant" to "b", "action" to "impression"),
         )
         for ((metric, dims) in examples) {
             val result = CounterRegistry.validate(metric, dims)
             assertTrue(result is CounterRegistry.ValidationResult.Valid, "$metric should validate: $result")
         }
+    }
+
+    /**
+     * Shared vector with php-hosting/tests/counterRegistryTest.php — both backends must
+     * produce this exact canonical string and hash for the A/B testing "experiment" metric,
+     * or the same logical impression/interaction cell splits into two rows across backends.
+     */
+    @Test
+    fun `experiment metric canonicalizes and hashes to the shared vector`() {
+        val result = CounterRegistry.validate(
+            "experiment",
+            mapOf("exp" to "checkout_cta", "variant" to "b", "action" to "impression"),
+        )
+        assertIs<CounterRegistry.ValidationResult.Valid>(result)
+        assertEquals("f7dec88b3cd61e3b865e98c0b56991eb1f61e241ccdf381fe15f0bd9b9175c2f", result.dimsHash)
+    }
+
+    @Test
+    fun `experiment metric missing action is invalid`() {
+        val result = CounterRegistry.validate("experiment", mapOf("exp" to "checkout_cta", "variant" to "b"))
+        assertIs<CounterRegistry.ValidationResult.Invalid>(result)
+        assertEquals("dims_mismatch", result.reason)
+    }
+
+    @Test
+    fun `experiment metric with an extra key is invalid`() {
+        val result = CounterRegistry.validate(
+            "experiment",
+            mapOf("exp" to "checkout_cta", "variant" to "b", "action" to "impression", "extra" to "x"),
+        )
+        assertIs<CounterRegistry.ValidationResult.Invalid>(result)
+        assertEquals("dims_mismatch", result.reason)
     }
 }

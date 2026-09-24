@@ -97,6 +97,22 @@ let config = QuietMetrixConfig(
 QuietMetrix.shared.initialize(config: config)
 ```
 
+## Experiments (A/B testing)
+
+Create an experiment in the dashboard's Experiments tab, then branch on it in code — no
+config to declare here, unlike funnels. See the [Experiments guide](experiments.md) for the
+full concept, timing, and country-targeting details. The functions are exposed as top-level
+Kotlin functions, so Swift/Objective-C sees them namespaced on `ExperimentsKt`:
+
+```swift
+switch ExperimentsKt.getVariant(experimentKey: "checkout_cta") {
+case "b":
+    NewCheckoutButton { ExperimentsKt.trackExperimentInteraction(experimentKey: "checkout_cta") }
+default:
+    OldCheckoutButton() // "a", or "none" if not enrolled
+}
+```
+
 ## Consent
 
 ```swift

@@ -8,7 +8,10 @@ import com.quietmetrix.dashboard.api.ApiManagedUser
 import com.quietmetrix.dashboard.api.ApiMember
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.ApiUser
+import com.quietmetrix.dashboard.api.CreateExperimentRequest
 import com.quietmetrix.dashboard.api.CreateProjectResponse
+import com.quietmetrix.dashboard.api.ExperimentDto
+import com.quietmetrix.dashboard.api.ExperimentResultsResponse
 import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FrictionResponse
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
@@ -19,6 +22,7 @@ import com.quietmetrix.dashboard.api.SessionsResponse
 import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.api.TransitionsResponse
 import com.quietmetrix.dashboard.api.UiError
+import com.quietmetrix.dashboard.api.UpdateExperimentRequest
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.api.decodeUserFromJwt
 import com.quietmetrix.dashboard.api.toUiError
@@ -30,6 +34,10 @@ import com.quietmetrix.dashboard.resources.login_error_network
 import com.quietmetrix.dashboard.resources.login_error_server
 import com.quietmetrix.dashboard.resources.login_error_unknown
 import com.quietmetrix.dashboard.storage.TokenStorage
+import com.quietmetrix.dashboard.ui.screens.guideStepAfter
+import com.quietmetrix.dashboard.ui.screens.guideStepBefore
+import com.quietmetrix.dashboard.ui.screens.shouldAutoOpenGuide
+import com.quietmetrix.dashboard.ui.screens.EXPERIMENTS_GUIDE_STEP_COUNT
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,6 +76,16 @@ data class DashboardState(
     val funnels: List<FunnelDto> = emptyList(),
     val selectedFunnelKey: String? = null,
     val funnelResults: FunnelResultsResponse? = null,
+    // A/B testing experiments
+    val experiments: List<ExperimentDto> = emptyList(),
+    /** Null when the project's plan has no cap (paid plan, or self-host). */
+    val experimentLimit: Int? = null,
+    val selectedExperimentKey: String? = null,
+    val experimentResults: ExperimentResultsResponse? = null,
+    val experimentsGuideOpen: Boolean = false,
+    val experimentsGuideStep: Int = 0,
+    /** Set when the most recent create-experiment call was rejected with `experiment_limit_reached`. */
+    val experimentLimitReached: Boolean = false,
     // User management + API-key UX
     val users: List<ApiManagedUser> = emptyList(),
     val members: Map<String, List<ApiMember>> = emptyMap(),
@@ -87,12 +105,15 @@ data class DashboardState(
     val isAdmin: Boolean get() = role == UserRole.ADMIN
     /** Admins and developers may regenerate API keys; reviewers may not. */
     val canRegenerate: Boolean get() = role == UserRole.ADMIN || role == UserRole.DEVELOPER
+    /** Admins and developers may create/edit/delete experiments; reviewers may not — mirrors
+     *  the server's role check in ExperimentRoutes.kt. */
+    val canWriteExperiments: Boolean get() = role == UserRole.ADMIN || role == UserRole.DEVELOPER
     /** Reviewers see everything read-only. */
     val isReadOnly: Boolean get() = role == UserRole.REVIEWER
 }
 
 /** One background data panel that can fail independently without blanking the dashboard. */
-enum class DataSection { Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults }
+enum class DataSection { Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults, Experiments, ExperimentResults }
 
 /** Records [error] for [section] without touching the global banner or any other section. */
 internal fun DashboardState.withSectionError(section: DataSection, error: UiError): DashboardState =
@@ -297,19 +318,30 @@ class DashboardViewModel {
             NavDestination.Projects  -> loadProjects()
             NavDestination.Users     -> loadUsersOnce()
             NavDestination.Funnels   -> loadFunnelsOnce()
+            NavDestination.Experiments -> {
+                loadExperimentsOnce()
+                if (shouldAutoOpenGuide(TokenStorage.isExperimentsGuideSeen())) {
+                    _state.update { it.copy(experimentsGuideOpen = true, experimentsGuideStep = 0) }
+                }
+            }
             NavDestination.Settings  -> { /* no fetch */ }
         }
     }
 
     fun selectProject(projectId: String) {
-        _state.update { it.copy(currentProjectId = projectId, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null) }
+        _state.update {
+            it.copy(
+                currentProjectId = projectId, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null,
+                experiments = emptyList(), experimentLimit = null, selectedExperimentKey = null, experimentResults = null,
+            )
+        }
         TokenStorage.saveLastProjectId(projectId)
-        scope.launch { loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadFunnelsOnce() }
+        scope.launch { loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadFunnelsOnce(); loadExperimentsOnce() }
     }
 
     fun selectRange(range: TimeRange) {
         _state.update { it.copy(range = range) }
-        scope.launch { loadAggregates(); loadSessions(); loadFunnelResultsOnce() }
+        scope.launch { loadAggregates(); loadSessions(); loadFunnelResultsOnce(); loadExperimentResultsOnce() }
     }
 
     fun setDemoMode(enabled: Boolean) {
@@ -543,6 +575,127 @@ class DashboardViewModel {
                 _state.update { it.copy(error = e.toUiError("DELETE /projects/{id}/funnels/{key}")) }
             }
         }
+    }
+
+    // ---- Experiments (A/B testing) ----
+
+    private suspend fun loadExperimentsOnce() {
+        val s = _state.value
+        val projectId = s.currentProjectId ?: return
+        try {
+            val res = api.listExperiments(projectId)
+            val currentKey = s.selectedExperimentKey?.takeIf { key -> res.experiments.any { it.key == key } }
+                ?: res.experiments.firstOrNull()?.key
+            _state.update {
+                it.copy(experiments = res.experiments, experimentLimit = res.limit, selectedExperimentKey = currentKey)
+                    .clearingSectionError(DataSection.Experiments)
+            }
+            loadExperimentResultsOnce()
+        } catch (e: Throwable) {
+            _state.update { it.withSectionError(DataSection.Experiments, e.toUiError("GET /projects/{id}/experiments")) }
+        }
+    }
+
+    private suspend fun loadExperimentResultsOnce() {
+        val s = _state.value
+        val projectId = s.currentProjectId ?: return
+        val key = s.selectedExperimentKey ?: run {
+            _state.update { it.copy(experimentResults = null).clearingSectionError(DataSection.ExperimentResults) }
+            return
+        }
+        try {
+            val res = api.experimentResults(projectId, key, s.range)
+            _state.update { it.copy(experimentResults = res).clearingSectionError(DataSection.ExperimentResults) }
+        } catch (e: Throwable) {
+            _state.update {
+                it.withSectionError(DataSection.ExperimentResults, e.toUiError("GET /projects/{id}/experiments/{key}/results"))
+            }
+        }
+    }
+
+    fun selectExperiment(experimentKey: String) {
+        _state.update { it.copy(selectedExperimentKey = experimentKey) }
+        scope.launch { loadExperimentResultsOnce() }
+    }
+
+    /** Creates a `draft` experiment. On `experiment_limit_reached`, sets
+     *  [DashboardState.experimentLimitReached] instead of the generic error path so the
+     *  create form can show the free-plan upgrade message specifically. */
+    fun createExperiment(request: CreateExperimentRequest) {
+        val projectId = _state.value.currentProjectId ?: return
+        scope.launch {
+            try {
+                api.createExperiment(projectId, request)
+                _state.update { it.copy(experimentLimitReached = false) }
+                loadExperimentsOnce()
+            } catch (e: ApiException) {
+                if (e.code == "experiment_limit_reached") {
+                    _state.update { it.copy(experimentLimitReached = true) }
+                } else {
+                    _state.update { it.copy(error = e.toUiError("POST /projects/{id}/experiments")) }
+                }
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("POST /projects/{id}/experiments")) }
+            }
+        }
+    }
+
+    fun dismissExperimentLimitReached() {
+        _state.update { it.copy(experimentLimitReached = false) }
+    }
+
+    fun updateExperiment(experimentKey: String, request: UpdateExperimentRequest) {
+        val projectId = _state.value.currentProjectId ?: return
+        scope.launch {
+            try {
+                api.updateExperiment(projectId, experimentKey, request)
+                loadExperimentsOnce()
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("PATCH /projects/{id}/experiments/{key}")) }
+            }
+        }
+    }
+
+    /** Convenience for the status-only transitions the list screen's action buttons trigger
+     *  (Start/Pause/Resume/End) — see ExperimentsLogic.availableActions(). */
+    fun changeExperimentStatus(experimentKey: String, status: String) {
+        updateExperiment(experimentKey, UpdateExperimentRequest(status = status))
+    }
+
+    fun deleteExperiment(experimentKey: String) {
+        val projectId = _state.value.currentProjectId ?: return
+        scope.launch {
+            try {
+                api.deleteExperiment(projectId, experimentKey)
+                _state.update {
+                    it.copy(selectedExperimentKey = if (it.selectedExperimentKey == experimentKey) null else it.selectedExperimentKey)
+                }
+                loadExperimentsOnce()
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("DELETE /projects/{id}/experiments/{key}")) }
+            }
+        }
+    }
+
+    // ---- Experiments setup guide ----
+
+    /** Opens the guide on demand (help button) — always works, regardless of dismissal state. */
+    fun openExperimentsGuide() {
+        _state.update { it.copy(experimentsGuideOpen = true, experimentsGuideStep = 0) }
+    }
+
+    fun nextExperimentsGuideStep() {
+        _state.update { it.copy(experimentsGuideStep = guideStepAfter(it.experimentsGuideStep, EXPERIMENTS_GUIDE_STEP_COUNT)) }
+    }
+
+    fun previousExperimentsGuideStep() {
+        _state.update { it.copy(experimentsGuideStep = guideStepBefore(it.experimentsGuideStep)) }
+    }
+
+    /** Closes the guide, whether finished or skipped, and marks it seen so it won't auto-open again. */
+    fun closeExperimentsGuide() {
+        TokenStorage.saveExperimentsGuideSeen()
+        _state.update { it.copy(experimentsGuideOpen = false) }
     }
 
     fun clearError() {

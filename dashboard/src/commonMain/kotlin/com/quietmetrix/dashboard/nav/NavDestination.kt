@@ -2,6 +2,7 @@ package com.quietmetrix.dashboard.nav
 
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.ic_experiment
 import com.quietmetrix.dashboard.resources.ic_flow
 import com.quietmetrix.dashboard.resources.ic_funnel
 import com.quietmetrix.dashboard.resources.ic_overview
@@ -9,6 +10,7 @@ import com.quietmetrix.dashboard.resources.ic_projects
 import com.quietmetrix.dashboard.resources.ic_retention
 import com.quietmetrix.dashboard.resources.ic_settings
 import com.quietmetrix.dashboard.resources.ic_users
+import com.quietmetrix.dashboard.resources.nav_experiments
 import com.quietmetrix.dashboard.resources.nav_flow
 import com.quietmetrix.dashboard.resources.nav_funnels
 import com.quietmetrix.dashboard.resources.nav_overview
@@ -34,6 +36,7 @@ enum class NavDestination(
     Retention(icon = Res.drawable.ic_retention, labelRes = Res.string.nav_retention),
     Projects(icon = Res.drawable.ic_projects, labelRes = Res.string.nav_projects),
     Funnels(icon = Res.drawable.ic_funnel, labelRes = Res.string.nav_funnels),
+    Experiments(icon = Res.drawable.ic_experiment, labelRes = Res.string.nav_experiments),
     Users(icon = Res.drawable.ic_users, labelRes = Res.string.nav_users, adminOnly = true),
     Settings(icon = Res.drawable.ic_settings, labelRes = Res.string.nav_settings);
 

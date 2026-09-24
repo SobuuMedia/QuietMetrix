@@ -82,10 +82,31 @@ $examples = [
     'search'             => ['screen' => 'Library'],
     'search_zero_result' => ['screen' => 'Library'],
     'friction'           => ['screen' => 'Checkout', 'kind' => 'rage_tap'],
+    'experiment'         => ['exp' => 'checkout_cta', 'variant' => 'b', 'action' => 'impression'],
 ];
 foreach ($examples as $metric => $dims) {
     check("$metric validates a well-formed example", true, counterValidate($metric, $dims)['valid']);
 }
+
+// --- experiment metric: shared vector with CounterRegistryTest.kt -------------------------
+// Both backends must produce this exact canonical string and hash for the A/B testing
+// "experiment" metric, or the same logical impression/interaction cell splits into two rows
+// across backends.
+
+$expResult = counterValidate('experiment', ['exp' => 'checkout_cta', 'variant' => 'b', 'action' => 'impression']);
+check('experiment metric is valid', true, $expResult['valid']);
+check('experiment metric hashes to the shared vector', 'f7dec88b3cd61e3b865e98c0b56991eb1f61e241ccdf381fe15f0bd9b9175c2f', $expResult['hash']);
+
+check(
+    'experiment metric missing action is invalid',
+    'dims_mismatch',
+    counterValidate('experiment', ['exp' => 'checkout_cta', 'variant' => 'b'])['reason'],
+);
+check(
+    'experiment metric with an extra key is invalid',
+    'dims_mismatch',
+    counterValidate('experiment', ['exp' => 'checkout_cta', 'variant' => 'b', 'action' => 'impression', 'extra' => 'x'])['reason'],
+);
 
 echo "\n";
 if ($failures > 0) {

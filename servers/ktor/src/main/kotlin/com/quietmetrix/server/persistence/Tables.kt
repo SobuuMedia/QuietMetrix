@@ -155,6 +155,39 @@ object Funnels : Table("funnels") {
     }
 }
 
+/**
+ * An A/B testing experiment definition: exactly two variants, assigned entirely on-device
+ * (see docs/sdk/experiments.md). The server never learns which device got which variant —
+ * this table only holds what an operator configured in the dashboard.
+ */
+object Experiments : Table("experiments") {
+    val id = long("id").autoIncrement()
+    val projectId = long("project_id").references(Projects.id)
+    // Slug, unique per project. Also the SDK-facing config's identifier and the "exp" dim
+    // value on the `experiment` counter metric.
+    val experimentKey = varchar("experiment_key", 32)
+    val name = varchar("name", 255)
+    val screen = varchar("screen", 128).nullable()
+    // draft | active | paused | ended.
+    val status = varchar("status", 16).default("draft")
+    // Share of eligible devices (1-100) that enter the experiment at all; the rest get "none".
+    val trafficPercent = integer("traffic_percent").default(100)
+    // JSON array of exactly two {name, weight} objects, weights summing to 100.
+    val variants = text("variants")
+    // JSON array of ISO-3166 alpha-2 country codes, or NULL = all countries.
+    val countries = text("countries").nullable()
+    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
+    val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
+    val startedAt = datetime("started_at").nullable()
+    val endedAt = datetime("ended_at").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(projectId, experimentKey)
+    }
+}
+
 /** Last accepted revision for each code-owned funnel manifest. */
 object FunnelManifests : Table("funnel_manifests") {
     val projectId = long("project_id").references(Projects.id)

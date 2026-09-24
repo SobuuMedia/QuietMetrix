@@ -2,12 +2,14 @@ package com.quietmetrix.dashboard.nav
 
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.ic_experiment
 import com.quietmetrix.dashboard.resources.ic_flow
 import com.quietmetrix.dashboard.resources.ic_funnel
 import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.ic_projects
 import com.quietmetrix.dashboard.resources.ic_retention
 import com.quietmetrix.dashboard.resources.ic_settings
+import com.quietmetrix.dashboard.resources.nav_experiments
 import com.quietmetrix.dashboard.resources.nav_flow
 import com.quietmetrix.dashboard.resources.nav_funnels
 import com.quietmetrix.dashboard.resources.nav_overview
@@ -22,9 +24,9 @@ import kotlin.test.assertTrue
 class NavDestinationTest {
 
     @Test
-    fun hasSevenDestinationsInExpectedOrder() {
+    fun hasEightDestinationsInExpectedOrder() {
         assertEquals(
-            listOf("Overview", "Flow", "Retention", "Projects", "Funnels", "Users", "Settings"),
+            listOf("Overview", "Flow", "Retention", "Projects", "Funnels", "Experiments", "Users", "Settings"),
             NavDestination.entries.map { it.name },
         )
     }
@@ -51,6 +53,7 @@ class NavDestinationTest {
         assertEquals(Res.drawable.ic_retention, NavDestination.Retention.icon)
         assertEquals(Res.drawable.ic_projects, NavDestination.Projects.icon)
         assertEquals(Res.drawable.ic_funnel, NavDestination.Funnels.icon)
+        assertEquals(Res.drawable.ic_experiment, NavDestination.Experiments.icon)
         assertEquals(Res.drawable.ic_settings, NavDestination.Settings.icon)
 
         assertEquals(Res.string.nav_overview, NavDestination.Overview.labelRes)
@@ -58,6 +61,7 @@ class NavDestinationTest {
         assertEquals(Res.string.nav_retention, NavDestination.Retention.labelRes)
         assertEquals(Res.string.nav_projects, NavDestination.Projects.labelRes)
         assertEquals(Res.string.nav_funnels, NavDestination.Funnels.labelRes)
+        assertEquals(Res.string.nav_experiments, NavDestination.Experiments.labelRes)
         assertEquals(Res.string.nav_settings, NavDestination.Settings.labelRes)
     }
 }

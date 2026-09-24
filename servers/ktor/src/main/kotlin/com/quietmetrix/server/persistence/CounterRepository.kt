@@ -69,12 +69,29 @@ class CounterRepository(
             val deviceDelta = if (delta.isNewDevice) 1L else 0L
 
             if (existing == null) {
-                val distinctCells = Counters.selectAll()
-                    .where { (Counters.projectId eq projectId) and (Counters.metric eq delta.metric) }
-                    .count()
-                if (distinctCells >= maxDistinctCellsPerMetric) {
-                    quarantine(projectId, delta, "cardinality_cap", "metric ${delta.metric} already has $distinctCells distinct cells")
-                    return@transaction UpsertResult.Quarantined("cardinality_cap")
+                // The cap limits distinct DIMS COMBINATIONS (dims_hash) per metric, not rows.
+                // A single combination produces one row per (day, platform, app_version,
+                // country), so counting rows here would trip the cap on a single popular
+                // metric within weeks even with no new combinations. Only check the cap when
+                // this dims_hash has never been seen before for this metric.
+                val dimsHashSeenBefore = Counters.selectAll()
+                    .where {
+                        (Counters.projectId eq projectId) and
+                            (Counters.metric eq delta.metric) and
+                            (Counters.dimsHash eq validation.dimsHash)
+                    }
+                    .limit(1)
+                    .any()
+                if (!dimsHashSeenBefore) {
+                    val distinctCombinations = Counters
+                        .select(Counters.dimsHash)
+                        .where { (Counters.projectId eq projectId) and (Counters.metric eq delta.metric) }
+                        .withDistinct()
+                        .count()
+                    if (distinctCombinations >= maxDistinctCellsPerMetric) {
+                        quarantine(projectId, delta, "cardinality_cap", "metric ${delta.metric} already has $distinctCombinations distinct dims combinations")
+                        return@transaction UpsertResult.Quarantined("cardinality_cap")
+                    }
                 }
                 Counters.insert {
                     it[Counters.projectId] = projectId

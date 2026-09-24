@@ -24,6 +24,7 @@
     <string name="tab_info_flow">Screen transitions show how users navigate your app. Each row represents one common path from one screen to the next. High drop-off at a step may indicate UX friction — investigate why users leave at that point.</string>
     <string name="tab_info_retention">Retention shows what share of each cohort came back at least N days after their first launch. Each row is a weekly cohort; the shaded range under a percentage is its confidence interval — with a small cohort, treat the range as the honest answer, not the single number.</string>
     <string name="tab_info_funnels">A funnel is an ordered list of events you already track, plus a time window. Each device evaluates its own progress and reports only how far it got — funnels are declared in your app's SDK config and appear here automatically once registered.</string>
+    <string name="tab_info_experiments">An experiment shows two versions of a screen or part of a screen to different devices and compares how often people interact with each. Assignment happens entirely on-device — QuietMetrix never knows which device saw which variant, only aggregate counts.</string>
 
     <!-- UI elements -->
     <string name="tab_info_content_description">Information</string>
@@ -40,6 +41,7 @@
     <string name="nav_retention">Retention</string>
     <string name="nav_projects">Projects</string>
     <string name="nav_funnels">Funnels</string>
+    <string name="nav_experiments">Experiments</string>
     <string name="nav_users">Users</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_menu_cd">Open navigation menu</string>
@@ -266,6 +268,73 @@
     <string name="funnel_delete_confirm_title">Delete funnel</string>
     <string name="funnel_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
     <string name="funnel_editor_cancel">Cancel</string>
+
+    <!-- Experiments (A/B testing) -->
+    <string name="experiments_title">Experiments</string>
+    <string name="experiment_empty">No experiments yet — create one to start an A/B test.</string>
+    <string name="experiment_none_selected">Select an experiment to see its results.</string>
+    <string name="experiment_pick_experiment">Select an experiment</string>
+    <string name="experiment_new">New experiment</string>
+    <string name="experiment_help_content_description">Experiment setup help</string>
+    <string name="experiment_usage_line">%1$d of %2$d experiments used on the free plan</string>
+    <string name="experiment_limit_reached_message">The free plan allows up to %1$d experiments per project. End one to free a slot, or upgrade to add more.</string>
+    <string name="experiment_status_draft">Draft</string>
+    <string name="experiment_status_active">Active</string>
+    <string name="experiment_status_paused">Paused</string>
+    <string name="experiment_status_ended">Ended</string>
+    <string name="experiment_action_start">Start</string>
+    <string name="experiment_action_pause">Pause</string>
+    <string name="experiment_action_resume">Resume</string>
+    <string name="experiment_action_end">End</string>
+    <string name="experiment_action_delete">Delete</string>
+    <string name="experiment_delete_confirm_title">Delete experiment</string>
+    <string name="experiment_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
+    <string name="experiment_editor_cancel">Cancel</string>
+    <string name="experiment_editor_title">New experiment</string>
+    <string name="experiment_editor_key_label">Key</string>
+    <string name="experiment_editor_key_hint">e.g. checkout_cta</string>
+    <string name="experiment_editor_name_label">Name</string>
+    <string name="experiment_editor_screen_label">Screen (optional)</string>
+    <string name="experiment_editor_variant_a_label">Variant A name</string>
+    <string name="experiment_editor_variant_b_label">Variant B name</string>
+    <string name="experiment_editor_split_label">Split (% to A)</string>
+    <string name="experiment_editor_traffic_label">Traffic %</string>
+    <string name="experiment_editor_countries_label">Countries (optional)</string>
+    <string name="experiment_editor_countries_hint">Leave empty for all countries. Example: ES, FR, MX</string>
+    <string name="experiment_editor_countries_invalid">Some codes aren\'t valid 2-letter country codes</string>
+    <string name="experiment_editor_submit">Create</string>
+    <string name="experiment_screen_label">Screen: %1$s</string>
+    <string name="experiment_variants_split">%1$s / %2$s</string>
+    <string name="experiment_traffic_label">Traffic: %1$d%%</string>
+    <string name="experiment_results_title">Results</string>
+    <string name="experiment_results_unit_note">Counted per session. Only aggregate counts are stored — QuietMetrix never knows which user saw which variant.</string>
+    <string name="experiment_results_not_enough_data">Not enough data yet</string>
+    <string name="experiment_results_baseline_badge">Baseline</string>
+    <string name="experiment_impressions_label">Sessions shown</string>
+    <string name="experiment_interactions_label">Interactions</string>
+    <string name="experiment_rate_label">Rate</string>
+    <string name="experiment_verdict_not_enough_data">Not enough data yet — keep the experiment running.</string>
+    <string name="experiment_verdict_no_difference">No significant difference yet (p = %1$s)</string>
+    <string name="experiment_verdict_winner">Variant %1$s performs better (95%% confidence, p = %2$s)</string>
+
+    <!-- Experiments setup guide -->
+    <string name="experiments_guide_step_of">Step %1$d of %2$d</string>
+    <string name="experiments_guide_skip">Skip</string>
+    <string name="experiments_guide_back">Back</string>
+    <string name="experiments_guide_next">Next</string>
+    <string name="experiments_guide_done">Done</string>
+    <string name="experiments_guide_step1_title">What an experiment is</string>
+    <string name="experiments_guide_step1_body">Two versions of a screen or part of a screen. QuietMetrix shows one or the other and compares how often people interact. Only aggregate counts are ever stored.</string>
+    <string name="experiments_guide_step2_title">Create it here</string>
+    <string name="experiments_guide_step2_body">Pick a key (e.g. checkout_cta), name the two variants, choose the split, the traffic percentage, and optionally countries (by device language region).</string>
+    <string name="experiments_guide_step3_title">Mark the screen in your app</string>
+    <string name="experiments_guide_step3_code">when (getVariant("checkout_cta")) {\n    "b" -&gt; NewButton()\n    else -&gt; OldButton()\n}</string>
+    <string name="experiments_guide_step3_body">"none" means: show your current version.</string>
+    <string name="experiments_guide_step4_title">Record the interaction</string>
+    <string name="experiments_guide_step4_code">trackExperimentInteraction("checkout_cta")</string>
+    <string name="experiments_guide_step4_body">Call this in the button\'s click handler.</string>
+    <string name="experiments_guide_step5_title">Start and read results</string>
+    <string name="experiments_guide_step5_body">Press Start. New app sessions pick it up on their next launch. Results appear once each variant has enough sessions (privacy threshold).</string>
 
     <!-- Invitation acceptance screen -->
     <string name="invite_accept_title">Accept your invitation</string>
