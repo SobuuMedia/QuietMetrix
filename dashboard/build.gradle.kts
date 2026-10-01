@@ -1,3 +1,4 @@
+import org.jetbrains.compose.ExperimentalComposeLibrary
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
@@ -12,9 +13,11 @@ repositories { mavenCentral(); google() }
 kotlin {
     jvmToolchain(21)
 
-    // JVM target exists solely to run unit tests against pure, Compose-free
-    // logic (formatters, breakpoints, chart math, sort/filter/pagination).
-    // The production dashboard still ships as wasmJs only.
+    // JVM target exists to run unit tests: pure, Compose-free logic
+    // (formatters, breakpoints, chart math, sort/filter/pagination) plus
+    // Compose UI tests via runComposeUiTest()/captureToImage() (see jvmTest
+    // deps below) for screenshot-regression coverage. The production
+    // dashboard still ships as wasmJs only.
     jvm()
 
     @OptIn(ExperimentalWasmDsl::class)
@@ -46,6 +49,14 @@ kotlin {
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                // Backs runComposeUiTest()/captureToImage(): the JUnit4 test
+                // runner that drives JVM compose tests, Compose's own
+                // multiplatform UI-testing API, and Skia rendering (there is
+                // no Android target in this module to get that from).
+                implementation(kotlin("test-junit"))
+                @OptIn(ExperimentalComposeLibrary::class)
+                implementation(compose.uiTest)
+                implementation(compose.desktop.currentOs)
             }
         }
         val wasmJsMain by getting {
