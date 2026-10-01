@@ -40,7 +40,9 @@ import com.quietmetrix.dashboard.ui.screens.shouldAutoOpenGuide
 import com.quietmetrix.dashboard.ui.screens.EXPERIMENTS_GUIDE_STEP_COUNT
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -99,6 +101,9 @@ data class DashboardState(
     val accessTokens: List<AccessTokenDto> = emptyList(),
     /** The plaintext token from the most recent create, shown once then dismissed. */
     val newAccessToken: String? = null,
+    /** The single bottom-center toast currently showing, or null. Set by [DashboardViewModel.showToast],
+     *  cleared by [DashboardViewModel.dismissToast] or its own ~5s auto-dismiss timer. */
+    val toast: Toast? = null,
 ) {
     /** Global role of the signed-in user. */
     val role: String? get() = user?.role
@@ -115,6 +120,32 @@ data class DashboardState(
 /** One background data panel that can fail independently without blanking the dashboard. */
 enum class DataSection { Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults, Experiments, ExperimentResults }
 
+/**
+ * A single bottom-center toast notification (design_handoff_dashboard_redesign/README.md >
+ * Interactions & Behavior > "Toasts": "bottom-center, auto-dismiss ~5s, optional action button,
+ * close (✕) button. Used for every completed action ... and for refresh/error feedback."; shape
+ * per the README's State Management section: `toast: { emoji, title, body, err, actionLabel,
+ * action } | null`).
+ *
+ * @param emoji large glyph shown at the start of the toast.
+ * @param title short summary of what happened (e.g. "App created").
+ * @param body optional one-line detail shown under [title].
+ * @param err true renders the toast with error styling (used for refresh/error feedback);
+ * false (default) renders the normal completed-action styling.
+ * @param actionLabel optional label for an inline action button (e.g. "Copy key", "Undo"); null
+ * means no action button is shown.
+ * @param action invoked when the [actionLabel] button is pressed. The two are expected to be
+ * set together — a non-null [actionLabel] with no [action] renders a button that does nothing.
+ */
+data class Toast(
+    val emoji: String,
+    val title: String,
+    val body: String? = null,
+    val err: Boolean = false,
+    val actionLabel: String? = null,
+    val action: (() -> Unit)? = null,
+)
+
 /** Records [error] for [section] without touching the global banner or any other section. */
 internal fun DashboardState.withSectionError(section: DataSection, error: UiError): DashboardState =
     copy(sectionErrors = sectionErrors + (section to error))
@@ -123,9 +154,18 @@ internal fun DashboardState.withSectionError(section: DataSection, error: UiErro
 internal fun DashboardState.clearingSectionError(section: DataSection): DashboardState =
     copy(sectionErrors = sectionErrors - section)
 
-class DashboardViewModel {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
+/**
+ * Holds [DashboardState] and every mutator that transitions it, backed by [api] calls launched on
+ * [scope].
+ *
+ * @param scope the coroutine scope every suspending mutator launches into. Defaults to this
+ * view model's own supervisor scope for real callers; tests inject a virtual-time `TestScope`
+ * (see `ToastQueueTest`) so timers like [showToast]'s ~5s auto-dismiss can be driven with
+ * `advanceTimeBy` instead of a real delay.
+ */
+class DashboardViewModel(
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+) {
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state.asStateFlow()
 
@@ -793,5 +833,35 @@ class DashboardViewModel {
         } catch (e: Throwable) {
             _state.update { it.withSectionError(DataSection.Retention, e.toUiError("GET /projects/{id}/retention")) }
         }
+    }
+
+    // ---- Toasts ----
+
+    /** The in-flight auto-dismiss timer for the currently-shown toast, if any. Cancelled whenever
+     *  that toast is replaced or manually closed, so a stale timer can never dismiss a different
+     *  toast than the one it was scheduled for. */
+    private var toastDismissJob: Job? = null
+
+    /**
+     * Shows [toast] bottom-center, replacing whatever toast is currently showing, and schedules
+     * it to auto-dismiss after ~5s (design_handoff_dashboard_redesign/README.md > Interactions &
+     * Behavior > "Toasts"). Cancels any pending auto-dismiss timer from a previous toast first —
+     * otherwise that stale timer would later fire and incorrectly dismiss this new one.
+     */
+    fun showToast(toast: Toast) {
+        toastDismissJob?.cancel()
+        _state.update { it.copy(toast = toast) }
+        toastDismissJob = scope.launch {
+            delay(5_000)
+            _state.update { it.copy(toast = null) }
+        }
+    }
+
+    /** Dismisses the current toast immediately (the ✕ close button) and cancels its pending
+     *  auto-dismiss timer so it can't later re-fire against whatever toast shows next. */
+    fun dismissToast() {
+        toastDismissJob?.cancel()
+        toastDismissJob = null
+        _state.update { it.copy(toast = null) }
     }
 }
