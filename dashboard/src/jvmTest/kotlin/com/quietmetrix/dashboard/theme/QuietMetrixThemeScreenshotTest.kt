@@ -27,6 +27,15 @@ import kotlin.test.Test
 @OptIn(ExperimentalTestApi::class)
 class QuietMetrixThemeScreenshotTest {
 
+    // Deliberately using the v1 runComposeUiTest (the API the existing
+    // screenshot-golden infra from Tasks 1-2 is built on); v1 is flagged
+    // deprecated in favor of a v2 API with different default
+    // coroutine-dispatcher semantics (StandardTestDispatcher vs. immediate
+    // execution). That v1-vs-v2 migration is a separate decision for the
+    // shared test harness, not something to silently swap per-test -
+    // suppressed only to keep this test's output clean, per Task 1's
+    // reviewed convention (commit ab300e0).
+    @Suppress("DEPRECATION")
     @Test
     fun darkThemeBackgroundMatchesGolden() = runComposeUiTest {
         setContent {
@@ -45,6 +54,8 @@ class QuietMetrixThemeScreenshotTest {
         bitmap.assertMatchesGolden("_infra/theme-dark-bg.png")
     }
 
+    // See darkThemeBackgroundMatchesGolden's @Suppress comment above.
+    @Suppress("DEPRECATION")
     @Test
     fun lightThemeBackgroundMatchesGolden() = runComposeUiTest {
         setContent {
