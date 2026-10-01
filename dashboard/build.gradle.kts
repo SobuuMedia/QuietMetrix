@@ -74,6 +74,16 @@ compose.resources {
     generateResClass = always
 }
 
+// Forwards -Pgolden.record=true into the forked jvmTest JVM's system
+// properties, so ScreenshotGolden.kt's writeAsGolden() can read it as
+// System.getProperty("golden.record"). Without this, the Gradle project
+// property and the JVM system property are two unrelated things and
+// writeAsGolden()'s record-mode gate would be unreachable from the
+// command line.
+tasks.withType<Test>().configureEach {
+    systemProperty("golden.record", providers.gradleProperty("golden.record").getOrElse("false"))
+}
+
 // ---------------------------------------------------------------------------
 // Distribution into the PHP and Ktor servers
 // ---------------------------------------------------------------------------
