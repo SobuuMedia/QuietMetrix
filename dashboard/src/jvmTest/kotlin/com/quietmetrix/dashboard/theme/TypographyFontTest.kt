@@ -63,6 +63,7 @@ class TypographyFontTest {
         Font(Res.font.jetbrains_mono_bold, FontWeight.Bold),
     ) as FontListFontFamily
 
+    @Suppress("DEPRECATION")
     @Test
     fun headingSlotsResolveToBundledBricolageGrotesque() = runComposeUiTest {
         lateinit var expected: FontListFontFamily
@@ -89,6 +90,7 @@ class TypographyFontTest {
         assertNotEquals(FontFamily.Default, display, "must not be left on the system default font")
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun extrasMonoStylesResolveToBundledJetBrainsMono() = runComposeUiTest {
         lateinit var expected: FontListFontFamily
@@ -116,6 +118,7 @@ class TypographyFontTest {
      * > body > label must still hold now that every slot also carries a
      * bundled [FontFamily].
      */
+    @Suppress("DEPRECATION")
     @Test
     fun typographyScaleIsOrdered() = runComposeUiTest {
         var display: TextStyle? = null
@@ -140,6 +143,7 @@ class TypographyFontTest {
         assertTrue(bodySize > labelSize, "body > label")
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun noMaterial3SlotUsesJetBrainsMono() = runComposeUiTest {
         lateinit var mono: FontListFontFamily
@@ -161,6 +165,7 @@ class TypographyFontTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun heroCardValueAndSectionTitleSizesMatchChosenSpecValues() = runComposeUiTest {
         var hero: TextStyle? = null
@@ -191,6 +196,7 @@ class TypographyFontTest {
         assertEquals(FontWeight.Bold, sectionTitleStyle.fontWeight, "section title weight")
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun explicitFontWeightIsSetOnEveryBundledFontEntry() = runComposeUiTest {
         lateinit var bricolage: FontListFontFamily
