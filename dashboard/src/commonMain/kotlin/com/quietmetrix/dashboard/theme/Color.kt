@@ -44,6 +44,17 @@ import androidx.compose.ui.graphics.Color
 //   reused for `error` (the README explicitly assigns coral to
 //   "errors/destructive actions"), and `ink`/`onLime`'s dark text are used
 //   where Material3 needs contrasting text on a light fill.
+//
+// PROVISIONAL (TODO Task 8): the primary/secondary/error role reuse above
+// (primary=ink/onPrimary=bg, secondary=ink2, error=coral) is a judgment
+// call, not a spec-mandated mapping — the design spec names no
+// theme-swapping "primary"/"secondary"/"error" token at all, this is only
+// filler so Material3's API (and existing screens reading
+// MaterialTheme.colorScheme.primary/.error) keeps compiling/rendering
+// sensibly today. Once screens are rebuilt to pull lime/coral straight
+// from LocalExtendedColors.current for CTAs/errors (per the spec's own
+// intent), re-examine whether these ColorScheme roles are still needed or
+// should be redefined. Revisit when wiring QuietMetrixTheme (Task 8).
 // ---------------------------------------------------------------------------
 
 // --- Dark theme tokens (design_handoff_dashboard_redesign/README.md:22-30) --
@@ -120,6 +131,12 @@ internal val QmCoral = Color(0xFFFF8A5B)
  * Material3 [ColorScheme] for dark mode, built from the dashboard-redesign
  * spec palette (see file-level KDoc for the ColorScheme-vs-[ExtendedColors]
  * mapping decision).
+ *
+ * PROVISIONAL: `primary`/`onPrimary`/`secondary`/`onSecondary`/
+ * `secondaryContainer`/`onSecondaryContainer`/`error`/`onError`/
+ * `errorContainer`/`onErrorContainer` below are judgment-call filler (ink/
+ * bg/coral reuse), not values the design spec names — see the TODO in the
+ * file-level KDoc. Revisit in Task 8.
  */
 val DarkColors: ColorScheme = darkColorScheme(
     primary = QmDarkInk,
@@ -144,6 +161,12 @@ val DarkColors: ColorScheme = darkColorScheme(
  * Material3 [ColorScheme] for light mode, built from the dashboard-redesign
  * spec palette (see file-level KDoc for the ColorScheme-vs-[ExtendedColors]
  * mapping decision).
+ *
+ * PROVISIONAL: `primary`/`onPrimary`/`secondary`/`onSecondary`/
+ * `secondaryContainer`/`onSecondaryContainer`/`error`/`onError`/
+ * `errorContainer`/`onErrorContainer` below are judgment-call filler (ink/
+ * bg/coral reuse), not values the design spec names — see the TODO in the
+ * file-level KDoc. Revisit in Task 8.
  */
 val LightColors: ColorScheme = lightColorScheme(
     primary = QmLightInk,
