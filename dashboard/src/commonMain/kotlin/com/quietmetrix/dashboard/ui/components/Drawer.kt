@@ -100,15 +100,17 @@ private val DrawerPanelShape = QmShapeTokens.drawer.copy(
  * @param onDismiss invoked when the ✕ is pressed, the scrim is clicked, or
  * ESC/back is pressed.
  * @param footer optional footer row, rendered below the scrollable
- * [content]; most drawers in the spec have no footer (just the header's
- * ✕), so this defaults to nothing.
+ * [content]; null (the default) renders no footer slot *and no reserved
+ * space for one* — both of the spec's named drawers (the Ask panel, the
+ * drill-down view) have no footer row at all, so a null default must cost
+ * zero extra height, not an empty padded strip.
  * @param content the drawer's scrollable body.
  */
 @Composable
 fun DrawerShell(
     title: String,
     onDismiss: () -> Unit,
-    footer: @Composable () -> Unit = {},
+    footer: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Dialog(
@@ -160,7 +162,9 @@ fun DrawerShell(
                             .padding(horizontal = 20.dp),
                     ) { content() }
 
-                    Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) { footer() }
+                    if (footer != null) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) { footer() }
+                    }
                 }
             }
         }

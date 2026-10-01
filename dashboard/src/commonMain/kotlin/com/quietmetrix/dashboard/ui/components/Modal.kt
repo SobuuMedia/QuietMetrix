@@ -71,14 +71,17 @@ data class ModalFooterSlot(val action: ModalFooterAction, val spacerBefore: Bool
  * - The 3-step experiment wizard's "← Back ... Cancel Next →" row
  *   ([leading] = the Back action once past step 1): [leading] renders
  *   alone at the leading edge with no spacer before it, then exactly one
- *   spacer, then [secondary] and [primary] packed together at the
- *   trailing edge with no gap between them (QuietMetrix
- *   Prototype.dc.html:740).
+ *   (expanding) spacer, then [secondary] and [primary] rendered back-to-back
+ *   at the trailing edge — no *spacer* slot between them, just [ModalFooter]'s
+ *   fixed 10dp `Arrangement.spacedBy` gap, the same fixed gap every adjacent
+ *   pair in the row gets (matching the HTML prototype's own `gap:10px`,
+ *   QuietMetrix Prototype.dc.html:740).
  *
  * There is always exactly one spacer whenever at least one trailing action
  * exists ([secondary] and/or [primary]), placed immediately before the
  * first trailing action — never before [leading] and never between
- * [secondary] and [primary].
+ * [secondary] and [primary] (those two only ever get the row's fixed
+ * 10dp gap, never an expanding spacer).
  *
  * @param leading optional action pinned to the row's leading edge (e.g.
  * "← Back"); null when the modal has no multi-step flow.
