@@ -116,14 +116,14 @@ class ThemeTokensTest {
         assertEquals(DarkExtendedColors.coral, LightExtendedColors.coral, "coral must not theme-swap")
     }
 
-    @Test
-    fun typographyScaleIsOrdered() {
-        val display = QmTypography.displayLarge.fontSize
-        val headline = QmTypography.headlineLarge.fontSize
-        val body = QmTypography.bodyMedium.fontSize
-        val label = QmTypography.labelSmall.fontSize
-        assertTrue(display > headline, "display > headline")
-        assertTrue(headline > body, "headline > body")
-        assertTrue(body > label, "body > label")
-    }
+    // -----------------------------------------------------------------------
+    // Task 6 wired QmTypography to the bundled Bricolage Grotesque / JetBrains
+    // Mono fonts (theme/Typography.kt). Reading QmTypography now requires
+    // loading a bundled font via Compose Multiplatform's resource system,
+    // which only works inside a composition — not possible from a plain
+    // kotlin.test function in this shared commonTest. The scale-ordering
+    // assertion that used to live here, plus the new font-family/size
+    // assertions, moved to TypographyFontTest (dashboard/src/jvmTest),
+    // which drives a real composition via runComposeUiTest.
+    // -----------------------------------------------------------------------
 }
