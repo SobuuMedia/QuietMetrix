@@ -3,10 +3,8 @@ package com.quietmetrix.dashboard.nav
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
@@ -23,7 +21,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.ui.components.handCursor
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -46,13 +43,7 @@ fun SideRail(
                 modifier = Modifier.handCursor(),
                 selected = dest == current,
                 onClick = { onSelect(dest) },
-                icon = {
-                    Icon(
-                        painter = painterResource(dest.icon),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                    )
-                },
+                icon = { Text(dest.emoji) },
                 label = {
                     Text(
                         stringResource(dest.labelRes),
@@ -87,13 +78,7 @@ fun SideDrawerHost(
                 Spacer(Modifier.height(12.dp))
                 destinations.forEach { dest ->
                     NavigationDrawerItem(
-                        icon = {
-                            Icon(
-                                painter = painterResource(dest.icon),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        },
+                        icon = { Text(dest.emoji) },
                         label = { Text(stringResource(dest.labelRes)) },
                         selected = dest == current,
                         onClick = {

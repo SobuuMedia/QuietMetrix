@@ -2,13 +2,6 @@ package com.quietmetrix.dashboard.nav
 
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.resources.Res
-import com.quietmetrix.dashboard.resources.ic_experiment
-import com.quietmetrix.dashboard.resources.ic_flow
-import com.quietmetrix.dashboard.resources.ic_funnel
-import com.quietmetrix.dashboard.resources.ic_overview
-import com.quietmetrix.dashboard.resources.ic_projects
-import com.quietmetrix.dashboard.resources.ic_retention
-import com.quietmetrix.dashboard.resources.ic_settings
 import com.quietmetrix.dashboard.resources.nav_experiments
 import com.quietmetrix.dashboard.resources.nav_flow
 import com.quietmetrix.dashboard.resources.nav_funnels
@@ -45,16 +38,19 @@ class NavDestinationTest {
     }
 
     @Test
-    fun eachDestinationHasIconAndLabel() {
-        // The drawable accessors are `by lazy` singletons, so identity/value
-        // equality holds and verifies the icon is wired (never null/tofu).
-        assertEquals(Res.drawable.ic_overview, NavDestination.Overview.icon)
-        assertEquals(Res.drawable.ic_flow, NavDestination.Flow.icon)
-        assertEquals(Res.drawable.ic_retention, NavDestination.Retention.icon)
-        assertEquals(Res.drawable.ic_projects, NavDestination.Projects.icon)
-        assertEquals(Res.drawable.ic_funnel, NavDestination.Funnels.icon)
-        assertEquals(Res.drawable.ic_experiment, NavDestination.Experiments.icon)
-        assertEquals(Res.drawable.ic_settings, NavDestination.Settings.icon)
+    fun eachDestinationHasEmojiAndLabel() {
+        // Emoji mapping confirmed against the HTML prototype's rendered nav bar
+        // (design_handoff_dashboard_redesign/QuietMetrix Prototype.dc.html:992),
+        // not inferred from README prose. `Users` corresponds to the
+        // prototype's "team" entry (label "Team", emoji U+1F465).
+        assertEquals("🏠", NavDestination.Overview.emoji) // 🏠
+        assertEquals("🧭", NavDestination.Flow.emoji) // 🧭
+        assertEquals("🔁", NavDestination.Retention.emoji) // 🔁
+        assertEquals("📦", NavDestination.Projects.emoji) // 📦
+        assertEquals("🪜", NavDestination.Funnels.emoji) // 🪜
+        assertEquals("🧪", NavDestination.Experiments.emoji) // 🧪
+        assertEquals("👥", NavDestination.Users.emoji) // 👥
+        assertEquals("⚙️", NavDestination.Settings.emoji) // ⚙️
 
         assertEquals(Res.string.nav_overview, NavDestination.Overview.labelRes)
         assertEquals(Res.string.nav_flow, NavDestination.Flow.labelRes)
