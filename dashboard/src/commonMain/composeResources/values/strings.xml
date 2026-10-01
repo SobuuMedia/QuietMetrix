@@ -363,4 +363,5 @@
     <string name="action_copy_error_details">Copy error details</string>
     <string name="snackbar_error_details_copied">Error details copied to clipboard</string>
     <string name="action_retry">Retry</string>
+    <string name="confirm_dialog_cancel">Cancel</string>
 </resources>
