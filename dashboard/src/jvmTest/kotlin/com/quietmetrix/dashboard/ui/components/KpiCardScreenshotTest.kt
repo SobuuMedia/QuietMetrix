@@ -168,8 +168,33 @@ class KpiCardScreenshotTest {
         // Direct coverage for the press half of the hover/press idiom:
         // drives a mouse-button-down (without release, so the gesture is
         // still "held") on the card's node and asserts the captured frame
-        // differs from the resting-state capture — catching a future edit
-        // that silently dropped or inverted the press-scale animation.
+        // differs from a capture taken immediately before the press.
+        //
+        // The "before" baseline here is the *hovered* (not fully resting)
+        // state: press() requires the pointer to already be positioned
+        // over the node via enter()/moveTo() first (confirmed empirically
+        // — press() alone, with no prior enter, did not register as a
+        // press on this node), and that enter() alone already changes
+        // pixels (see hoveringClickableCardChangesRenderedPixels). Diffing
+        // the pressed capture against a fully-resting one would really be
+        // asserting "hovered+pressed differs from resting", which stays
+        // true from the hover-brighten animation alone even if the
+        // press-scale animation were deleted entirely — it wouldn't
+        // isolate press from hover. Comparing pressed-after-hover against
+        // hovered-before-press isolates the press-specific delta instead.
+        //
+        // Note this still can't attribute that delta to PRESS_SCALE alone
+        // in isolation: Card(onClick = ...) also draws Material3's
+        // built-in ripple indication on press (hardcoded inside
+        // Surface(onClick = ...), not exposed as a parameter on this Card
+        // overload, so it can't be disabled from here) — confirmed by
+        // temporarily zeroing PRESS_SCALE locally and re-running this
+        // test, which still passed on the ripple alone. So this is a
+        // "press has its own visible effect, distinct from hover" smoke
+        // check, not a PRESS_SCALE-only unit test; it would still catch
+        // onClick/interactionSource being wired up incorrectly, but a
+        // regression isolated to just PRESS_SCALE could in principle slip
+        // through undetected here.
         setContent {
             QuietMetrixTheme(ThemeMode.Dark) {
                 Box(
@@ -191,19 +216,20 @@ class KpiCardScreenshotTest {
             }
         }
         waitForIdle()
-        val resting = onRoot().captureToImage()
 
-        onNodeWithTag(KPI_CARD_TAG).performMouseInput {
-            enter(center)
-            press()
-        }
+        onNodeWithTag(KPI_CARD_TAG).performMouseInput { enter(center) }
         waitForIdle()
-        val pressed = onRoot().captureToImage()
+        val hoveredOnly = onRoot().captureToImage()
+
+        onNodeWithTag(KPI_CARD_TAG).performMouseInput { press() }
+        waitForIdle()
+        val hoveredAndPressed = onRoot().captureToImage()
 
         assertTrue(
-            pressed.differsFrom(resting),
-            "Pressing the card produced no pixel change — the press-scale animation " +
-                "(animateFloatAsState reading collectIsPressedAsState()) may be broken.",
+            hoveredAndPressed.differsFrom(hoveredOnly),
+            "Pressing the card (on top of hover) produced no further pixel change — the " +
+                "press-scale animation (animateFloatAsState reading " +
+                "collectIsPressedAsState()) and/or Card's press ripple may be broken.",
         )
     }
 }
