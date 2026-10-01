@@ -1,7 +1,6 @@
 package com.quietmetrix.dashboard.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -60,7 +59,18 @@ private const val PRESS_SCALE = 0.97f
  * Elevation (shadow lift) a [KpiCard] gains while hovered, approximating
  * the hand-off's `box-shadow: 0 12px 30px rgba(0,0,0,.18)` hover rule for
  * "number cards" (README > Interactions: "number cards additionally lift
- * with a shadow on hover").
+ * with a shadow on hover"). Passed straight into
+ * `CardDefaults.cardElevation(hoveredElevation = HOVER_ELEVATION)` —
+ * deliberately *not* driven through a manual `animateDpAsState` of our
+ * own: Material3's `Card(onClick = ...)` already animates its elevation
+ * off the same `interactionSource` internally (see [KpiCard]'s KDoc), so
+ * adding a second, independently-animated `Dp` on top of it would have
+ * one animation chasing a target that is itself still moving — two
+ * competing animations instead of one. Letting Material3 own the one
+ * elevation animation and only supplying the hover/press/drag targets is
+ * the idiom later components should copy for elevation specifically; the
+ * scale and color animations below remain manual because Material3 has no
+ * built-in equivalent for either.
  */
 private val HOVER_ELEVATION = 12.dp
 
@@ -78,11 +88,29 @@ private val HOVER_ELEVATION = 12.dp
  * hover/press idiom documented on [HOVER_BRIGHTEN_FRACTION]/[PRESS_SCALE]/
  * [HOVER_ELEVATION] — a card with no [onClick] renders statically, since a
  * non-interactive tile shouldn't hint at hover/press affordances it doesn't
- * have. This hover/press idiom (interaction-state-driven brighten + shadow
- * lift on hover, scale-down on press, via a single shared
- * [MutableInteractionSource]) is the first use of this pattern in the
+ * have. This hover/press idiom is the first use of this pattern in the
  * dashboard-redesign plan; later clickable components (nav pills,
- * experiment cards, etc.) should copy it rather than invent a new one.
+ * experiment cards, etc.) should copy it rather than invent a new one. It
+ * is a single shared [MutableInteractionSource], passed to
+ * `Card(onClick = ..., interactionSource = ...)`, that drives:
+ * - **scale** (press → [PRESS_SCALE]): manual, via `animateFloatAsState`
+ *   reading `interactionSource.collectIsPressedAsState()` — Material3 has
+ *   no built-in scale-on-press.
+ * - **container color** (hover → brighten by [HOVER_BRIGHTEN_FRACTION]):
+ *   manual, via `animateColorAsState` reading
+ *   `interactionSource.collectIsHoveredAsState()` — Material3 has no
+ *   built-in brighten-on-hover.
+ * - **elevation/shadow lift** (hover → [HOVER_ELEVATION]): *not* manually
+ *   animated — the same `interactionSource` is handed straight to `Card`,
+ *   which already animates `CardDefaults.cardElevation`'s
+ *   `hoveredElevation` off it internally. Wrapping that in a second,
+ *   independent `animateDpAsState` would be two animations racing each
+ *   other (one chasing a target that is itself still moving); see
+ *   [HOVER_ELEVATION]'s KDoc for the full rationale. **This is the
+ *   detail to get right when copying this idiom**: manually animate only
+ *   the properties Material3 doesn't already animate for you off
+ *   `interactionSource` (scale, color); let the framework animate the
+ *   ones it owns (elevation on a `Card`).
  *
  * @param label short metric name (e.g. "People").
  * @param value the big headline number, already formatted by the caller.
@@ -120,15 +148,18 @@ fun KpiCard(
     }
 
     if (onClick != null) {
-        // Hover/press idiom (see this function's KDoc): a single shared
-        // MutableInteractionSource drives both the press-scale and the
-        // hover-brighten/shadow-lift animations below.
+        // Hover/press idiom (see this function's KDoc for the full
+        // rationale): a single shared MutableInteractionSource is handed
+        // to Card, which animates its own elevation off it internally
+        // (hoveredElevation below); we only manually animate the two
+        // properties Material3 doesn't own — press-scale and
+        // hover-brighten — reading interaction state from that same
+        // source so all three stay in lockstep with one real gesture.
         val interactionSource = remember { MutableInteractionSource() }
         val pressed by interactionSource.collectIsPressedAsState()
         val hovered by interactionSource.collectIsHoveredAsState()
 
         val scale by animateFloatAsState(if (pressed) PRESS_SCALE else 1f, label = "kpiCardScale")
-        val hoverElevation by animateDpAsState(if (hovered) HOVER_ELEVATION else 0.dp, label = "kpiCardElevation")
         val baseContainer = MaterialTheme.colorScheme.surface
         val containerColor by animateColorAsState(
             if (hovered) lerp(baseContainer, Color.White, HOVER_BRIGHTEN_FRACTION) else baseContainer,
@@ -140,7 +171,11 @@ fun KpiCard(
             modifier = modifier.graphicsLayer(scaleX = scale, scaleY = scale).handCursor(),
             shape = shape,
             colors = CardDefaults.cardColors(containerColor = containerColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = hoverElevation),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 0.dp,
+                hoveredElevation = HOVER_ELEVATION,
+                pressedElevation = 0.dp,
+            ),
             border = border,
             interactionSource = interactionSource,
             content = { body() },
