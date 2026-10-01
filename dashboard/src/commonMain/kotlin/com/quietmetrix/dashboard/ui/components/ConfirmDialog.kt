@@ -103,7 +103,7 @@ fun ConfirmDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(emoji, fontSize = 44.sp)
-                Text(title, style = MaterialTheme.typography.headlineSmall)
+                Text(title, style = MaterialTheme.typography.headlineLarge)
             }
         },
         text = { Text(body, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Start) },
@@ -117,7 +117,10 @@ fun ConfirmDialog(
             ) { Text(buttonSpec.label) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.confirm_dialog_cancel)) }
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(containerColor = extended.chipFill),
+            ) { Text(stringResource(Res.string.confirm_dialog_cancel)) }
         },
     )
 }
