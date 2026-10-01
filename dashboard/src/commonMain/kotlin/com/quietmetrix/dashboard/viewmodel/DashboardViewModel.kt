@@ -10,6 +10,7 @@ import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.ApiUser
 import com.quietmetrix.dashboard.api.CreateExperimentRequest
 import com.quietmetrix.dashboard.api.CreateProjectResponse
+import com.quietmetrix.dashboard.api.ErrorKind
 import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.api.ExperimentResultsResponse
 import com.quietmetrix.dashboard.api.FunnelDto
@@ -154,6 +155,18 @@ internal fun DashboardState.withSectionError(section: DataSection, error: UiErro
 /** Clears a previously-recorded section error, e.g. after that section reloads successfully. */
 internal fun DashboardState.clearingSectionError(section: DataSection): DashboardState =
     copy(sectionErrors = sectionErrors - section)
+
+/**
+ * The first currently-recorded [DataSection] failure whose [UiError.kind] is
+ * [ErrorKind.Network], or null if every background loader last succeeded (or hasn't run yet).
+ * Drives the global "We can't reach your QuietMetrix server" banner
+ * (design_handoff_dashboard_redesign/README.md > Header: "An error banner ... renders under the
+ * header in Errors state, on every screen") — deliberately independent of
+ * [DashboardState.error], which is reserved for user-initiated-action failures (create project,
+ * invite, ...) and already has its own dismissible [com.quietmetrix.dashboard.ui.components.ErrorBanner].
+ */
+val DashboardState.serverUnreachableError: UiError?
+    get() = sectionErrors.values.firstOrNull { it.kind == ErrorKind.Network }
 
 /**
  * Clears [DashboardState.toast] only if [scheduledJob] — the auto-dismiss timer that is asking to

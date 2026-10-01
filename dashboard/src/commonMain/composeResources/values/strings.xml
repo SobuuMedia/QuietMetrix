@@ -372,4 +372,12 @@
     <string name="snackbar_error_details_copied">Error details copied to clipboard</string>
     <string name="action_retry">Retry</string>
     <string name="confirm_dialog_cancel">Cancel</string>
+
+    <!-- Header: global progress bar + "can't reach the server" banner (design_handoff_dashboard_redesign/README.md
+         > Header: "A 3px progress bar appears under the header during Loading state or while
+         refreshing" / "An error banner ... renders under the header in Errors state, on every
+         screen."). -->
+    <string name="header_progress_bar_cd">Loading</string>
+    <string name="header_server_unreachable_message">We can't reach your QuietMetrix server.</string>
+    <string name="action_try_again">Try again</string>
 </resources>

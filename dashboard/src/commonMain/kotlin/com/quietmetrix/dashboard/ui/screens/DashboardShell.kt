@@ -1,5 +1,12 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,8 +14,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -24,6 +33,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,15 +49,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.TimeRange
+import com.quietmetrix.dashboard.api.UiError
 import com.quietmetrix.dashboard.nav.NavDestination
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_refresh
 import com.quietmetrix.dashboard.resources.action_signout
+import com.quietmetrix.dashboard.resources.action_try_again
 import com.quietmetrix.dashboard.resources.brand
 import com.quietmetrix.dashboard.resources.header_ask_button
 import com.quietmetrix.dashboard.resources.header_avatar_cd
+import com.quietmetrix.dashboard.resources.header_progress_bar_cd
+import com.quietmetrix.dashboard.resources.header_server_unreachable_message
 import com.quietmetrix.dashboard.resources.header_theme_toggle_cd
 import com.quietmetrix.dashboard.resources.header_toggle_compare
 import com.quietmetrix.dashboard.resources.header_toggle_expert
@@ -61,12 +75,14 @@ import com.quietmetrix.dashboard.theme.LocalThemeMode
 import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import com.quietmetrix.dashboard.theme.ThemeMode
+import com.quietmetrix.dashboard.ui.components.CopyErrorButton
 import com.quietmetrix.dashboard.ui.components.ErrorBanner
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.serverUnreachableError
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -103,6 +119,12 @@ private const val THEME_DARK_EMOJI = "🌙"
 /** Ask-the-data button glyph (design_handoff_dashboard_redesign/README.md > Header: "✨ Ask button (lavender, opens right-hand drawer)"). */
 private const val ASK_EMOJI = "✨"
 
+/** Server-unreachable banner glyph (design_handoff_dashboard_redesign/README.md > Header: "An error banner (coral background, 🔌 icon, ...)"). */
+private const val PLUG_EMOJI = "🔌"
+
+/** Height of [HeaderProgressBar]'s sliding fill — design_handoff_dashboard_redesign/README.md > Header: "A 3px progress bar". */
+private val PROGRESS_BAR_HEIGHT = 3.dp
+
 /**
  * Top-level shell every dashboard screen renders inside: a [Scaffold] whose
  * top bar is the dashboard-redesign header (logo/wordmark, project + date-range
@@ -137,6 +159,8 @@ fun DashboardShell(
             snackbarHost = { SnackbarHost(hostState = snackbarState) },
         ) { padding ->
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                HeaderProgressBar(visible = state.loading || state.refreshing)
+                state.serverUnreachableError?.let { ServerUnreachableBanner(it, onRetry = { viewModel.refresh() }) }
                 state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
                 Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     if (state.refreshing) {
@@ -148,6 +172,99 @@ fun DashboardShell(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 3px sliding lime loading bar shown directly under the header while [visible]
+ * (design_handoff_dashboard_redesign/README.md > Header: "A 3px progress bar appears under the
+ * header during Loading state or while refreshing (animated sliding lime fill)."). Renders
+ * nothing at all when [visible] is false, so it never reserves layout space on a quiet screen.
+ *
+ * The animation itself ([rememberInfiniteTransition]) is pulled out from
+ * [HeaderProgressBarTrack] — the actual fill-fraction drawing — so screenshot tests can render a
+ * single deterministic frame of the sweep instead of fighting a live animation clock.
+ */
+@Composable
+internal fun HeaderProgressBar(visible: Boolean, modifier: Modifier = Modifier) {
+    if (!visible) return
+    val transition = rememberInfiniteTransition(label = "header-progress-bar")
+    val fraction by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "header-progress-bar-fraction",
+    )
+    HeaderProgressBarTrack(fraction = fraction, modifier = modifier)
+}
+
+/**
+ * Pure, non-animated rendering of [HeaderProgressBar]'s track + lime fill at a given [fraction]
+ * (0f-1f) of the full width — factored out so a screenshot test can pin one exact frame. Visually
+ * cross-checked against `_source/02-overview-loading.png`'s visible progress-bar row (see
+ * `goldens/README.md`'s log entry for this golden): same 3px height and left-aligned sliding fill
+ * against a subtle track, at a fraction (~0.34) matching that captured frame. The fill is the
+ * solid [com.quietmetrix.dashboard.theme.ExtendedColors.lime] token rather than the exact
+ * (JPEG-compressed, anti-aliased) pixel color sampled from the source — the same token-over-pixel
+ * judgment call this file's other screenshot tests document for e.g. the Experiments "NEW" badge.
+ */
+@Composable
+internal fun HeaderProgressBarTrack(fraction: Float, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val progressBarCd = stringResource(Res.string.header_progress_bar_cd)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(PROGRESS_BAR_HEIGHT)
+            .background(extended.chipFill)
+            .semantics { contentDescription = progressBarCd },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .background(extended.lime),
+        )
+    }
+}
+
+/**
+ * Coral "can't reach your QuietMetrix server" banner rendered directly under the header on every
+ * screen while [DashboardState.serverUnreachableError] is non-null
+ * (design_handoff_dashboard_redesign/README.md > Header: "An error banner (coral background, 🔌
+ * icon, 'We can't reach your QuietMetrix server', 'Try again' + 'Copy error details' buttons)
+ * renders under the header in Errors state, on every screen."). Unlike [ErrorBanner] (dismissible,
+ * per-[UiError.kind] friendly sentence, for a user-initiated action), this banner's message is
+ * fixed — connectivity, not a specific action, is what it reports — and it has no dismiss button:
+ * [onRetry] (wired to [DashboardViewModel.refresh] by the caller) is the only way past it, since
+ * the underlying data really is unreachable until the next successful fetch.
+ */
+@Composable
+internal fun ServerUnreachableBanner(error: UiError, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val message = "$PLUG_EMOJI " + stringResource(Res.string.header_server_unreachable_message)
+    Surface(color = extended.coral, modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = message,
+                color = extended.onLime,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onRetry, modifier = Modifier.handCursor()) {
+                Text(stringResource(Res.string.action_try_again), color = extended.onLime, fontWeight = FontWeight.Bold)
+            }
+            CopyErrorButton(error, tint = extended.onLime)
         }
     }
 }

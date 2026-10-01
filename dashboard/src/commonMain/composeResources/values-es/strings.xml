@@ -372,4 +372,9 @@
     <string name="snackbar_error_details_copied">Detalles del error copiados al portapapeles</string>
     <string name="action_retry">Reintentar</string>
     <string name="confirm_dialog_cancel">Cancelar</string>
+
+    <!-- Header: global progress bar + "can't reach the server" banner (Task 17) -->
+    <string name="header_progress_bar_cd">Cargando</string>
+    <string name="header_server_unreachable_message">No podemos conectar con tu servidor de QuietMetrix.</string>
+    <string name="action_try_again">Intentar de nuevo</string>
 </resources>

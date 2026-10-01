@@ -131,10 +131,15 @@ fun InlineErrorNotice(error: UiError, onRetry: (() -> Unit)? = null) {
     }
 }
 
-/** Copies [error]'s full technical report — never the friendly sentence — to the clipboard. */
+/**
+ * Copies [error]'s full technical report — never the friendly sentence — to the clipboard.
+ * `internal` (not `private`) so [com.quietmetrix.dashboard.ui.screens.ServerUnreachableBanner]
+ * (Task 17's header-level "can't reach your QuietMetrix server" banner) can reuse the same
+ * copy-to-clipboard behavior as [ErrorBanner]/[InlineErrorNotice] instead of duplicating it.
+ */
 @OptIn(ExperimentalTime::class)
 @Composable
-private fun CopyErrorButton(error: UiError, tint: Color) {
+internal fun CopyErrorButton(error: UiError, tint: Color) {
     val clipboard = LocalClipboardManager.current
     var justCopied by remember { mutableStateOf(false) }
     val copiedLabel = stringResource(Res.string.snackbar_error_details_copied)
