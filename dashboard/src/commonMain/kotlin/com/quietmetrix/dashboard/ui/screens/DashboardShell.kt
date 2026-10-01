@@ -7,14 +7,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,12 +24,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,8 +40,6 @@ import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.nav.NavDestination
-import com.quietmetrix.dashboard.nav.SideDrawerHost
-import com.quietmetrix.dashboard.nav.SideRail
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.resources.Res
@@ -57,11 +51,9 @@ import com.quietmetrix.dashboard.resources.header_avatar_cd
 import com.quietmetrix.dashboard.resources.header_theme_toggle_cd
 import com.quietmetrix.dashboard.resources.header_toggle_compare
 import com.quietmetrix.dashboard.resources.header_toggle_expert
-import com.quietmetrix.dashboard.resources.ic_menu
 import com.quietmetrix.dashboard.resources.ic_refresh
 import com.quietmetrix.dashboard.resources.ic_signout
 import com.quietmetrix.dashboard.resources.nav_badge_new
-import com.quietmetrix.dashboard.resources.nav_menu_cd
 import com.quietmetrix.dashboard.resources.picker_no_projects
 import com.quietmetrix.dashboard.resources.picker_select_project
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
@@ -75,7 +67,6 @@ import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -113,11 +104,22 @@ private const val THEME_DARK_EMOJI = "🌙"
 private const val ASK_EMOJI = "✨"
 
 /**
- * Top-level shell every dashboard screen renders inside: a responsive
- * compact-drawer/wide-rail navigation split (unchanged by Task 16 — see
- * `DashboardTopBar`'s KDoc) wrapping a [Scaffold] whose top bar is the
- * dashboard-redesign header (logo/wordmark, project + date-range dropdowns,
- * toggle row, nav pill row).
+ * Top-level shell every dashboard screen renders inside: a [Scaffold] whose
+ * top bar is the dashboard-redesign header (logo/wordmark, project + date-range
+ * dropdowns, toggle row, nav pill row) and whose body is [content].
+ *
+ * The header's `NavPillRow` (Task 16) is the sole navigation surface at every
+ * window width — see this task's cleanup report
+ * (`.superpowers/sdd/proud-dazzling-pancake/cleanup-task16-duplicate-nav-report.md`)
+ * for why the pre-redesign `SideRail`/`SideDrawerHost` split (`nav/SideMenu.kt`)
+ * was removed from here: neither the README nor the HTML prototype describe a
+ * sidebar or drawer at any viewport, only the header pill row, which already
+ * wraps onto additional lines at narrow widths via `FlowRow` (matching the
+ * prototype's `<nav style="...flex-wrap:wrap">`). [BoxWithConstraints] and
+ * [classifyWindow] are kept here (and the [WindowSizeClass] still threaded
+ * into [content]) because several screens use them for non-nav layout
+ * decisions — e.g. [ResponsiveRowOrColumn]'s stacked-vs-row flow, [DataTable]
+ * hiding columns, [DonutChart] sizing, and `ProjectsTab`'s grid column count.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -129,47 +131,22 @@ fun DashboardShell(
 ) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val sizeClass = classifyWindow(maxWidth)
-        val drawerState = rememberDrawerState(DrawerValue.Closed)
-        val scope = rememberCoroutineScope()
 
-        val body: @Composable () -> Unit = {
-            Scaffold(
-                topBar = { DashboardTopBar(viewModel, state, sizeClass) { scope.launch { drawerState.open() } } },
-                snackbarHost = { SnackbarHost(hostState = snackbarState) },
-            ) { padding ->
-                Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                    state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
-                    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                        if (state.refreshing) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
-                        } else {
-                            content(sizeClass)
+        Scaffold(
+            topBar = { DashboardTopBar(viewModel, state) },
+            snackbarHost = { SnackbarHost(hostState = snackbarState) },
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
+                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    if (state.refreshing) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
+                    } else {
+                        content(sizeClass)
                     }
                 }
-            }
-        }
-
-        val destinations = NavDestination.visibleFor(state.user?.role)
-        if (sizeClass == WindowSizeClass.Compact) {
-            SideDrawerHost(
-                current = state.activeDestination,
-                onSelect = { viewModel.navigateTo(it) },
-                drawerState = drawerState,
-                destinations = destinations,
-                content = body,
-            )
-        } else {
-            Row(modifier = Modifier.fillMaxSize()) {
-                SideRail(
-                    current = state.activeDestination,
-                    onSelect = { viewModel.navigateTo(it) },
-                    modifier = Modifier.fillMaxHeight(),
-                    destinations = destinations,
-                )
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) { body() }
             }
         }
     }
@@ -182,24 +159,15 @@ fun DashboardShell(
  * Refresh/Theme/Ask/avatar toggle row, and the nav pill row — each wrapped
  * in a [FlowRow] so it reflows onto a second line on narrow widths rather
  * than overflowing (the spec's "wraps on narrow widths, never wraps text
- * within a single control").
- *
- * This task (16) deliberately leaves the compact/wide responsive split in
- * [DashboardShell] itself untouched: the hamburger menu button here (shown
- * only at [WindowSizeClass.Compact]) still opens the existing
- * [SideDrawerHost], and [SideRail] still renders alongside this header at
- * Medium/Expanded. The header's own nav pill row is therefore an *addition*
- * for every width, not a replacement for the side rail/drawer navigation —
- * removing those is a bigger structural change than a header restyle task
- * should make unilaterally (see the Task 16 report's Concerns section).
+ * within a single control"). The nav pill row is now the only navigation
+ * surface at every width (see [DashboardShell]'s KDoc) — there is no
+ * hamburger/drawer trigger here any more.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DashboardTopBar(
     viewModel: DashboardViewModel,
     state: DashboardState,
-    sizeClass: WindowSizeClass,
-    onOpenDrawer: () -> Unit,
 ) {
     val themeMode = LocalThemeMode.current
     val setThemeMode = LocalThemeModeSetter.current
@@ -216,18 +184,7 @@ private fun DashboardTopBar(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (sizeClass == WindowSizeClass.Compact) {
-                        IconButton(onClick = onOpenDrawer, modifier = Modifier.handCursor()) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_menu),
-                                contentDescription = stringResource(Res.string.nav_menu_cd),
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
-                    }
-                    HeaderLogoAndWordmark()
-                }
+                HeaderLogoAndWordmark()
                 Spacer(Modifier.weight(1f))
                 ProjectDropdown(
                     projects = state.projects,

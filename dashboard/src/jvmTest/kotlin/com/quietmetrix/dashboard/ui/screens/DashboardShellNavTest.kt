@@ -1,0 +1,103 @@
+package com.quietmetrix.dashboard.ui.screens
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.nav.NavDestination
+import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
+import com.quietmetrix.dashboard.theme.QuietMetrixTheme
+import com.quietmetrix.dashboard.theme.ThemeMode
+import com.quietmetrix.dashboard.viewmodel.DashboardState
+import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+/**
+ * Cleanup-task coverage (post Task 16) proving the header's [NavPillRow] is the
+ * *sole* navigation surface at every window size, now that the pre-redesign
+ * `SideRail`/`SideDrawerHost` split has been removed from [DashboardShell]: the
+ * design handoff (`design_handoff_dashboard_redesign/README.md` > Screens / Views
+ * > "1. Header") and the HTML prototype (exactly one `<nav>` element, `flex-wrap:
+ * wrap`, no sidebar/rail markup at any viewport) describe navigation as the
+ * header's pill row only, at every width — a second, independently-wired nav
+ * surface (the old side rail at Medium/Expanded, the hamburger-triggered drawer
+ * at Compact) was a holdover this task removes.
+ */
+@OptIn(ExperimentalTestApi::class)
+class DashboardShellNavTest {
+
+    // See QuietMetrixThemeScreenshotTest's @Suppress comment (Task 1's reviewed
+    // convention, commit ab300e0): v1 runComposeUiTest is what the existing
+    // screenshot-golden infra is built on.
+    @Suppress("DEPRECATION")
+    private fun renderShellAt(widthDp: Int, heightDp: Int = 900, block: androidx.compose.ui.test.ComposeUiTest.(DashboardViewModel) -> Unit) =
+        runComposeUiTest {
+            val viewModel = DashboardViewModel()
+            setContent {
+                CompositionLocalProvider(LocalThemeModeSetter provides {}) {
+                    QuietMetrixTheme(ThemeMode.Dark) {
+                        Box(modifier = Modifier.size(widthDp.dp, heightDp.dp)) {
+                            DashboardShell(
+                                viewModel = viewModel,
+                                state = DashboardState(),
+                                snackbarState = SnackbarHostState(),
+                            ) { _ ->
+                                Text("content")
+                            }
+                        }
+                    }
+                }
+            }
+            waitForIdle()
+            block(viewModel)
+        }
+
+    @Test
+    fun navPillRowIsTheOnlyNavSurfaceAtCompactWidth() = renderShellAt(widthDp = 360) { _ ->
+        // Exactly one "Flow" label — the pill row's — not a second one from a
+        // side drawer/rail rendering the same destination list.
+        onAllNodesWithText("Flow", substring = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun navPillRowIsTheOnlyNavSurfaceAtMediumWidth() = renderShellAt(widthDp = 700) { _ ->
+        onAllNodesWithText("Flow", substring = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun navPillRowIsTheOnlyNavSurfaceAtExpandedWidth() = renderShellAt(widthDp = 1200) { _ ->
+        onAllNodesWithText("Flow", substring = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun hamburgerMenuButtonNoLongerRendersAtCompactWidth() = renderShellAt(widthDp = 360) { _ ->
+        // The old compact-width hamburger opened SideDrawerHost; there is no
+        // drawer left for it to open, so the trigger itself must be gone.
+        onAllNodesWithContentDescription("Open navigation menu").assertCountEquals(0)
+    }
+
+    @Test
+    fun navPillRowSelectsDestinationAtCompactWidth() = renderShellAt(widthDp = 360) { viewModel ->
+        onNodeWithText("Settings", substring = true).performClick()
+        waitForIdle()
+        assertEquals(NavDestination.Settings, viewModel.state.value.activeDestination)
+    }
+
+    @Test
+    fun navPillRowSelectsDestinationAtExpandedWidth() = renderShellAt(widthDp = 1200) { viewModel ->
+        onNodeWithText("Settings", substring = true).performClick()
+        waitForIdle()
+        assertEquals(NavDestination.Settings, viewModel.state.value.activeDestination)
+    }
+}
