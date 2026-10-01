@@ -23,6 +23,14 @@ import kotlin.test.assertNotNull
  */
 class ScreenshotInfraSpikeTest {
 
+    // Deliberately using the v1 runComposeUiTest here (the API the task
+    // brief names); v1 is flagged deprecated in favor of a v2 API with
+    // different default coroutine-dispatcher semantics
+    // (StandardTestDispatcher vs. immediate execution). That v1-vs-v2
+    // choice is a design decision for Task 2's real harness, not something
+    // to silently swap here - suppressed only to keep this spike's output
+    // clean.
+    @Suppress("DEPRECATION")
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `captures a solid color box to a bitmap of the expected size`() = runComposeUiTest {
