@@ -45,6 +45,14 @@
     <string name="nav_users">Usuarios</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_menu_cd">Abrir menú de navegación</string>
+    <string name="nav_badge_new">NUEVO</string>
+
+    <!-- Header (dashboard-redesign toggle row / avatar menu) -->
+    <string name="header_toggle_compare">Comparar</string>
+    <string name="header_toggle_expert">Experto</string>
+    <string name="header_theme_toggle_cd">Cambiar tema</string>
+    <string name="header_ask_button">Preguntar</string>
+    <string name="header_avatar_cd">Menú de cuenta</string>
 
     <!-- Common actions -->
     <string name="action_signout">Cerrar sesión</string>

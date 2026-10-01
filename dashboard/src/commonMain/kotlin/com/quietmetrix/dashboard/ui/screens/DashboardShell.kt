@@ -1,17 +1,22 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,16 +24,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.api.ApiProject
+import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.nav.NavDestination
 import com.quietmetrix.dashboard.nav.SideDrawerHost
 import com.quietmetrix.dashboard.nav.SideRail
@@ -38,11 +52,26 @@ import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_refresh
 import com.quietmetrix.dashboard.resources.action_signout
 import com.quietmetrix.dashboard.resources.brand
+import com.quietmetrix.dashboard.resources.header_ask_button
+import com.quietmetrix.dashboard.resources.header_avatar_cd
+import com.quietmetrix.dashboard.resources.header_theme_toggle_cd
+import com.quietmetrix.dashboard.resources.header_toggle_compare
+import com.quietmetrix.dashboard.resources.header_toggle_expert
 import com.quietmetrix.dashboard.resources.ic_menu
 import com.quietmetrix.dashboard.resources.ic_refresh
 import com.quietmetrix.dashboard.resources.ic_signout
+import com.quietmetrix.dashboard.resources.nav_badge_new
 import com.quietmetrix.dashboard.resources.nav_menu_cd
+import com.quietmetrix.dashboard.resources.picker_no_projects
+import com.quietmetrix.dashboard.resources.picker_select_project
+import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.theme.LocalThemeMode
+import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
+import com.quietmetrix.dashboard.theme.QmShapeTokens
+import com.quietmetrix.dashboard.theme.ThemeMode
 import com.quietmetrix.dashboard.ui.components.ErrorBanner
+import com.quietmetrix.dashboard.ui.components.Pill
+import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
@@ -50,6 +79,46 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+/**
+ * Lime-badged "shh" logo glyph (design_handoff_dashboard_redesign/README.md >
+ * Header: emoji-badge logo, lime rounded square, shushing-face emoji). Kept
+ * as a named constant — not inlined directly into the `Text(...)` call that
+ * renders it — matching `NavDestination.emoji`'s convention of naming glyph
+ * constants rather than embedding them as bare literals.
+ */
+private const val LOGO_EMOJI = "🤫"
+
+/** Project-switcher dropdown glyph (no per-project emoji exists in [ApiProject], so this is a fixed stand-in matching the "📦 Projects" nav glyph). */
+private const val PROJECT_EMOJI = "📦"
+
+/** Date-range dropdown glyph (design_handoff_dashboard_redesign/README.md > Header: "🗓️ Last 7 days ▾"). */
+private const val DATE_EMOJI = "🗓️"
+
+/** Dropdown-trigger chevron glyph, shared by the project and date-range dropdowns. */
+private const val CHEVRON_DOWN = "▾"
+
+/** Compare-toggle glyph (design_handoff_dashboard_redesign/README.md > Header: "⇄ Compare toggle"). */
+private const val COMPARE_EMOJI = "⇄"
+
+/** Expert-toggle glyph (design_handoff_dashboard_redesign/README.md > Header: "🤓 Expert toggle"). */
+private const val EXPERT_EMOJI = "🤓"
+
+/** Light-theme glyph for the theme toggle (design_handoff_dashboard_redesign/README.md > Header: "☀️/🌙 theme toggle"). */
+private const val THEME_LIGHT_EMOJI = "☀️"
+
+/** Dark-theme glyph for the theme toggle. */
+private const val THEME_DARK_EMOJI = "🌙"
+
+/** Ask-the-data button glyph (design_handoff_dashboard_redesign/README.md > Header: "✨ Ask button (lavender, opens right-hand drawer)"). */
+private const val ASK_EMOJI = "✨"
+
+/**
+ * Top-level shell every dashboard screen renders inside: a responsive
+ * compact-drawer/wide-rail navigation split (unchanged by Task 16 — see
+ * `DashboardTopBar`'s KDoc) wrapping a [Scaffold] whose top bar is the
+ * dashboard-redesign header (logo/wordmark, project + date-range dropdowns,
+ * toggle row, nav pill row).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardShell(
@@ -106,7 +175,25 @@ fun DashboardShell(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The persistent dashboard-redesign header (design_handoff_dashboard_redesign/README.md
+ * > Screens / Views > "1. Header (persistent across all screens)"): a
+ * three-row [Column] — brand + project/date dropdowns, the Compare/Expert/
+ * Refresh/Theme/Ask/avatar toggle row, and the nav pill row — each wrapped
+ * in a [FlowRow] so it reflows onto a second line on narrow widths rather
+ * than overflowing (the spec's "wraps on narrow widths, never wraps text
+ * within a single control").
+ *
+ * This task (16) deliberately leaves the compact/wide responsive split in
+ * [DashboardShell] itself untouched: the hamburger menu button here (shown
+ * only at [WindowSizeClass.Compact]) still opens the existing
+ * [SideDrawerHost], and [SideRail] still renders alongside this header at
+ * Medium/Expanded. The header's own nav pill row is therefore an *addition*
+ * for every width, not a replacement for the side rail/drawer navigation —
+ * removing those is a bigger structural change than a header restyle task
+ * should make unilaterally (see the Task 16 report's Concerns section).
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DashboardTopBar(
     viewModel: DashboardViewModel,
@@ -114,59 +201,367 @@ private fun DashboardTopBar(
     sizeClass: WindowSizeClass,
     onOpenDrawer: () -> Unit,
 ) {
-    TopAppBar(
-        title = {
+    val themeMode = LocalThemeMode.current
+    val setThemeMode = LocalThemeModeSetter.current
+    var compareOn by remember { mutableStateOf(false) }
+    var expertOn by remember { mutableStateOf(false) }
+
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (sizeClass == WindowSizeClass.Compact) {
+                        IconButton(onClick = onOpenDrawer, modifier = Modifier.handCursor()) {
+                            Icon(
+                                painter = painterResource(Res.drawable.ic_menu),
+                                contentDescription = stringResource(Res.string.nav_menu_cd),
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                    HeaderLogoAndWordmark()
+                }
+                Spacer(Modifier.weight(1f))
+                ProjectDropdown(
+                    projects = state.projects,
+                    currentProjectId = state.currentProjectId,
+                    onSelect = { viewModel.selectProject(it) },
+                )
+                DateRangeDropdown(range = state.range, onSelect = { viewModel.selectRange(it) })
+            }
+
+            HeaderToggleRow(
+                compareOn = compareOn,
+                onCompareToggle = { compareOn = !compareOn },
+                expertOn = expertOn,
+                onExpertToggle = { expertOn = !expertOn },
+                refreshing = state.refreshing,
+                onRefresh = { viewModel.refresh() },
+                themeMode = themeMode,
+                onToggleTheme = { setThemeMode(if (themeMode == ThemeMode.Light) ThemeMode.Dark else ThemeMode.Light) },
+                onAsk = { /* Ask-your-data drawer is a separate, not-yet-built feature (README's own "AI Ask your data drawer" section); stub per this task's scope. */ },
+                userEmail = state.user?.email,
+                onSignOut = { viewModel.logout() },
+            )
+
+            NavPillRow(
+                destinations = NavDestination.visibleFor(state.user?.role),
+                current = state.activeDestination,
+                onSelect = { viewModel.navigateTo(it) },
+            )
+        }
+    }
+}
+
+/**
+ * The header's left-most element: the lime-badged [LOGO_EMOJI] glyph next
+ * to the "quietmetrix" wordmark (design_handoff_dashboard_redesign/README.md
+ * > Header: "emoji-badge logo (lime rounded square, 🤫) + wordmark").
+ */
+@Composable
+internal fun HeaderLogoAndWordmark(modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(color = extended.lime, shape = QmShapeTokens.chip) {
+            Text(LOGO_EMOJI, modifier = Modifier.padding(6.dp))
+        }
+        Text(
+            stringResource(Res.string.brand),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * Project-switcher dropdown trigger (design_handoff_dashboard_redesign/README.md
+ * > Header: "Project switcher dropdown (shows emoji + name, e.g. '📚 Sobuu ▾');
+ * menu lists all projects with a check on the active one"). Functionally
+ * identical to the pre-existing `ProjectPicker` in `DashboardScreen.kt`
+ * (same [ApiProject] list, same [onSelect] callback into
+ * `DashboardViewModel.selectProject`) — this is a new, header-styled
+ * trigger (pill-shaped chip instead of an `OutlinedButton`) rather than a
+ * re-skin of that shared widget, so the per-tab pickers elsewhere keep
+ * their existing appearance until their own screen tasks restyle them.
+ */
+@Composable
+internal fun ProjectDropdown(
+    projects: List<ApiProject>,
+    currentProjectId: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = projects.firstOrNull { it.id == currentProjectId }
+    val noProjects = stringResource(Res.string.picker_no_projects)
+    val selectProjectLabel = stringResource(Res.string.picker_select_project)
+    val triggerText = "$PROJECT_EMOJI " + (current?.name ?: if (projects.isEmpty()) noProjects else selectProjectLabel) + " $CHEVRON_DOWN"
+
+    Box(modifier = modifier) {
+        Surface(
+            onClick = { expanded = true },
+            enabled = projects.isNotEmpty(),
+            color = LocalExtendedColors.current.chipFill,
+            shape = QmShapeTokens.pill,
+            modifier = Modifier.handCursor(),
+        ) {
             Text(
-                stringResource(Res.string.brand),
+                triggerText,
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             )
-        },
-        navigationIcon = {
-            if (sizeClass == WindowSizeClass.Compact) {
-                IconButton(onClick = onOpenDrawer, modifier = Modifier.handCursor()) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_menu),
-                        contentDescription = stringResource(Res.string.nav_menu_cd),
-                        modifier = Modifier.size(24.dp),
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            projects.forEach { p ->
+                DropdownMenuItem(
+                    text = { Text(p.name) },
+                    onClick = { onSelect(p.id); expanded = false },
+                    modifier = Modifier.handCursor(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Date-range dropdown trigger (design_handoff_dashboard_redesign/README.md
+ * > Header: "Date-range dropdown ('🗓️ Last 7 days ▾'): Today / Last 7 days /
+ * Last 30 days / Last 90 days"). Functionally identical to the pre-existing
+ * `WindowPicker` in `DashboardScreen.kt` (same [TimeRange] entries, same
+ * [onSelect] callback into `DashboardViewModel.selectRange`) — see
+ * [ProjectDropdown]'s KDoc for why this is a new, header-styled trigger
+ * rather than a re-skin of that shared widget.
+ */
+@Composable
+internal fun DateRangeDropdown(
+    range: TimeRange,
+    onSelect: (TimeRange) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val triggerText = "$DATE_EMOJI " + stringResource(range.labelRes) + " $CHEVRON_DOWN"
+
+    Box(modifier = modifier) {
+        Surface(
+            onClick = { expanded = true },
+            color = LocalExtendedColors.current.chipFill,
+            shape = QmShapeTokens.pill,
+            modifier = Modifier.handCursor(),
+        ) {
+            Text(
+                triggerText,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            TimeRange.entries.forEach { r ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(r.labelRes)) },
+                    onClick = { onSelect(r); expanded = false },
+                    modifier = Modifier.handCursor(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The header's second row (design_handoff_dashboard_redesign/README.md >
+ * Header: "⇄ Compare toggle ... 🤓 Expert toggle ... 🔄 Refresh button ...
+ * ☀️/🌙 theme toggle ... ✨ Ask button (lavender, opens right-hand drawer)
+ * ... user avatar circle"). Only [onRefresh] (pre-existing
+ * `DashboardViewModel.refresh`) and the theme toggle (pre-existing
+ * `LocalThemeMode`/`LocalThemeModeSetter`) are wired to real behavior;
+ * [onCompareToggle]/[onExpertToggle]/[onAsk] are local, no-backend stub
+ * toggles per this task's scope (no Compare/Expert-mode state exists on
+ * [DashboardState] yet, and the "Ask your data" drawer is a separate,
+ * not-yet-built feature) — see the Task 16 report for this call-out.
+ * [onSignOut] is the pre-existing `DashboardViewModel.logout`, now reached
+ * through the avatar's dropdown menu rather than a standalone button.
+ */
+@Composable
+internal fun HeaderToggleRow(
+    compareOn: Boolean,
+    onCompareToggle: () -> Unit,
+    expertOn: Boolean,
+    onExpertToggle: () -> Unit,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    themeMode: ThemeMode,
+    onToggleTheme: () -> Unit,
+    onAsk: () -> Unit,
+    userEmail: String?,
+    onSignOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val extended = LocalExtendedColors.current
+    var avatarMenuExpanded by remember { mutableStateOf(false) }
+
+    FlowRow(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ToggleChip(emoji = COMPARE_EMOJI, label = stringResource(Res.string.header_toggle_compare), on = compareOn, onClick = onCompareToggle)
+        ToggleChip(emoji = EXPERT_EMOJI, label = stringResource(Res.string.header_toggle_expert), on = expertOn, onClick = onExpertToggle)
+
+        IconButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.handCursor()) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_refresh),
+                contentDescription = stringResource(Res.string.action_refresh),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        val themeToggleCd = stringResource(Res.string.header_theme_toggle_cd)
+        IconButton(
+            onClick = onToggleTheme,
+            modifier = Modifier.handCursor().semantics { contentDescription = themeToggleCd },
+        ) {
+            Text(if (themeMode == ThemeMode.Light) THEME_DARK_EMOJI else THEME_LIGHT_EMOJI, style = MaterialTheme.typography.titleMedium)
+        }
+
+        val askLabel = "$ASK_EMOJI " + stringResource(Res.string.header_ask_button)
+        Pill(text = askLabel, variant = PillVariant.Lavender, onClick = onAsk)
+
+        val avatarCd = stringResource(Res.string.header_avatar_cd)
+        Box {
+            Surface(
+                onClick = { avatarMenuExpanded = true },
+                color = extended.lavender,
+                shape = CircleShape,
+                modifier = Modifier.size(32.dp).handCursor().semantics { contentDescription = avatarCd },
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = (userEmail?.firstOrNull()?.uppercaseChar() ?: '?').toString(),
+                        color = extended.onLime,
+                        style = MaterialTheme.typography.labelLarge,
                     )
                 }
             }
-        },
-        actions = {
-            if (sizeClass != WindowSizeClass.Compact && !state.user?.email.isNullOrEmpty()) {
-                Text(
-                    text = state.user?.email.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 220.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-            }
-            IconButton(
-                onClick = { viewModel.refresh() },
-                enabled = !state.refreshing,
-                modifier = Modifier.handCursor(),
-            ) {
-                Icon(
-                    painter = painterResource(Res.drawable.ic_refresh),
-                    contentDescription = stringResource(Res.string.action_refresh),
-                    modifier = Modifier.size(20.dp),
+            DropdownMenu(expanded = avatarMenuExpanded, onDismissRequest = { avatarMenuExpanded = false }) {
+                userEmail?.let {
+                    DropdownMenuItem(text = { Text(it) }, onClick = {}, enabled = false)
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.action_signout)) },
+                    leadingIcon = {
+                        Icon(
+                            painter = painterResource(Res.drawable.ic_signout),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    onClick = { onSignOut(); avatarMenuExpanded = false },
+                    modifier = Modifier.handCursor(),
                 )
             }
-            TextButton(onClick = { viewModel.logout() }, modifier = Modifier.handCursor()) {
-                Icon(
-                    painter = painterResource(Res.drawable.ic_signout),
-                    contentDescription = stringResource(Res.string.action_signout),
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(Res.string.action_signout))
-            }
-            Spacer(Modifier.width(8.dp))
-        },
-    )
+        }
+    }
 }
 
+/**
+ * One Compare/Expert toggle pill: an emoji + label whose fill switches
+ * between [PillVariant.Lime] (on) and [PillVariant.Neutral] (off) so the
+ * active state reads clearly without a separate indicator glyph.
+ */
+@Composable
+private fun ToggleChip(emoji: String, label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val text = "$emoji $label"
+    Pill(text = text, variant = if (on) PillVariant.Lime else PillVariant.Neutral, onClick = onClick, modifier = modifier)
+}
+
+/**
+ * The header's third row — primary nav pills
+ * (design_handoff_dashboard_redesign/README.md > Header: "primary nav pills
+ * — Overview, Flow, Retention, Funnels, Experiments (has a lime 'NEW'
+ * badge), Projects, Team, Settings. Active pill is filled solid (`--ink` bg
+ * / `--bg` text)"). The active destination renders as a filled
+ * [PillVariant.NavActive] [Pill] (`goldens/pill/variants.png`'s existing
+ * reference); every inactive destination renders as plain emoji+label text
+ * with no fill at all — `_source/01-overview-normal.png`'s visible
+ * Flow/Retention/Funnels/Team/Settings pills show no background surface
+ * behind their text, only the active Overview pill does (see
+ * `goldens/README.md`'s log entry for this golden).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun NavPillRow(
+    destinations: List<NavDestination>,
+    current: NavDestination,
+    onSelect: (NavDestination) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        destinations.forEach { dest ->
+            Box {
+                NavPillItem(destination = dest, selected = dest == current, onClick = { onSelect(dest) })
+                if (dest == NavDestination.Experiments) {
+                    NewBadge(modifier = Modifier.align(Alignment.TopEnd))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A single nav-row entry: [PillVariant.NavActive] when selected, or plain
+ * (unfilled) emoji+label text otherwise — see [NavPillRow]'s KDoc for why
+ * the inactive style has no background.
+ */
+@Composable
+private fun NavPillItem(destination: NavDestination, selected: Boolean, onClick: () -> Unit) {
+    val label = destination.emoji + " " + stringResource(destination.labelRes)
+    if (selected) {
+        Pill(text = label, variant = PillVariant.NavActive, onClick = onClick)
+    } else {
+        Surface(onClick = onClick, color = Color.Transparent, shape = QmShapeTokens.pill, modifier = Modifier.handCursor()) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Small lime "NEW" corner badge for the Experiments nav pill
+ * (design_handoff_dashboard_redesign/README.md > Header: "Experiments (has a
+ * lime 'NEW' badge)"). Covered/cut by the Ask-drawer overlay in
+ * `_source/01-overview-normal.png`, so this is token-derived (fixed
+ * `extended.lime`/`onLime` per `theme/Color.kt`) rather than a JPEG crop —
+ * see `goldens/README.md`'s log entry for [NavPillRow]'s golden.
+ */
+@Composable
+private fun NewBadge(modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    Surface(color = extended.lime, shape = QmShapeTokens.chip, modifier = modifier) {
+        Text(
+            stringResource(Res.string.nav_badge_new),
+            style = MaterialTheme.typography.labelSmall,
+            color = extended.onLime,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+        )
+    }
+}
