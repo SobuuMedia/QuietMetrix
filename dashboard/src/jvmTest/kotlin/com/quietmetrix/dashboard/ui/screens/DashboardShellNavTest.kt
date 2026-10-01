@@ -8,12 +8,16 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.filter
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.api.ApiUser
+import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.nav.NavDestination
 import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
@@ -41,7 +45,12 @@ class DashboardShellNavTest {
     // convention, commit ab300e0): v1 runComposeUiTest is what the existing
     // screenshot-golden infra is built on.
     @Suppress("DEPRECATION")
-    private fun renderShellAt(widthDp: Int, heightDp: Int = 900, block: androidx.compose.ui.test.ComposeUiTest.(DashboardViewModel) -> Unit) =
+    private fun renderShellAt(
+        widthDp: Int,
+        heightDp: Int = 900,
+        state: DashboardState = DashboardState(),
+        block: androidx.compose.ui.test.ComposeUiTest.(DashboardViewModel) -> Unit,
+    ) =
         runComposeUiTest {
             val viewModel = DashboardViewModel()
             setContent {
@@ -50,7 +59,7 @@ class DashboardShellNavTest {
                         Box(modifier = Modifier.size(widthDp.dp, heightDp.dp)) {
                             DashboardShell(
                                 viewModel = viewModel,
-                                state = DashboardState(),
+                                state = state,
                                 snackbarState = SnackbarHostState(),
                             ) { _ ->
                                 Text("content")
@@ -85,6 +94,42 @@ class DashboardShellNavTest {
         // The old compact-width hamburger opened SideDrawerHost; there is no
         // drawer left for it to open, so the trigger itself must be gone.
         onAllNodesWithContentDescription("Open navigation menu").assertCountEquals(0)
+    }
+
+    @Test
+    fun allEightDestinationsAreReachableAndClickableAtMinimumSupportedWidth() {
+        // 320dp is this project's established "tiny width is still Compact" floor
+        // (nav/Breakpoint.kt's BreakpointTest.tinyWidthIsCompact asserts
+        // classifyWindow(320.dp) == Compact) -- the narrowest width the app
+        // commits to supporting. Removing SideDrawerHost means NavPillRow's
+        // FlowRow is now the *only* way to reach any destination at this width,
+        // so every destination (admin role, so all 8 -- including the
+        // admin-only "Users" entry -- are visible) must still render as a
+        // present, clickable pill once it wraps onto its own line(s).
+        // Matched as "<emoji> <label>" (how NavPillItem renders its text) rather
+        // than the emoji alone: the Projects destination's emoji ("📦") also
+        // appears, alone, in the unrelated ProjectDropdown trigger text ("📦 No
+        // projects ▾"), which is itself clickable -- disambiguating on the full
+        // "emoji label" pair avoids that false match.
+        val labelsByDestination = mapOf(
+            NavDestination.Overview to "Overview",
+            NavDestination.Flow to "Flow",
+            NavDestination.Retention to "Retention",
+            NavDestination.Projects to "Projects",
+            NavDestination.Funnels to "Funnels",
+            NavDestination.Experiments to "Experiments",
+            NavDestination.Users to "Users",
+            NavDestination.Settings to "Settings",
+        )
+        val adminState = DashboardState(user = ApiUser(id = "1", email = "admin@x.c", role = UserRole.ADMIN))
+        renderShellAt(widthDp = 320, state = adminState) { _ ->
+            NavDestination.entries.forEach { destination ->
+                val pillText = "${destination.emoji} ${labelsByDestination.getValue(destination)}"
+                onAllNodesWithText(pillText, substring = true)
+                    .filter(hasClickAction())
+                    .assertCountEquals(1)
+            }
+        }
     }
 
     @Test
