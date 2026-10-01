@@ -1,6 +1,7 @@
 package com.quietmetrix.dashboard.viewmodel
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -8,6 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -127,5 +129,49 @@ class ToastQueueTest {
         assertFalse(shown.err)
         assertNull(shown.actionLabel)
         assertNull(shown.action)
+    }
+
+    // ---- clearingToastIfStillCurrent: the Job-identity guard behind showToast's auto-dismiss ----
+    //
+    // Job.cancel() is cooperative — it only takes effect at a suspension point — so if a stale
+    // auto-dismiss timer's delay() had *already* resumed (e.g. its body is mid-execution on
+    // another thread under the real Dispatchers.Default-backed production scope) at the exact
+    // moment it's superseded, cancel() alone cannot stop it from running its clear. A genuine
+    // concurrent-thread test for that race would depend on real timing (hitting a multi-millisecond
+    // window at the exact moment a coroutine resumes) and would be inherently flaky; these tests
+    // instead cover the identity-check decision itself — the mechanism that makes the stale body's
+    // clear a no-op even if it does run — deterministically and without any coroutines or timing.
+
+    @Test
+    fun clearingToastIfStillCurrentNoOpsWhenTheSchedulingJobIsNoLongerCurrent() {
+        val toast = Toast(emoji = "⚠️", title = "Second")
+        val state = DashboardState(toast = toast)
+        val staleJob = Job() // the superseded toast's own auto-dismiss timer
+        val currentJob = Job() // a different toast's timer, now the one actually in flight
+
+        val result = state.clearingToastIfStillCurrent(scheduledJob = staleJob, currentJob = currentJob)
+
+        assertSame(toast, result.toast, "a stale timer must not clear a toast it wasn't scheduled for")
+    }
+
+    @Test
+    fun clearingToastIfStillCurrentClearsWhenTheSchedulingJobIsStillCurrent() {
+        val job = Job()
+        val state = DashboardState(toast = Toast(emoji = "✅", title = "Done"))
+
+        val result = state.clearingToastIfStillCurrent(scheduledJob = job, currentJob = job)
+
+        assertNull(result.toast, "the toast's own still-current timer must clear it as normal")
+    }
+
+    @Test
+    fun clearingToastIfStillCurrentNoOpsWhenCurrentJobIsNull() {
+        val toast = Toast(emoji = "✅", title = "Done")
+        val state = DashboardState(toast = toast)
+        val staleJob = Job() // dismissToast() already cancelled and nulled this out
+
+        val result = state.clearingToastIfStillCurrent(scheduledJob = staleJob, currentJob = null)
+
+        assertSame(toast, result.toast, "a timer superseded by a manual dismiss must not clear whatever shows next")
     }
 }

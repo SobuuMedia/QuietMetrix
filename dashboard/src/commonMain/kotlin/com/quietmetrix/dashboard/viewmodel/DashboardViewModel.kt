@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.StringResource
+import kotlin.concurrent.Volatile
 
 data class DashboardState(
     val token: String? = null,
@@ -153,6 +154,23 @@ internal fun DashboardState.withSectionError(section: DataSection, error: UiErro
 /** Clears a previously-recorded section error, e.g. after that section reloads successfully. */
 internal fun DashboardState.clearingSectionError(section: DataSection): DashboardState =
     copy(sectionErrors = sectionErrors - section)
+
+/**
+ * Clears [DashboardState.toast] only if [scheduledJob] — the auto-dismiss timer that is asking to
+ * clear it — is still [currentJob], i.e. still the one [DashboardViewModel.toastDismissJob] points
+ * at. If a newer toast (or a manual [DashboardViewModel.dismissToast]) has since taken over that
+ * field, [scheduledJob] is stale and this is a no-op.
+ *
+ * Pulled out as a pure, directly-testable function (same reasoning as [confirmButtonSpec] in
+ * `ConfirmDialog.kt`: isolate the decision from the coroutine/timing it's normally wrapped in) so
+ * the one subtlety `Job.cancel()` can't fully guarantee on its own — cancellation is cooperative
+ * and only takes effect at a suspension point, so a stale timer whose `delay()` already resumed
+ * before `cancel()` could reach it would otherwise run this clear anyway, racing with whatever
+ * toast replaced it — has a test (`ToastQueueTest`) that exercises the no-op branch deterministically,
+ * without needing real concurrent threads or timing to reproduce the race itself.
+ */
+internal fun DashboardState.clearingToastIfStillCurrent(scheduledJob: Job, currentJob: Job?): DashboardState =
+    if (scheduledJob === currentJob) copy(toast = null) else this
 
 /**
  * Holds [DashboardState] and every mutator that transitions it, backed by [api] calls launched on
@@ -839,7 +857,11 @@ class DashboardViewModel(
 
     /** The in-flight auto-dismiss timer for the currently-shown toast, if any. Cancelled whenever
      *  that toast is replaced or manually closed, so a stale timer can never dismiss a different
-     *  toast than the one it was scheduled for. */
+     *  toast than the one it was scheduled for. `@Volatile` because [scope] (in production)
+     *  dispatches on [Dispatchers.Default], a real thread pool: `showToast` can run on one thread
+     *  while a previous toast's auto-dismiss coroutine body resumes on another, so this field is
+     *  read and written across threads without any other synchronization. */
+    @Volatile
     private var toastDismissJob: Job? = null
 
     /**
@@ -847,14 +869,27 @@ class DashboardViewModel(
      * it to auto-dismiss after ~5s (design_handoff_dashboard_redesign/README.md > Interactions &
      * Behavior > "Toasts"). Cancels any pending auto-dismiss timer from a previous toast first —
      * otherwise that stale timer would later fire and incorrectly dismiss this new one.
+     *
+     * `cancel()` alone is not enough to guarantee that, though: it is cooperative and only takes
+     * effect at the cancelled coroutine's next suspension point, so if the previous timer's
+     * `delay(5_000)` had *already* resumed and its body was already running (on another thread,
+     * under the real multi-threaded [Dispatchers.Default] scope) at the moment this function is
+     * called, `cancel()` cannot stop that in-flight `_state.update` — the two updates could then
+     * land in either order, and a stale clear landing after this toast is published would wipe it
+     * out a moment after it appeared. The `toastDismissJob === job` identity check inside the
+     * launched block closes that gap: even if the stale body still runs to completion, it is now
+     * a no-op once [toastDismissJob] no longer points at it (because `showToast` or [dismissToast]
+     * already moved it on to something else) — see [clearingToastIfStillCurrent].
      */
     fun showToast(toast: Toast) {
         toastDismissJob?.cancel()
         _state.update { it.copy(toast = toast) }
-        toastDismissJob = scope.launch {
+        lateinit var job: Job
+        job = scope.launch {
             delay(5_000)
-            _state.update { it.copy(toast = null) }
+            _state.update { it.clearingToastIfStillCurrent(scheduledJob = job, currentJob = toastDismissJob) }
         }
+        toastDismissJob = job
     }
 
     /** Dismisses the current toast immediately (the ✕ close button) and cancels its pending
