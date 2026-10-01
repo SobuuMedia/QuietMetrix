@@ -1,6 +1,8 @@
 package com.quietmetrix.dashboard.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -126,4 +128,32 @@ class ThemeTokensTest {
     // assertions, moved to TypographyFontTest (dashboard/src/jvmTest),
     // which drives a real composition via runComposeUiTest.
     // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // Spec shape scale (design_handoff_dashboard_redesign/README.md > Design
+    // System > Spacing & shape, reconciled with the Design Tokens summary) —
+    // card radius 20px lives on Material3's extraLarge slot; pill/chip/modal/
+    // drawer have no Material3 Shapes slot of their own, so they live on the
+    // supplementary QmShapeTokens holder. Unlike Shapes.kt, this is plain
+    // data (RoundedCornerShape), so it needs no composition to construct and
+    // genuinely belongs in commonTest.
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun cardRadiusMatchesSpec() {
+        assertEquals(RoundedCornerShape(20.dp), QmShapes.extraLarge, "card radius (Spacing & shape: 20px)")
+    }
+
+    @Test
+    fun shapeTokensMatchSpecPalette() {
+        assertEquals(RoundedCornerShape(999.dp), QmShapeTokens.pill, "pill radius (999px full pill)")
+        assertEquals(
+            RoundedCornerShape(10.dp),
+            QmShapeTokens.chip,
+            "chip radius (9-12px per Spacing & shape, narrowed to 9-10px per Design Tokens; 10dp fits both)",
+        )
+        assertEquals(RoundedCornerShape(20.dp), QmShapeTokens.card, "card radius (20px), aliasing QmShapes.extraLarge")
+        assertEquals(RoundedCornerShape(24.dp), QmShapeTokens.modal, "modal radius (24px)")
+        assertEquals(RoundedCornerShape(20.dp), QmShapeTokens.drawer, "drawer radius (20px, coincides with card)")
+    }
 }
