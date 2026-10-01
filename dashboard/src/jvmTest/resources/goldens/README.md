@@ -39,4 +39,5 @@ requiring this task to predict render sizes it can't yet know.
 
 | Golden path | Source | Source rect (x,y,w,h) | Notes |
 |---|---|---|---|
-| _(none yet — filled in by the tasks that create them)_ | | | |
+| `_infra/theme-dark-bg.png` | n/a (not a `_source/` crop) | n/a | Task 8. Solid-color reference, not a design-handoff crop: `QuietMetrixTheme(Dark) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) }` rendered at the default 1024x768 `runComposeUiTest` canvas, verified at `rgb(19,16,23)` = `#131017` (`QmDarkBg`). Recorded via `-Pgolden.record=true` from the real render (see Task 8 report for the record-then-verify steps), not hand-crafted bytes. |
+| `_infra/theme-light-bg.png` | n/a (not a `_source/` crop) | n/a | Task 8. Same as above for `QuietMetrixTheme(Light)`, verified at `rgb(247,242,234)` = `#F7F2EA` (`QmLightBg`), 1024x768. |
