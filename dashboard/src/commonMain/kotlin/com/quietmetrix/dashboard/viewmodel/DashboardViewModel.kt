@@ -383,7 +383,10 @@ class DashboardViewModel(
     /** Suspending fetch for a destination, shared by navigation and refresh. */
     private suspend fun loadActive(destination: NavDestination) {
         when (destination) {
-            NavDestination.Overview  -> { loadAggregates(); loadSessions() }
+            // Task 19 fix round 1: loadRetentionOnce() added so the Overview vitals grid's
+            // "Came back next day" card has real data without requiring a separate visit to the
+            // Retention tab first (see OverviewVitalsLogic.kt's computeVitalsNumbers KDoc).
+            NavDestination.Overview  -> { loadAggregates(); loadSessions(); loadRetentionOnce() }
             NavDestination.Flow      -> { loadTransitions(); loadSearch(); loadFriction() }
             NavDestination.Retention -> loadRetentionOnce()
             NavDestination.Projects  -> loadProjects()

@@ -58,6 +58,17 @@ kotlin {
                 @OptIn(ExperimentalComposeLibrary::class)
                 implementation(compose.uiTest)
                 implementation(compose.desktop.currentOs)
+                // Test-only: ApiClient builds a plain `HttpClient { }` with no engine parameter,
+                // so it relies on exactly one engine being discoverable on the runtime classpath.
+                // commonMain never declares one for the jvm target (production ships wasmJs
+                // only), so without this, any jvmTest that actually constructs a DashboardViewModel
+                // and calls a network-touching method throws "Failed to find HTTP client engine
+                // implementation" (see Task 19 fix round 1's OverviewNavigationLoadsRetentionTest,
+                // which needs a real (if unreachable) HTTP attempt to prove loadActive's dispatch
+                // wiring). ktor-client-java wraps the JDK's own built-in HttpClient — no extra
+                // native/transitive dependencies, perfectly adequate for a loopback connect-refused
+                // test.
+                implementation(libs.ktor.client.java)
             }
         }
         val wasmJsMain by getting {
