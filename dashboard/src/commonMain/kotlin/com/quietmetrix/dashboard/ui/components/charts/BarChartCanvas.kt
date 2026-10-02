@@ -27,6 +27,13 @@ data class BarData(val label: String, val value: Float)
  * Vertical bar chart with y-axis gridlines + tick labels and a thinned-out set
  * of x-axis labels. Replaces the old hand-drawn "Daily volume" rectangle rows
  * and shows the full selected window instead of just the last 14 days.
+ *
+ * [highlightIndex] (Task 20) paints exactly one bar in [highlightColor] instead of [barColor] —
+ * used by the Overview daily-volume chart card to call out the real "record day" (see
+ * `OverviewChartLogic.kt`'s `recordDayIndex`) with a lime bar, per the design handoff's "record day
+ * ... a lime bar" (the literal floating "🚀 v2.3 shipped" caption text is deliberately NOT part of
+ * this component — see `DailyVolumeSection`'s KDoc). `null` (the default) highlights nothing,
+ * so existing callers are unaffected.
  */
 @Composable
 fun BarChartCanvas(
@@ -34,6 +41,8 @@ fun BarChartCanvas(
     modifier: Modifier = Modifier,
     barColor: Color = MaterialTheme.colorScheme.primary,
     chartHeight: androidx.compose.ui.unit.Dp = 220.dp,
+    highlightIndex: Int? = null,
+    highlightColor: Color = LocalExtendedColors.current.lime,
 ) {
     if (bars.isEmpty()) return
     val textMeasurer = rememberTextMeasurer()
@@ -67,9 +76,9 @@ fun BarChartCanvas(
             max = maxV,
         )
         val corner = CornerRadius(3.dp.toPx(), 3.dp.toPx())
-        specs.forEach { spec ->
+        specs.forEachIndexed { i, spec ->
             drawRoundRect(
-                color = barColor,
+                color = if (i == highlightIndex) highlightColor else barColor,
                 topLeft = Offset(spec.x, spec.y),
                 size = Size(spec.width, spec.height.coerceAtLeast(1f)),
                 cornerRadius = corner,

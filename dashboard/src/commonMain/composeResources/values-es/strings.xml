@@ -417,4 +417,10 @@
     <string name="overview_vital_retention_not_tracked">Aún no se registra — consulta Retención para ver las cohortes.</string>
     <string name="overview_vital_errors_caption">Incluye fallos, errores y excepciones.</string>
     <string name="overview_vital_filter_chip">Mostrando solo %1$s ✕</string>
+
+    <string name="overview_chart_title_hourly">Qué pasó cada hora</string>
+    <string name="overview_chart_title_daily">Qué pasó cada día</string>
+    <string name="overview_chart_metric_visits">Visitas</string>
+    <string name="overview_chart_metric_actions">Acciones</string>
+    <string name="overview_chart_record_day">🔥 Día con más actividad: %1$s</string>
 </resources>

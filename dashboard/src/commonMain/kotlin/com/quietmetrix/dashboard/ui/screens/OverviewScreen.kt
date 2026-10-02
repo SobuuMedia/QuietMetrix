@@ -47,15 +47,12 @@ import com.quietmetrix.dashboard.format.formatMinorUnits
 import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.Res
-import com.quietmetrix.dashboard.resources.card_daily_volume
 import com.quietmetrix.dashboard.resources.card_screen_time
-import com.quietmetrix.dashboard.resources.card_sessions_trend
 import com.quietmetrix.dashboard.resources.card_top_events
 import com.quietmetrix.dashboard.resources.card_top_screens
 import com.quietmetrix.dashboard.resources.card_top_values
 import com.quietmetrix.dashboard.resources.ic_events
 import com.quietmetrix.dashboard.resources.ic_info
-import com.quietmetrix.dashboard.resources.ic_live
 import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.kpi_errors
 import com.quietmetrix.dashboard.resources.overview_empty_greeting
@@ -65,6 +62,11 @@ import com.quietmetrix.dashboard.resources.overview_empty_headline_tail
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_body
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_emoji
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_title
+import com.quietmetrix.dashboard.resources.overview_chart_metric_actions
+import com.quietmetrix.dashboard.resources.overview_chart_metric_visits
+import com.quietmetrix.dashboard.resources.overview_chart_record_day
+import com.quietmetrix.dashboard.resources.overview_chart_title_daily
+import com.quietmetrix.dashboard.resources.overview_chart_title_hourly
 import com.quietmetrix.dashboard.resources.overview_error_headline
 import com.quietmetrix.dashboard.resources.overview_hero_ai_chip
 import com.quietmetrix.dashboard.resources.overview_hero_copy
@@ -112,8 +114,6 @@ import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.charts.BarChartCanvas
 import com.quietmetrix.dashboard.ui.components.charts.BarData
-import com.quietmetrix.dashboard.ui.components.charts.LineChartCanvas
-import com.quietmetrix.dashboard.ui.components.charts.LineData
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.layoutFlowFor
@@ -225,39 +225,18 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.card_daily_volume),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    val daily = agg?.daily ?: emptyList()
-                    if (daily.isEmpty()) {
-                        EmptyState(Res.drawable.ic_events, Res.string.state_no_data)
-                    } else {
-                        BarChartCanvas(daily.map { BarData(formatBucketLabel(it.day, state.range.hourly), it.total.toFloat()) })
-                    }
-                }
-            }
-
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.card_sessions_trend),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    val sessDaily = sess?.dailySessions ?: emptyList()
-                    if (sessDaily.isEmpty()) {
-                        EmptyState(Res.drawable.ic_live, Res.string.state_no_data)
-                    } else {
-                        LineChartCanvas(sessDaily.map { LineData(formatBucketLabel(it.day, state.range.hourly), it.total.toFloat()) })
-                    }
-                }
-            }
+            // Task 20: one unified "Daily volume chart card" (design_handoff_dashboard_redesign/
+            // README.md > Overview) replaces the two pre-redesign cards above ("Daily volume" /
+            // events-only bar chart, and "Daily sessions" / sessions-only line chart) — the
+            // README describes a single card with a Visits/Actions toggle, not two permanently
+            // stacked charts. See DailyVolumeSection's KDoc for the segmented-control and
+            // record-day data-honesty decisions.
+            DailyVolumeSection(
+                agg = agg,
+                sess = sess,
+                range = state.range,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             ResponsiveRowOrColumn(sizeClass) {
                 Card(modifier = Modifier.fillSlot()) {
@@ -736,6 +715,148 @@ internal fun VitalsSection(
                     )
                 }
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Daily volume chart card (Task 20)
+// ---------------------------------------------------------------------------
+
+/**
+ * The redesigned Overview daily-volume chart card: a title that reflects the active
+ * [TimeRange]'s bucket granularity, a Visits/Actions segmented control, and a [BarChartCanvas] of
+ * the selected series with the real "record day" highlighted in lime. Replaces the two
+ * pre-redesign cards ("Daily volume" and "Daily sessions") that stood side by side in
+ * `OverviewScreen` — the design handoff describes one card with a metric toggle, not two
+ * permanently-stacked charts (design_handoff_dashboard_redesign/README.md > Overview).
+ *
+ * **Segmented control — "Visits"/"Actions" only, not "People/Visits/Actions":** see
+ * [DailyVolumeMetric]'s KDoc. "People" (a distinct-device/WAU count) is not tracked anywhere in
+ * this backend — the same gap Tasks 18/19 already found for the hero and vitals grid — and unlike
+ * those two tasks there is no honest relabel available here (this control's "Visits" option
+ * already *is* the sessions proxy those tasks used for "People"), so the segment is omitted
+ * entirely rather than duplicated under a second name.
+ *
+ * **Title — 2 variants, not 3:** the design handoff's title changes "('Who showed up each day' /
+ * '…each hour' / '…each week')" for 3 bucket granularities. [TimeRange] only distinguishes
+ * `hourly` vs. not (`TimeRange.kt`) — there is no weekly bucketing anywhere in the backend (every
+ * non-hourly range, including [TimeRange.Day90], buckets by day) — so a literal 3rd "each week"
+ * title would describe a granularity that never actually renders. Only 2 variants are shown. The
+ * wording itself is also changed from "who showed up" (a people/attendance framing) to "what
+ * happened", since neither Visits nor Actions is a distinct-person count.
+ *
+ * **Record-day callout — real highlight, no fabricated caption:** the design handoff calls out the
+ * record day with "a floating '🚀 v2.3 shipped' label and a lime bar"
+ * (design_handoff_dashboard_redesign/README.md > Overview). The lime bar is real and honestly
+ * derivable — [recordDayIndex] finds the actual highest-value bucket in whichever series is
+ * selected, reusing [BarChartCanvas]'s new `highlightIndex`/`highlightColor` parameters (this
+ * task's one genuine `BarChartCanvas` extension). The literal text "v2.3 shipped" is NOT rendered
+ * anywhere: it is placeholder flavor text from the design mockup (grepped across this repo — no
+ * changelog, release-note, or deploy-marker concept exists in either backend
+ * (`servers/ktor/`/`php-hosting/`) that could honestly back a specific version string), and
+ * showing it verbatim to a real user would fabricate a release event that may not have happened on
+ * their actual record day. Instead, a plain, true caption — "🔥 Busiest day: {label}" — is shown
+ * under the chart, derived from the same real [recordDayIndex] the bar highlight uses.
+ *
+ * **Deliberately out of scope (documented, not silently dropped):**
+ * - **Hover tooltip / click-to-drill-down**: the design handoff asks for both ("Hover a bar →
+ *   tooltip with exact number; click → opens that day's drill-down"). The drill-down drawer itself
+ *   is not wired anywhere in this codebase yet — every existing `KpiCard.onClick` callsite leaves
+ *   it unset, and Tasks 10/14's reports already name this a project-wide, explicitly-deferred gap
+ *   for later tasks (26/40/41) to wire up. Building a one-off hover/click affordance here that
+ *   opens nothing would be a dead-end interaction, so both are left for whichever task wires the
+ *   drill-down drawer for real.
+ * - **Compare-mode ghost bars + legend**: the design handoff's "When Compare is on, each bar gets
+ *   a dashed lavender ghost bar behind it for the previous period, plus a legend." Checked
+ *   `ChartLogic.kt`/`BarChartCanvas.kt` first per this task's brief: **neither has any ghost-bar or
+ *   previous-period support today.** Not adding it here either, for the same two-part reason
+ *   Task 19's report already documented for the vitals grid's unpopulated `compareNote`: (a) there
+ *   is no previous-period data anywhere in [AggregatesResponse]/[SessionsResponse] to honestly draw
+ *   a ghost bar from, and (b) `DashboardShell.kt`'s `compareOn` Compare toggle is local header state
+ *   that still isn't threaded down to any screen content. Rendering a dashed ghost bar from
+ *   invented numbers would be exactly the fabrication this codebase's Task 18 precedent rules out;
+ *   building the pure layout math for a feature with no real data to feed it would be speculative,
+ *   untested-by-real-usage code. This is a scope *omission*, not a stub — unlike `KpiCard.onClick`,
+ *   there is no Compare-aware parameter on this composable at all.
+ *
+ * Empty state (no buckets for the selected metric) shows the existing [EmptyState] placeholder,
+ * matching the pre-redesign cards' own behavior — no new skeleton/loading treatment was added here
+ * since neither pre-redesign card had one either.
+ */
+@Composable
+internal fun DailyVolumeSection(
+    agg: AggregatesResponse?,
+    sess: SessionsResponse?,
+    range: TimeRange,
+    modifier: Modifier = Modifier,
+) {
+    var metric by remember { mutableStateOf(DailyVolumeMetric.Actions) }
+
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (range.hourly) Res.string.overview_chart_title_hourly else Res.string.overview_chart_title_daily,
+                    ),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                MetricSegmentedControl(selected = metric, onSelect = { metric = it })
+            }
+            Spacer(Modifier.height(8.dp))
+
+            val bars = dailyVolumeBars(agg, sess, metric, range.hourly)
+            if (bars.isEmpty()) {
+                EmptyState(Res.drawable.ic_events, Res.string.state_no_data)
+            } else {
+                val recordIndex = recordDayIndex(bars)
+                BarChartCanvas(
+                    bars = bars.map { BarData(it.label, it.value.toFloat()) },
+                    highlightIndex = recordIndex,
+                )
+                if (recordIndex != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(Res.string.overview_chart_record_day, bars[recordIndex].label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = LocalExtendedColors.current.lime,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The Visits/Actions toggle for [DailyVolumeSection] — two [Pill]s reusing the same
+ * Lavender-when-selected/Neutral-when-not vocabulary [VitalsSection]'s filter chip and `Pill`'s own
+ * variants already establish elsewhere on this screen (no distinct "segmented control" component
+ * exists yet in `ui/components/`, and this task's scope is `OverviewScreen.kt` only — see
+ * [DailyVolumeSection]'s KDoc for why "People" has no third option here).
+ */
+@Composable
+private fun MetricSegmentedControl(
+    selected: DailyVolumeMetric,
+    onSelect: (DailyVolumeMetric) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        DailyVolumeMetric.entries.forEach { option ->
+            val label = when (option) {
+                DailyVolumeMetric.Visits -> stringResource(Res.string.overview_chart_metric_visits)
+                DailyVolumeMetric.Actions -> stringResource(Res.string.overview_chart_metric_actions)
+            }
+            Pill(
+                text = label,
+                variant = if (option == selected) PillVariant.Lavender else PillVariant.Neutral,
+                onClick = { onSelect(option) },
+            )
         }
     }
 }

@@ -443,4 +443,18 @@
     <string name="overview_vital_retention_not_tracked">Not tracked yet — visit Retention for cohort details.</string>
     <string name="overview_vital_errors_caption">Includes crashes, errors, and exceptions.</string>
     <string name="overview_vital_filter_chip">Showing only %1$s ✕</string>
+
+    <!-- Task 20: Overview daily-volume chart card. The design handoff's segmented control is
+         "People/Visits/Actions" and its title text implies "who showed up" (a distinct-people
+         count); both "People" and "each week" bucketing are omitted here as not honestly
+         derivable — see OverviewChartLogic.kt's DailyVolumeMetric KDoc ("People" has no backend
+         data, same gap as the hero/vitals grid) and TimeRange.kt (only hourly/daily bucketing
+         exists, no weekly aggregation, so the title has 2 variants, not 3). The record-day
+         caption deliberately does NOT reuse the design mockup's literal "🚀 v2.3 shipped" text —
+         see DailyVolumeSection's KDoc. -->
+    <string name="overview_chart_title_hourly">What happened each hour</string>
+    <string name="overview_chart_title_daily">What happened each day</string>
+    <string name="overview_chart_metric_visits">Visits</string>
+    <string name="overview_chart_metric_actions">Actions</string>
+    <string name="overview_chart_record_day">🔥 Busiest day: %1$s</string>
 </resources>
