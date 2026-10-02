@@ -574,4 +574,20 @@
     <string name="cohort_heatmap_checkbox_content_description_selected">%1$s is selected as %2$s for comparison</string>
     <string name="cohort_heatmap_tooltip_known">Of the %1$s people who installed %2$s, %3$s (%4$s) opened the app again on %5$s.</string>
     <string name="cohort_heatmap_tooltip_unknown">Too early. Come back after %1$s to see this one ⏳</string>
+
+    <!-- Retention: "⚖️ Comparing A vs B" panel + closing insight card (Task 26) -->
+    <string name="retention_comparison_eyebrow_emoji">⚖️</string>
+    <string name="retention_comparison_heading">Comparing</string>
+    <string name="retention_comparison_chip_a">A · %1$s</string>
+    <string name="retention_comparison_chip_b">B · %1$s</string>
+    <string name="retention_comparison_vs">vs</string>
+    <string name="retention_comparison_not_enough_data">Not enough data yet to compare these two.</string>
+    <string name="retention_comparison_same">On %1$s, both groups came back the same (%2$s).</string>
+    <string name="retention_comparison_higher">On %1$s, people from %2$s came back %3$d pts more than people from %4$s. 📈</string>
+    <string name="retention_comparison_lower">On %1$s, people from %2$s came back %3$d pts less than people from %4$s. 📉</string>
+    <string name="retention_comparison_column_values">%1$s · %2$s</string>
+    <string name="retention_comparison_column_unknown">⏳ Not enough data for this day yet.</string>
+    <string name="retention_insight_eyebrow_emoji">✨</string>
+    <string name="retention_insight_not_enough_data">Not enough cohort history yet to spot a trend — check back once you have two cohorts old enough to compare.</string>
+    <string name="retention_insight_ask_why">Ask why</string>
 </resources>

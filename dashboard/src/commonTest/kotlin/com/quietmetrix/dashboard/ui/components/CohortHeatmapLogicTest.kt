@@ -202,4 +202,42 @@ class CohortHeatmapLogicTest {
     fun selectingAThirdRowDropsTheOldestSelectionKeepingTheNewestTwo() {
         assertEquals(listOf("B", "C"), toggleCohortHeatmapSelection(listOf("A", "B"), "C"))
     }
+
+    // ---- selectedCohortHeatmapRows: Task 26's selection-id -> row lookup for the A-vs-B panel ----
+
+    @Test
+    fun selectedRowsAreResolvedInTickOrderNotRowOrder() {
+        val rows = buildCohortHeatmapRows(
+            listOf(
+                RetentionCohort(cohortDate = "2026-08-01", size = 10, day1 = 0.1),
+                RetentionCohort(cohortDate = "2026-09-20", size = 20, day1 = 0.2),
+            ),
+            CohortGrouping.ByDay,
+            today,
+        )
+        // Rows come back newest-first ("2026-09-20", "2026-08-01"), but the user ticked the OLDER
+        // row first (as A) — the resolved order must follow the tick order, not the row order.
+        val selected = selectedCohortHeatmapRows(rows, listOf("2026-08-01", "2026-09-20"))
+        assertEquals(listOf("2026-08-01", "2026-09-20"), selected.map { it.id })
+    }
+
+    @Test
+    fun selectedRowsDropsAnIdWithNoMatchingRowRatherThanCrashing() {
+        val rows = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 10, day1 = 0.1)),
+            CohortGrouping.ByDay,
+            today,
+        )
+        assertEquals(listOf("2026-08-01"), selectedCohortHeatmapRows(rows, listOf("2026-08-01", "no-such-id")).map { it.id })
+    }
+
+    @Test
+    fun selectedRowsIsEmptyWhenNothingIsSelected() {
+        val rows = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 10, day1 = 0.1)),
+            CohortGrouping.ByDay,
+            today,
+        )
+        assertEquals(emptyList(), selectedCohortHeatmapRows(rows, emptyList()))
+    }
 }

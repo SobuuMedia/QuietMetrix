@@ -2,8 +2,11 @@ package com.quietmetrix.dashboard.ui.screens
 
 import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.api.RetentionResponse
+import com.quietmetrix.dashboard.ui.components.CohortGrouping
+import com.quietmetrix.dashboard.ui.components.buildCohortHeatmapRows
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
@@ -195,5 +198,166 @@ class RetentionLogicTest {
     @Test
     fun notEnoughDataWhenNeitherIsAvailable() {
         assertEquals(RetentionHeadlineKind.NotEnoughData, retentionHeadlineKind(null, null))
+    }
+
+    // ---- computeRetentionComparisonDayColumns (Task 26: the paired-bar-chart's per-column data) ----
+
+    @Test
+    fun dayColumnsMarkBothKnownOnlyWhenNeitherSideIsNull() {
+        val rowA = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 100, day1 = 0.5, day7 = 0.3)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val rowB = buildCohortHeatmapRows(
+            // 2026-09-30 is too young for day7 as of "today" (2026-10-02) -> that column's B side is null.
+            listOf(RetentionCohort(cohortDate = "2026-09-30", size = 50, day1 = 0.6, day7 = null)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val columns = computeRetentionComparisonDayColumns(rowA, rowB)
+        val day1 = columns.single { it.dayNumber == 1 }
+        val day7 = columns.single { it.dayNumber == 7 }
+        assertEquals(true, day1.bothKnown)
+        assertEquals(false, day7.bothKnown) // B's day7 is honestly unknown (too young), not a fabricated 0
+        assertNull(day7.bFraction)
+    }
+
+    // ---- computeRetentionComparisonTakeaway (Task 26: "⚖️ Comparing A vs B" panel) ----
+
+    @Test
+    fun comparisonTakeawayPicksTheHighestDayNumberBothRowsHaveObserved() {
+        // Day30 is too young for row B — day14 is the last ("most-advanced") column both rows share.
+        val rowA = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 100, day1 = 0.5, day3 = 0.4, day7 = 0.3, day14 = 0.2, day30 = 0.1)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val rowB = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-09-20", size = 50, day1 = 0.6, day3 = 0.5, day7 = 0.4, day14 = 0.35, day30 = null)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val takeaway = assertIs<RetentionComparisonTakeaway.Comparison>(computeRetentionComparisonTakeaway(rowA, rowB))
+        assertEquals(14, takeaway.dayNumber)
+        assertEquals(0.2, takeaway.aFraction)
+        assertEquals(0.35, takeaway.bFraction)
+        assertEquals(15, takeaway.deltaPoints) // (0.35 - 0.2) * 100, rounded
+    }
+
+    @Test
+    fun comparisonTakeawayIsNotEnoughDataWhenNoDayColumnIsSharedByBothRows() {
+        // Row B's cohort is dated "today" itself (0 days old) — too young for EVERY day column,
+        // including day1, so it can never share a known value with row A at any column.
+        val rowA = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 100, day1 = 0.5)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val rowB = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-10-02", size = 50, day1 = null)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        assertEquals(RetentionComparisonTakeaway.NotEnoughData, computeRetentionComparisonTakeaway(rowA, rowB))
+    }
+
+    @Test
+    fun comparisonTakeawayNeverTreatsAConfirmedZeroAsUnknown() {
+        // Row B is aged-out (10 days old as of "today") with a genuine, confirmed 0% at day7 — this
+        // must still be treated as a real, comparable value, not silently excluded as "too young".
+        val rowA = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 100, day7 = 0.3)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val rowB = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-09-22", size = 50, day7 = null)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val takeaway = assertIs<RetentionComparisonTakeaway.Comparison>(computeRetentionComparisonTakeaway(rowA, rowB))
+        assertEquals(7, takeaway.dayNumber)
+        assertEquals(0.3, takeaway.aFraction)
+        assertEquals(0.0, takeaway.bFraction)
+        assertEquals(-30, takeaway.deltaPoints)
+    }
+
+    @Test
+    fun comparisonTakeawayDeltaIsZeroWhenBothRowsMatchExactly() {
+        val rowA = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-01", size = 100, day1 = 0.42)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val rowB = buildCohortHeatmapRows(
+            listOf(RetentionCohort(cohortDate = "2026-08-15", size = 80, day1 = 0.42)),
+            CohortGrouping.ByDay,
+            today,
+        ).single()
+        val takeaway = assertIs<RetentionComparisonTakeaway.Comparison>(computeRetentionComparisonTakeaway(rowA, rowB))
+        assertEquals(0, takeaway.deltaPoints)
+    }
+
+    // ---- computeRetentionClosingInsightTakeaway (Task 26: closing insight card) ----
+
+    @Test
+    fun closingInsightIsNotEnoughDataWithFewerThanTwoCohorts() {
+        assertEquals(
+            RetentionComparisonTakeaway.NotEnoughData,
+            computeRetentionClosingInsightTakeaway(emptyList(), today),
+        )
+        assertEquals(
+            RetentionComparisonTakeaway.NotEnoughData,
+            computeRetentionClosingInsightTakeaway(
+                listOf(RetentionCohort(cohortDate = "2026-08-01", size = 10, day1 = 0.5)),
+                today,
+            ),
+        )
+    }
+
+    @Test
+    fun closingInsightComparesTheLatestCohortAgainstThePreviousOne() {
+        // Previous (11 days old) is also old enough to have aged out at day3/day7, which would
+        // otherwise be a MORE-advanced mutually-known column than day1 (via effectiveDayValue's
+        // confirmed-zero path) — the latest cohort here is only 1 day old, so day1 is deliberately
+        // the only column both sides have actually reached.
+        val cohorts = listOf(
+            RetentionCohort(cohortDate = "2026-09-21", size = 100, day1 = 0.30),
+            RetentionCohort(cohortDate = "2026-10-01", size = 50, day1 = 0.45),
+        )
+        val takeaway = assertIs<RetentionComparisonTakeaway.Comparison>(computeRetentionClosingInsightTakeaway(cohorts, today))
+        assertEquals(1, takeaway.dayNumber)
+        assertEquals("2026-09-21", takeaway.aLabel) // previous (older)
+        assertEquals(0.30, takeaway.aFraction)
+        assertEquals("2026-10-01", takeaway.bLabel) // latest (newer)
+        assertEquals(0.45, takeaway.bFraction)
+        assertEquals(15, takeaway.deltaPoints)
+    }
+
+    @Test
+    fun closingInsightIsNotEnoughDataWhenTheLatestCohortHasNoComparableDayYet() {
+        // The latest cohort is dated "today" itself (0 days old) — too young for EVERY day
+        // column, including day1, regardless of how old (and how aged-out-confirmed-zero) the
+        // previous cohort is.
+        val cohorts = listOf(
+            RetentionCohort(cohortDate = "2026-08-01", size = 100, day7 = 0.30),
+            RetentionCohort(cohortDate = "2026-10-02", size = 50, day1 = null, day7 = null),
+        )
+        assertEquals(RetentionComparisonTakeaway.NotEnoughData, computeRetentionClosingInsightTakeaway(cohorts, today))
+    }
+
+    @Test
+    fun closingInsightFallsBackToAnEarlierSharedDayWhenTheNewestDayIsntMutuallyObserved() {
+        // Both cohorts share day1, but the latest cohort (09-30) is too young for day7 — the
+        // takeaway must fall back to day1 rather than reporting "not enough data".
+        val cohorts = listOf(
+            RetentionCohort(cohortDate = "2026-08-01", size = 100, day1 = 0.30, day7 = 0.10),
+            RetentionCohort(cohortDate = "2026-09-30", size = 50, day1 = 0.50, day7 = null),
+        )
+        val takeaway = assertIs<RetentionComparisonTakeaway.Comparison>(computeRetentionClosingInsightTakeaway(cohorts, today))
+        assertEquals(1, takeaway.dayNumber)
+        assertEquals(0.30, takeaway.aFraction)
+        assertEquals(0.50, takeaway.bFraction)
     }
 }

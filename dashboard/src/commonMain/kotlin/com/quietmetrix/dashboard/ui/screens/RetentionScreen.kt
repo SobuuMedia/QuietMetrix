@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,6 +41,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.RetentionCohort
@@ -47,6 +52,8 @@ import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_a
+import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_b
 import com.quietmetrix.dashboard.resources.col_activation
 import com.quietmetrix.dashboard.resources.col_cohort
 import com.quietmetrix.dashboard.resources.col_cohort_size
@@ -65,6 +72,17 @@ import com.quietmetrix.dashboard.resources.retention_card_day1_label
 import com.quietmetrix.dashboard.resources.retention_card_day30_label
 import com.quietmetrix.dashboard.resources.retention_card_day7_label
 import com.quietmetrix.dashboard.resources.retention_card_too_early
+import com.quietmetrix.dashboard.resources.retention_comparison_chip_a
+import com.quietmetrix.dashboard.resources.retention_comparison_chip_b
+import com.quietmetrix.dashboard.resources.retention_comparison_column_unknown
+import com.quietmetrix.dashboard.resources.retention_comparison_column_values
+import com.quietmetrix.dashboard.resources.retention_comparison_eyebrow_emoji
+import com.quietmetrix.dashboard.resources.retention_comparison_heading
+import com.quietmetrix.dashboard.resources.retention_comparison_higher
+import com.quietmetrix.dashboard.resources.retention_comparison_lower
+import com.quietmetrix.dashboard.resources.retention_comparison_not_enough_data
+import com.quietmetrix.dashboard.resources.retention_comparison_same
+import com.quietmetrix.dashboard.resources.retention_comparison_vs
 import com.quietmetrix.dashboard.resources.retention_dot_empty_content_description
 import com.quietmetrix.dashboard.resources.retention_dot_filled_content_description
 import com.quietmetrix.dashboard.resources.retention_dot_filled_emoji
@@ -77,15 +95,23 @@ import com.quietmetrix.dashboard.resources.retention_h1_lead
 import com.quietmetrix.dashboard.resources.retention_h1_mid
 import com.quietmetrix.dashboard.resources.retention_h1_not_enough_data
 import com.quietmetrix.dashboard.resources.retention_h1_tail
+import com.quietmetrix.dashboard.resources.retention_insight_ask_why
+import com.quietmetrix.dashboard.resources.retention_insight_eyebrow_emoji
+import com.quietmetrix.dashboard.resources.retention_insight_not_enough_data
 import com.quietmetrix.dashboard.resources.state_no_retention
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.ui.components.CohortHeatmap
+import com.quietmetrix.dashboard.ui.components.CohortHeatmapRow
 import com.quietmetrix.dashboard.ui.components.EmptyState
 import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
+import com.quietmetrix.dashboard.ui.components.Pill
+import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
+import com.quietmetrix.dashboard.ui.components.charts.BarChartCanvas
+import com.quietmetrix.dashboard.ui.components.charts.BarData
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.table.Column
 import com.quietmetrix.dashboard.ui.components.table.DataTable
@@ -150,9 +176,13 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 }
             } else {
                 val vitals = computeRetentionVitals(state.retention)
+                var comparisonRows by remember { mutableStateOf(emptyList<CohortHeatmapRow>()) }
                 RetentionHero(vitals)
                 RetentionVitalCardsRow(vitals, sizeClass)
-                CohortHeatmap(cohorts)
+                CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it })
+                if (comparisonRows.size == 2) {
+                    RetentionComparisonPanel(comparisonRows[0], comparisonRows[1])
+                }
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         DataTable(
@@ -184,6 +214,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                         )
                     }
                 }
+                RetentionClosingInsightCard(cohorts)
             }
         }
     }
@@ -426,6 +457,180 @@ private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Mo
             ) {
                 if (isFilled) Text(filledFace, style = MaterialTheme.typography.bodySmall)
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// "⚖️ Comparing A vs B" panel + closing insight card — Task 26
+// ---------------------------------------------------------------------------
+
+/**
+ * The design handoff's "⚖️ Comparing A vs B" panel (README.md > Retention: "Ticking two rows
+ * shows a '⚖️ Comparing A vs B' panel below with a one-line takeaway and a small paired bar chart
+ * per day-column"), rendered by [RetentionScreen] only while [CohortHeatmap]'s selection holds
+ * exactly 2 rows — this composable receives those 2 rows directly (lifted via
+ * `onSelectedRowsChange`), it doesn't re-derive the selection itself. [rowA]/[rowB] are in tick
+ * order (A first, B second), not chronological order — see [computeRetentionComparisonTakeaway]'s
+ * KDoc.
+ */
+@Composable
+internal fun RetentionComparisonPanel(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, modifier: Modifier = Modifier) {
+    val takeaway = computeRetentionComparisonTakeaway(rowA, rowB)
+
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    stringResource(Res.string.retention_comparison_eyebrow_emoji) + " " + stringResource(Res.string.retention_comparison_heading),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Pill(text = stringResource(Res.string.retention_comparison_chip_a, rowA.label), variant = PillVariant.Lime)
+                Text(stringResource(Res.string.retention_comparison_vs), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Pill(text = stringResource(Res.string.retention_comparison_chip_b, rowB.label), variant = PillVariant.Lavender)
+            }
+            Text(
+                retentionComparisonSentence(takeaway, stringResource(Res.string.retention_comparison_not_enough_data)),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (takeaway is RetentionComparisonTakeaway.Comparison) {
+                RetentionComparisonColumnsRow(rowA, rowB)
+            }
+        }
+    }
+}
+
+/**
+ * Renders a [RetentionComparisonTakeaway] as the plain one-line sentence [RetentionComparisonPanel]
+ * and [RetentionClosingInsightCard] both show (same shape, different surrounding chrome — see
+ * each composable's KDoc): the real comparison sentence when [takeaway] found a day-column both
+ * sides had actually observed, or [notEnoughData] when it didn't — see [RetentionComparisonTakeaway]'s
+ * KDoc for why that's a genuinely possible state, not a fallback for a bug. Day labels reuse the
+ * existing `col_day1`/`col_day3`/.../`col_day30` strings ([RetentionScreen]'s own cohort table and
+ * [CohortHeatmap]'s header row already use these exact 5) rather than minting a 3rd copy.
+ */
+@Composable
+private fun retentionComparisonSentence(takeaway: RetentionComparisonTakeaway, notEnoughData: String): String = when (takeaway) {
+    is RetentionComparisonTakeaway.NotEnoughData -> notEnoughData
+    is RetentionComparisonTakeaway.Comparison -> {
+        val dayLabel = comparisonDayLabel(takeaway.dayNumber)
+        val delta = takeaway.deltaPoints
+        when {
+            delta == 0 -> stringResource(Res.string.retention_comparison_same, dayLabel, formatPercent(takeaway.aFraction))
+            delta > 0 -> stringResource(Res.string.retention_comparison_higher, dayLabel, takeaway.bLabel, delta, takeaway.aLabel)
+            else -> stringResource(Res.string.retention_comparison_lower, dayLabel, takeaway.bLabel, -delta, takeaway.aLabel)
+        }
+    }
+}
+
+/** The existing per-day-column header strings, looked up by raw day number — see
+ *  [retentionComparisonSentence]'s KDoc for why these are reused rather than re-minted. */
+@Composable
+private fun comparisonDayLabel(dayNumber: Int): String = when (dayNumber) {
+    1 -> stringResource(Res.string.col_day1)
+    3 -> stringResource(Res.string.col_day3)
+    7 -> stringResource(Res.string.col_day7)
+    14 -> stringResource(Res.string.col_day14)
+    30 -> stringResource(Res.string.col_day30)
+    else -> ""
+}
+
+/**
+ * One small [BarChartCanvas] pair per day-column (design handoff: "a small paired bar chart per
+ * day-column") — A in lime, B in lavender, reusing [BarChartCanvas] rather than a new chart
+ * primitive (per the Task 26 brief), fed by [computeRetentionComparisonDayColumns]. A day-column
+ * where EITHER side is still too young ([RetentionComparisonDayColumn.bothKnown] false) renders an
+ * honest "not yet" placeholder instead of a bar chart that would otherwise have nothing real to
+ * plot for the missing side — see that class's KDoc for why a null is never treated as a
+ * fabricated 0% here.
+ */
+@Composable
+private fun RetentionComparisonColumnsRow(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val columns = computeRetentionComparisonDayColumns(rowA, rowB)
+    val labelA = stringResource(Res.string.cohort_heatmap_checkbox_a)
+    val labelB = stringResource(Res.string.cohort_heatmap_checkbox_b)
+
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        columns.forEach { column ->
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (column.bothKnown) {
+                    BarChartCanvas(
+                        bars = listOf(
+                            BarData(labelA, (column.aFraction!! * 100).toFloat()),
+                            BarData(labelB, (column.bFraction!! * 100).toFloat()),
+                        ),
+                        barColor = extended.lime,
+                        highlightIndex = 1,
+                        highlightColor = extended.lavender,
+                        chartHeight = 100.dp,
+                    )
+                    Text(
+                        stringResource(Res.string.retention_comparison_column_values, formatPercent(column.aFraction), formatPercent(column.bFraction)),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                } else {
+                    Box(modifier = Modifier.height(100.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            stringResource(Res.string.retention_comparison_column_unknown),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                Text(
+                    comparisonDayLabel(column.dayNumber),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The design handoff's closing insight card ("✨, lime-adjacent insight sentence, 'Ask why' CTA
+ * into the AI drawer" — README.md > Retention).
+ *
+ * **Data-honesty investigation (Task 26)**: see [computeRetentionClosingInsightTakeaway]'s KDoc
+ * for the full writeup — the design handoff's own prototype hardcodes a fabricated feature-level
+ * causal claim here with no backing field anywhere in the API, so this renders the SAME real,
+ * mechanical "did retention move cohort-over-cohort, and by how much" sentence
+ * [RetentionComparisonPanel] already computes for a user-selected pair — just applied
+ * automatically to the latest-vs-previous cohort — rather than any invented AI-sounding insight.
+ *
+ * "Ask why" is a stubbed callback: the real AI Ask drawer this should open is Task 40's scope, not
+ * this one's — same "stub now, wire for real later" convention [RetentionVitalCard]'s own click
+ * handler already established.
+ */
+@Composable
+internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val takeaway = computeRetentionClosingInsightTakeaway(cohorts)
+    val sentence = retentionComparisonSentence(takeaway, stringResource(Res.string.retention_insight_not_enough_data))
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        border = BorderStroke(1.dp, extended.hairline),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(stringResource(Res.string.retention_insight_eyebrow_emoji), style = MaterialTheme.typography.headlineSmall)
+            Text(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Pill(
+                text = stringResource(Res.string.retention_insight_ask_why),
+                variant = PillVariant.Neutral,
+                onClick = { /* "Ask why" -> the real AI Ask drawer is Task 40's scope, not this one's. */ },
+            )
         }
     }
 }

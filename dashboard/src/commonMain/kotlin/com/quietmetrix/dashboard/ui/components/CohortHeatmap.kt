@@ -94,16 +94,19 @@ import kotlin.time.ExperimentalTime
  * this depends on, and [CohortHeatmapCell]'s KDoc for what a cell's `null` does/doesn't mean.
  *
  * Ticking two rows' A/B selectors is tracked here ([toggleCohortHeatmapSelection]) and reported via
- * [onSelectionChange], but the "⚖️ Comparing A vs B" panel the design handoff describes below the
- * grid is Task 26's scope, not this component's — this component owns only the up-to-2-row
+ * [onSelectionChange] (ids, in tick order) and [onSelectedRowsChange] (the same selection, already
+ * resolved to the actual [CohortHeatmapRow]s via [selectedCohortHeatmapRows] — Task 26's "⚖️
+ * Comparing A vs B" panel renders those directly rather than re-deriving them from ids), but the
+ * panel itself is Task 26's scope, not this component's — this component owns only the up-to-2-row
  * selection state/UI, not what's done with it.
  */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun CohortHeatmap(
+internal fun CohortHeatmap(
     cohorts: List<RetentionCohort>,
     modifier: Modifier = Modifier,
     onSelectionChange: (List<String>) -> Unit = {},
+    onSelectedRowsChange: (List<CohortHeatmapRow>) -> Unit = {},
 ) {
     if (cohorts.isEmpty()) return
 
@@ -129,6 +132,7 @@ fun CohortHeatmap(
                         grouping = newGrouping
                         selected = emptyList()
                         onSelectionChange(emptyList())
+                        onSelectedRowsChange(emptyList())
                     },
                 )
             }
@@ -149,6 +153,7 @@ fun CohortHeatmap(
                     onToggleSelect = {
                         selected = toggleCohortHeatmapSelection(selected, row.id)
                         onSelectionChange(selected)
+                        onSelectedRowsChange(selectedCohortHeatmapRows(rows, selected))
                     },
                 )
             }

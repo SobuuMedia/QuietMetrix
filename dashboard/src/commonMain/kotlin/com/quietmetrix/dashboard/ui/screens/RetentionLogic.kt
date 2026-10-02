@@ -2,6 +2,8 @@ package com.quietmetrix.dashboard.ui.screens
 
 import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.api.RetentionResponse
+import com.quietmetrix.dashboard.ui.components.COHORT_HEATMAP_DAY_NUMBERS
+import com.quietmetrix.dashboard.ui.components.CohortHeatmapRow
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -167,4 +169,146 @@ internal fun retentionHeadlineKind(day1: Double?, day7: Double?): RetentionHeadl
     day1 != null -> RetentionHeadlineKind.Day1Only
     day7 != null -> RetentionHeadlineKind.Day7Only
     else -> RetentionHeadlineKind.NotEnoughData
+}
+
+// ---------------------------------------------------------------------------
+// "⚖️ Comparing A vs B" panel + closing insight card — Task 26
+// ---------------------------------------------------------------------------
+
+/**
+ * One (day-column) slot of an A-vs-B comparison. [aFraction]/[bFraction] are each already
+ * honestly resolved by the caller (via [effectiveDayValue], never a raw/ambiguous field) — null
+ * means that side genuinely hasn't reached [dayNumber] yet, exactly as [effectiveDayValue] defines
+ * it, NEVER a confirmed zero's absence. [bothKnown] is false whenever either side is null, which is
+ * the signal the UI uses to render an honest "not yet" placeholder for that single day-column
+ * instead of a bar chart that would otherwise have to silently treat the unknown side as a
+ * fabricated 0%.
+ */
+internal data class RetentionComparisonDayColumn(val dayNumber: Int, val aFraction: Double?, val bFraction: Double?) {
+    val bothKnown: Boolean get() = aFraction != null && bFraction != null
+}
+
+/**
+ * Builds one [RetentionComparisonDayColumn] per [COHORT_HEATMAP_DAY_NUMBERS] entry from the two
+ * cohort-heatmap rows a user has ticked A/B for (Task 25's `toggleCohortHeatmapSelection`; this
+ * function doesn't own that selection, only reads what it's given). [rowA]/[rowB]'s cells are
+ * already [effectiveDayValue]-resolved by
+ * [com.quietmetrix.dashboard.ui.components.buildCohortHeatmapRows], not re-derived here.
+ */
+internal fun computeRetentionComparisonDayColumns(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow): List<RetentionComparisonDayColumn> =
+    COHORT_HEATMAP_DAY_NUMBERS.mapIndexed { index, dayNumber ->
+        RetentionComparisonDayColumn(dayNumber, rowA.cells.getOrNull(index)?.fraction, rowB.cells.getOrNull(index)?.fraction)
+    }
+
+/**
+ * The "⚖️ Comparing A vs B" panel's one-line takeaway, or the closing insight card's cohort-over-
+ * cohort trend sentence (same shape, different callers — see [computeRetentionComparisonTakeaway]
+ * and [computeRetentionClosingInsightTakeaway]). [Comparison.deltaPoints] is [Comparison.bFraction]
+ * minus [Comparison.aFraction] in whole percentage points, rounded — positive means B came back
+ * more than A.
+ */
+internal sealed class RetentionComparisonTakeaway {
+    data class Comparison(
+        val dayNumber: Int,
+        val aLabel: String,
+        val aFraction: Double,
+        val bLabel: String,
+        val bFraction: Double,
+    ) : RetentionComparisonTakeaway() {
+        val deltaPoints: Int get() = ((bFraction - aFraction) * 100).roundToInt()
+    }
+
+    /** Neither group has a day-column both sides have actually observed yet — honestly say so
+     *  rather than comparing a real number against an unobserved stand-in. */
+    object NotEnoughData : RetentionComparisonTakeaway()
+}
+
+/**
+ * Picks the [RetentionComparisonTakeaway] for two selected heatmap rows [rowA]/[rowB] (A/B per
+ * Task 25's slot order — A is whichever row was ticked first, not necessarily the older one).
+ * Mirrors the design handoff's own prototype rule verbatim (`QuietMetrix Prototype.dc.html:1121`):
+ * among [COHORT_HEATMAP_DAY_NUMBERS], the LAST (highest-numbered, most-advanced) day-column where
+ * BOTH rows resolve to a real fraction is the one the sentence is built from — never a day where
+ * either side is still too young, exactly the prototype's own `cA[3][ci] != null && cB[3][ci] !=
+ * null` guard, reused here via [RetentionComparisonDayColumn.bothKnown].
+ */
+internal fun computeRetentionComparisonTakeaway(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow): RetentionComparisonTakeaway {
+    val lastComparable = computeRetentionComparisonDayColumns(rowA, rowB).lastOrNull { it.bothKnown }
+        ?: return RetentionComparisonTakeaway.NotEnoughData
+    return RetentionComparisonTakeaway.Comparison(
+        dayNumber = lastComparable.dayNumber,
+        aLabel = rowA.label,
+        aFraction = lastComparable.aFraction!!,
+        bLabel = rowB.label,
+        bFraction = lastComparable.bFraction!!,
+    )
+}
+
+/**
+ * The 5 cohort-age day-numbers the closing insight card compares across — duplicated from
+ * [COHORT_HEATMAP_DAY_NUMBERS] rather than imported, matching this codebase's standing
+ * per-file-duplication convention for small shared constants (see `CohortHeatmapLogic.kt`'s
+ * `MILLIS_PER_DAY` KDoc for the same reasoning): [computeRetentionClosingInsightTakeaway] compares
+ * raw [RetentionCohort]s directly, not [CohortHeatmapRow]s, so it has no actual dependency on the
+ * heatmap's own constant.
+ */
+private val CLOSING_INSIGHT_DAY_NUMBERS: List<Int> = listOf(1, 3, 7, 14, 30)
+
+/** [RetentionCohort]'s raw (possibly ambiguous — see [effectiveDayValue]) field for [dayNumber] —
+ *  duplicated from `CohortHeatmapLogic.kt`'s private `rawDayValue` for the same per-file-
+ *  duplication reason as [CLOSING_INSIGHT_DAY_NUMBERS]. */
+private fun rawCohortDayValue(cohort: RetentionCohort, dayNumber: Int): Double? = when (dayNumber) {
+    1 -> cohort.day1
+    3 -> cohort.day3
+    7 -> cohort.day7
+    14 -> cohort.day14
+    30 -> cohort.day30
+    else -> null
+}
+
+/**
+ * The Retention screen's closing insight card data: compares the most recent [RetentionCohort]
+ * against the one immediately before it (by [RetentionCohort.cohortDate], descending — ISO dates
+ * sort correctly lexically, matching `CohortHeatmapLogic.kt`'s own `sortedByDescending { it.id }`
+ * convention) to see whether retention genuinely trended up or down, one real cohort-over-cohort
+ * step at a time.
+ *
+ * **Data-honesty investigation (Task 26)**: the design handoff's own prototype hardcodes this
+ * card's sentence verbatim ("People who scan a book on day one come back 2.3× more. Consider
+ * showing the scanner in onboarding." — `QuietMetrix Prototype.dc.html:277`), a fabricated
+ * feature-level causal claim with no backing field anywhere in [RetentionCohort]/[RetentionResponse]
+ * (no per-feature/per-action breakdown exists on this response at all) — the same category of gap
+ * Task 21's "Worth a look" investigation already found and refused to fabricate for Overview (see
+ * that task's report: 3 hardcoded "insights" replaced with 3 plain, mechanically-derived facts).
+ * What IS honestly reproducible from real data here is the prototype's OWN "Comparing A vs B"
+ * sentence rule (same file, lines 1121-1123) applied automatically to the latest two cohorts
+ * instead of a user's manual A/B tick — a real, mechanical "did retention move, and by how much"
+ * fact, not an AI-shaped causal story. [computeRetentionComparisonTakeaway] already implements that
+ * exact rule; this function just supplies it with the latest-vs-previous real cohort pair instead
+ * of a user-selected one.
+ *
+ * Returns [RetentionComparisonTakeaway.NotEnoughData] both when fewer than 2 cohorts exist at all,
+ * and when no single day-column has been observed by both the latest and the previous cohort —
+ * same honesty rule as the A-vs-B panel: never fabricate a trend out of an unobserved comparison.
+ */
+@OptIn(ExperimentalTime::class)
+internal fun computeRetentionClosingInsightTakeaway(
+    cohorts: List<RetentionCohort>,
+    todayEpochDay: Long = Clock.System.now().toEpochMilliseconds().floorDiv(MILLIS_PER_DAY),
+): RetentionComparisonTakeaway {
+    val sorted = cohorts.sortedByDescending { it.cohortDate }
+    if (sorted.size < 2) return RetentionComparisonTakeaway.NotEnoughData
+    val previous = sorted[1]
+    val latest = sorted[0]
+    fun resolved(cohort: RetentionCohort, dayNumber: Int) =
+        effectiveDayValue(cohort, dayNumber, rawCohortDayValue(cohort, dayNumber), todayEpochDay)
+    val lastComparableDay = CLOSING_INSIGHT_DAY_NUMBERS.lastOrNull { d -> resolved(previous, d) != null && resolved(latest, d) != null }
+        ?: return RetentionComparisonTakeaway.NotEnoughData
+    return RetentionComparisonTakeaway.Comparison(
+        dayNumber = lastComparableDay,
+        aLabel = previous.cohortDate,
+        aFraction = resolved(previous, lastComparableDay)!!,
+        bLabel = latest.cohortDate,
+        bFraction = resolved(latest, lastComparableDay)!!,
+    )
 }

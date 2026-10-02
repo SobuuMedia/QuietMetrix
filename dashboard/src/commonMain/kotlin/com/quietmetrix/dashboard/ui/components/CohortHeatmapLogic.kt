@@ -178,3 +178,15 @@ internal fun cohortHeatmapCellTextIsDark(fraction: Double): Boolean = fraction >
  */
 internal fun toggleCohortHeatmapSelection(current: List<String>, id: String): List<String> =
     if (id in current) current - id else (current + id).takeLast(2)
+
+/**
+ * Resolves [selectedIds] (Task 25's up-to-2-id A/B selection, in tick order — A first, B second)
+ * into the actual [CohortHeatmapRow] objects from [rows], in that same order, so Task 26's
+ * "⚖️ Comparing A vs B" panel (`ui/screens/RetentionLogic.kt`'s `computeRetentionComparisonTakeaway`)
+ * can render the 2 selected rows' real cell data without re-deriving the selection itself. An id
+ * with no matching row (e.g. a selection carried over from a grouping that's since changed) is
+ * silently dropped rather than crashing — [CohortHeatmap] already resets selection on a grouping
+ * change, so this is a defensive fallback, not an expected path.
+ */
+internal fun selectedCohortHeatmapRows(rows: List<CohortHeatmapRow>, selectedIds: List<String>): List<CohortHeatmapRow> =
+    selectedIds.mapNotNull { id -> rows.find { it.id == id } }
