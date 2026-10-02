@@ -138,3 +138,41 @@ internal fun formatPValue(p: Double): String {
     val frac = (thousandths % 1000).toString().padStart(3, '0')
     return "$whole.$frac"
 }
+
+// ---- Confidence meter (Task 29) ----
+
+/**
+ * Converts the server's two-sided p-value into the 0-100 confidence score shown on the
+ * confidence meter. `confidence = (1 - pValue) * 100`, so the meter's 95% marker line lines up
+ * exactly with the server's `significant = pValue < SIGNIFICANCE_LEVEL (0.05)` cutoff
+ * (ExperimentStats.kt) — 95% confidence is the boundary, not an arbitrary UI choice. Rounded to
+ * the nearest whole percent and clamped to `0..100` as a defensive guard against floating-point
+ * drift at the extremes.
+ */
+internal fun confidenceScoreFor(pValue: Double): Int =
+    round((1.0 - pValue) * 100).toInt().coerceIn(0, 100)
+
+/**
+ * The confidence score for an experiment's current [ExperimentVerdict], or `null` when there
+ * isn't a comparison to score yet (see [ExperimentVerdict.NotEnoughData]) — never a fake 0%.
+ */
+internal fun confidenceScoreFor(verdict: ExperimentVerdict): Int? = when (verdict) {
+    is ExperimentVerdict.NotEnoughData -> null
+    is ExperimentVerdict.NoDifference -> confidenceScoreFor(verdict.pValue)
+    is ExperimentVerdict.Winner -> confidenceScoreFor(verdict.pValue)
+}
+
+/**
+ * The plain-language verdict sentence shown beside the confidence meter (README's Experiments
+ * spec: "a confidence meter ... plain-language verdict sentence, raw stats in Expert mode").
+ * The raw [ExperimentComparisonDto] stats (z, p-value) are formatted separately via
+ * [formatPValue] for Expert mode — this sentence is the plain-language layer only.
+ */
+internal fun verdictSentence(verdict: ExperimentVerdict): String = when (verdict) {
+    is ExperimentVerdict.NotEnoughData ->
+        "Not enough data yet to call a winner."
+    is ExperimentVerdict.NoDifference ->
+        "No clear difference yet (${confidenceScoreFor(verdict.pValue)}% confidence) — keep collecting data."
+    is ExperimentVerdict.Winner ->
+        "${verdict.variantName} is winning with ${confidenceScoreFor(verdict.pValue)}% confidence."
+}

@@ -216,4 +216,60 @@ class ExperimentsLogicTest {
     fun formatPValueAtTheThresholdIsNotLessThan() {
         assertEquals("0.001", formatPValue(0.001))
     }
+
+    // ---- Confidence meter (Task 29) ----
+
+    @Test
+    fun confidenceScoreForPValueIsOneHundredMinusPValueAsAPercent() {
+        assertEquals(96, confidenceScoreFor(0.04))
+        assertEquals(50, confidenceScoreFor(0.5))
+    }
+
+    @Test
+    fun confidenceScoreForPValueAtTheSignificanceThresholdIsNinetyFivePercent() {
+        // Server's SIGNIFICANCE_LEVEL = 0.05 (ExperimentStats.kt) -> the meter's 95% marker line.
+        assertEquals(95, confidenceScoreFor(0.05))
+    }
+
+    @Test
+    fun confidenceScoreForPValueClampsToTheZeroToHundredRange() {
+        assertEquals(100, confidenceScoreFor(0.0))
+        assertEquals(0, confidenceScoreFor(1.0))
+    }
+
+    @Test
+    fun confidenceScoreForVerdictIsNullWhenNotEnoughData() {
+        assertNull(confidenceScoreFor(ExperimentVerdict.NotEnoughData))
+    }
+
+    @Test
+    fun confidenceScoreForVerdictUsesThePValueFromNoDifference() {
+        assertEquals(17, confidenceScoreFor(ExperimentVerdict.NoDifference(pValue = 0.83)))
+    }
+
+    @Test
+    fun confidenceScoreForVerdictUsesThePValueFromWinner() {
+        assertEquals(96, confidenceScoreFor(ExperimentVerdict.Winner(variantName = "b", pValue = 0.035)))
+    }
+
+    @Test
+    fun verdictSentenceForNotEnoughDataNamesNoWinnerYet() {
+        assertEquals("Not enough data yet to call a winner.", verdictSentence(ExperimentVerdict.NotEnoughData))
+    }
+
+    @Test
+    fun verdictSentenceForNoDifferenceNamesTheConfidencePercent() {
+        assertEquals(
+            "No clear difference yet (17% confidence) — keep collecting data.",
+            verdictSentence(ExperimentVerdict.NoDifference(pValue = 0.83)),
+        )
+    }
+
+    @Test
+    fun verdictSentenceForWinnerNamesTheVariantAndConfidencePercent() {
+        assertEquals(
+            "b is winning with 96% confidence.",
+            verdictSentence(ExperimentVerdict.Winner(variantName = "b", pValue = 0.035)),
+        )
+    }
 }
