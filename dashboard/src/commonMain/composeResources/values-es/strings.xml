@@ -380,12 +380,10 @@
 
     <!-- Overview hero + privacy card (Task 18) -->
     <string name="overview_hero_greeting">👋 Hola, equipo de %1$s. Aquí tienes tu resumen de %2$s.</string>
-    <string name="overview_hero_people">%1$s personas</string>
+    <string name="overview_hero_sessions">%1$s sesiones</string>
     <string name="overview_hero_opened">abrieron %1$s</string>
-    <string name="overview_hero_more">más</string>
-    <string name="overview_hero_fewer">menos</string>
-    <string name="overview_hero_change">%1$d% %2$s</string>
-    <string name="overview_hero_than_before">que antes.</string>
+    <string name="overview_hero_trend_up">con tendencia al alza este período</string>
+    <string name="overview_hero_trend_down">con tendencia a la baja este período</string>
     <string name="overview_hero_tail_standout">Gran parte fue %1$s.</string>
     <string name="overview_hero_tail_generic">Atento a lo que venga a continuación.</string>
     <string name="overview_hero_ai_chip">✨ Escrito por IA a partir de tus datos</string>

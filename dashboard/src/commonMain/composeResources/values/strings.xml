@@ -391,23 +391,16 @@
     <string name="action_try_again">Try again</string>
 
     <!-- Overview hero + privacy card (Task 18; design_handoff_dashboard_redesign/README.md > 2.
-         Overview). "people"/percent-change numbers are derived from already-tracked data (total
-         sessions, same-window daily-bucket momentum), not a real distinct-device/previous-period
-         comparison — see OverviewHeroLogic.kt's KDoc. -->
+         Overview). Relabeled per post-review decision (see Task 18's report "Relabeling" section):
+         the hero shows "sessions" (what is actually tracked), not "people" (a distinct-device/WAU
+         metric this dashboard doesn't measure), and the trend is a direction ("trending up/down
+         this period"), not a numeric percent framed as a period-over-period comparison — see
+         OverviewHeroLogic.kt's KDoc for the full reasoning. -->
     <string name="overview_hero_greeting">👋 Hey, %1$s team. Here's your %2$s overview.</string>
-    <string name="overview_hero_people">%1$s people</string>
+    <string name="overview_hero_sessions">%1$s sessions</string>
     <string name="overview_hero_opened">opened %1$s</string>
-    <string name="overview_hero_more">more</string>
-    <string name="overview_hero_fewer">fewer</string>
-    <!-- Single '%' literal, not '%%': Compose Multiplatform's resource string formatter only
-         replaces literal "%N$d"/"%N$s" tokens via regex (see StringResourcesUtils.kt's
-         SimpleStringFormatRegex) — it does not unescape "%%" the way java.util.Formatter does,
-         so "%%" would render as two literal percent signs. Confirmed empirically while recording
-         this task's goldens; two pre-existing strings (experiment_traffic_label,
-         experiment_verdict_winner) have the same "%%" pattern and are very likely affected too —
-         out of this task's scope to fix, flagging in the report as a follow-up. -->
-    <string name="overview_hero_change">%1$d% %2$s</string>
-    <string name="overview_hero_than_before">than before.</string>
+    <string name="overview_hero_trend_up">trending up this period</string>
+    <string name="overview_hero_trend_down">trending down this period</string>
     <string name="overview_hero_tail_standout">Most of that was %1$s.</string>
     <string name="overview_hero_tail_generic">Keep an eye on what's trending next.</string>
     <string name="overview_hero_ai_chip">✨ Written by AI from your numbers</string>

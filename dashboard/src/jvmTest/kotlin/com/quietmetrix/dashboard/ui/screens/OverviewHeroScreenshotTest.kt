@@ -33,15 +33,19 @@ import kotlin.test.Test
  * (narrower — that frame's Ask-drawer overlay edge sits further left, same finding already
  * recorded for `header/server-unreachable-banner.png`), all below the nav/progress-bar strip and
  * left of the Ask-drawer overlay:
- * - Normal: "Good afternoon, Sobuu team 👋 Here's your week, Sep 18 – 24." + "This week **1,284**
- *   **people** opened Sobuu **18% more**..." (lime spans confirmed visually) — the exact wrap and
- *   closing clause aren't reproducible byte-for-byte (different font metrics/column width/
- *   sentence wording: this dashboard reuses the existing range-label strings and a same-window
- *   momentum proxy rather than the mock's hand-authored per-range copy — see
- *   `OverviewHeroLogic.kt`'s KDoc for why), so the golden is a self-consistent regression
- *   baseline recorded from the real composable, per the standing fallback ruling (Task 9's
- *   `pill/variants.png` entry), not a pixel-match to the JPEG.
- * - Loading: "🧮 Counting your people…" verbatim.
+ * - Normal: the source frame shows "Good afternoon, Sobuu team 👋 Here's your week, Sep 18 – 24."
+ *   + "This week **1,284 people** opened Sobuu **18% more**...", but the rendered copy here reads
+ *   "**1,284 sessions** opened Sobuu, **trending up this period**." — relabeled per a post-review
+ *   decision (see Task 18's report "Relabeling" section): "people" would claim a distinct-device
+ *   count this dashboard doesn't track (it's actually total sessions), and a numeric "18% more"
+ *   would claim a real previous-period comparison this dashboard can't make (it's actually a
+ *   same-window momentum signal) — both are now worded honestly instead of visually confident but
+ *   misleading, per `OverviewHeroLogic.kt`'s KDoc. The lime `SpanStyle` highlight treatment itself
+ *   still matches the source's two highlighted phrases. The golden is a self-consistent
+ *   regression baseline recorded from the real composable, per the standing fallback ruling
+ *   (Task 9's `pill/variants.png` entry), not a pixel-match to the JPEG.
+ * - Loading: "🧮 Counting your people…" verbatim — a whimsical loading message, not a data claim,
+ *   so it wasn't in scope for the "people"/"% more" relabeling above (no number is asserted here).
  * - Empty: "👋 Welcome to Sobuu" + "No data yet. Let's get your **first event** in about 5
  *   minutes." verbatim (lime span on "first event").
  * - Errors: greeting line + plain "Here are your numbers for ..." headline verbatim; the "😴 The

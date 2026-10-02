@@ -19,38 +19,38 @@ class OverviewHeroLogicTest {
     }
 
     @Test
-    fun peopleCountPrefersSessionTotalOverEventTotal() {
+    fun sessionCountPrefersSessionTotalOverEventTotal() {
         val agg = AggregatesResponse(totals = Totals(events = 500))
         val sess = SessionsResponse(totalSessions = 128)
-        assertEquals(128L, computeHeroNumbers(agg, sess)?.peopleCount)
+        assertEquals(128L, computeHeroNumbers(agg, sess)?.sessionCount)
     }
 
     @Test
-    fun peopleCountFallsBackToEventTotalWhenNoSessionsResponse() {
+    fun sessionCountFallsBackToEventTotalWhenNoSessionsResponse() {
         val agg = AggregatesResponse(totals = Totals(events = 500))
-        assertEquals(500L, computeHeroNumbers(agg, null)?.peopleCount)
+        assertEquals(500L, computeHeroNumbers(agg, null)?.sessionCount)
     }
 
     @Test
-    fun peopleCountIsZeroWhenOnlyAnEmptySessionsResponseHasLoaded() {
+    fun sessionCountIsZeroWhenOnlyAnEmptySessionsResponseHasLoaded() {
         val sess = SessionsResponse(totalSessions = 0)
-        assertEquals(0L, computeHeroNumbers(null, sess)?.peopleCount)
+        assertEquals(0L, computeHeroNumbers(null, sess)?.sessionCount)
     }
 
     @Test
-    fun percentChangeNullWithFewerThanTwoDailyBuckets() {
+    fun momentumChangeNullWithFewerThanTwoDailyBuckets() {
         val agg = AggregatesResponse(daily = listOf(DailyPoint(day = "d1", total = 10)))
-        assertNull(computeHeroNumbers(agg, null)?.percentChange)
+        assertNull(computeHeroNumbers(agg, null)?.momentumChange)
     }
 
     @Test
-    fun percentChangeNullWithNoDailyBuckets() {
+    fun momentumChangeNullWithNoDailyBuckets() {
         val agg = AggregatesResponse(daily = emptyList())
-        assertNull(computeHeroNumbers(agg, null)?.percentChange)
+        assertNull(computeHeroNumbers(agg, null)?.momentumChange)
     }
 
     @Test
-    fun percentChangeNullWhenFirstHalfSumsToZero() {
+    fun momentumChangeNullWhenFirstHalfSumsToZero() {
         val agg = AggregatesResponse(
             daily = listOf(
                 DailyPoint(day = "d1", total = 0),
@@ -59,12 +59,13 @@ class OverviewHeroLogicTest {
                 DailyPoint(day = "d4", total = 50),
             ),
         )
-        assertNull(computeHeroNumbers(agg, null)?.percentChange)
+        assertNull(computeHeroNumbers(agg, null)?.momentumChange)
     }
 
     @Test
-    fun percentChangeDetectsAnIncrease() {
-        // first half (d1,d2) sums 100, second half (d3,d4) sums 150 -> +50%
+    fun momentumDetectsAnIncrease() {
+        // first half (d1,d2) sums 100, second half (d3,d4) sums 150 -> +50% (rendered as
+        // "trending up", never as "+50%" — see HeroNumbers.momentumIsIncrease's KDoc).
         val agg = AggregatesResponse(
             daily = listOf(
                 DailyPoint(day = "d1", total = 50),
@@ -74,13 +75,14 @@ class OverviewHeroLogicTest {
             ),
         )
         val hero = computeHeroNumbers(agg, null)
-        assertEquals(50, hero?.percentChange)
-        assertTrue(hero!!.percentIsIncrease)
+        assertEquals(50, hero?.momentumChange)
+        assertTrue(hero!!.momentumIsIncrease)
     }
 
     @Test
-    fun percentChangeDetectsADecrease() {
-        // first half (d1,d2) sums 150, second half (d3,d4) sums 100 -> -33%
+    fun momentumDetectsADecrease() {
+        // first half (d1,d2) sums 150, second half (d3,d4) sums 100 -> -33% (rendered as
+        // "trending down", never as "-33%").
         val agg = AggregatesResponse(
             daily = listOf(
                 DailyPoint(day = "d1", total = 80),
@@ -90,8 +92,8 @@ class OverviewHeroLogicTest {
             ),
         )
         val hero = computeHeroNumbers(agg, null)
-        assertEquals(33, hero?.percentChange)
-        assertFalse(hero!!.percentIsIncrease)
+        assertEquals(33, hero?.momentumChange)
+        assertFalse(hero!!.momentumIsIncrease)
     }
 
     @Test

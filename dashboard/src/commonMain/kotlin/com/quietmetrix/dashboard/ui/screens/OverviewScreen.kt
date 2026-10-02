@@ -65,18 +65,16 @@ import com.quietmetrix.dashboard.resources.overview_error_ai_nap_emoji
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_title
 import com.quietmetrix.dashboard.resources.overview_error_headline
 import com.quietmetrix.dashboard.resources.overview_hero_ai_chip
-import com.quietmetrix.dashboard.resources.overview_hero_change
 import com.quietmetrix.dashboard.resources.overview_hero_copy
-import com.quietmetrix.dashboard.resources.overview_hero_fewer
 import com.quietmetrix.dashboard.resources.overview_hero_greeting
 import com.quietmetrix.dashboard.resources.overview_hero_loading
-import com.quietmetrix.dashboard.resources.overview_hero_more
 import com.quietmetrix.dashboard.resources.overview_hero_opened
-import com.quietmetrix.dashboard.resources.overview_hero_people
+import com.quietmetrix.dashboard.resources.overview_hero_sessions
 import com.quietmetrix.dashboard.resources.overview_hero_tail_generic
 import com.quietmetrix.dashboard.resources.overview_hero_tail_standout
 import com.quietmetrix.dashboard.resources.overview_hero_tell_me_more
-import com.quietmetrix.dashboard.resources.overview_hero_than_before
+import com.quietmetrix.dashboard.resources.overview_hero_trend_down
+import com.quietmetrix.dashboard.resources.overview_hero_trend_up
 import com.quietmetrix.dashboard.resources.overview_privacy_body
 import com.quietmetrix.dashboard.resources.overview_privacy_gdpr_chip
 import com.quietmetrix.dashboard.resources.overview_privacy_info_cd
@@ -406,7 +404,7 @@ internal fun OverviewHero(
     modifier: Modifier = Modifier,
 ) {
     val hero = computeHeroNumbers(agg, sess)
-    val isEmpty = hero == null || (hero.peopleCount == 0L && (agg?.totals?.events ?: 0L) == 0L)
+    val isEmpty = hero == null || (hero.sessionCount == 0L && (agg?.totals?.events ?: 0L) == 0L)
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         when {
@@ -432,25 +430,24 @@ private fun OverviewHeroNormal(hero: HeroNumbers, projectName: String, range: Ti
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    val peopleLabel = stringResource(Res.string.overview_hero_people, formatCount(hero.peopleCount))
+    val sessionsLabel = stringResource(Res.string.overview_hero_sessions, formatCount(hero.sessionCount))
     val openedPhrase = stringResource(Res.string.overview_hero_opened, projectName)
-    val changeLabel = hero.percentChange?.let { pct ->
-        val changeWord = stringResource(if (hero.percentIsIncrease) Res.string.overview_hero_more else Res.string.overview_hero_fewer)
-        stringResource(Res.string.overview_hero_change, pct, changeWord)
+    // Trend DIRECTION only, never the numeric magnitude — see HeroNumbers.momentumIsIncrease's
+    // KDoc: this isn't a real period-over-period comparison, so it must not read like one.
+    val trendPhrase = hero.momentumChange?.let { _ ->
+        stringResource(if (hero.momentumIsIncrease) Res.string.overview_hero_trend_up else Res.string.overview_hero_trend_down)
     }
-    val thanBefore = stringResource(Res.string.overview_hero_than_before)
     val tail = hero.standoutEvent?.let { stringResource(Res.string.overview_hero_tail_standout, it) }
         ?: stringResource(Res.string.overview_hero_tail_generic)
 
     val sentence = buildAnnotatedString {
-        withStyle(lime) { append(peopleLabel) }
+        withStyle(lime) { append(sessionsLabel) }
         append(" ")
         append(openedPhrase)
-        if (changeLabel != null) {
+        if (trendPhrase != null) {
             append(", ")
-            withStyle(lime) { append(changeLabel) }
-            append(" ")
-            append(thanBefore)
+            withStyle(lime) { append(trendPhrase) }
+            append(".")
         } else {
             append(".")
         }
