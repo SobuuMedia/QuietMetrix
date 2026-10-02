@@ -97,4 +97,31 @@ class DashboardShellProgressAndBannerWiringTest {
         renderShellAt(DashboardState()) {
             onAllNodesWithText("We can't reach your QuietMetrix server.", substring = true).assertCountEquals(0)
         }
+
+    /**
+     * Regression test for the two-error-mechanism collision a code review caught: a background
+     * loader's connection failure (recorded in [DashboardState.sectionErrors], surfacing
+     * [ServerUnreachableBanner]) and a user-initiated action's connection failure (recorded in
+     * [DashboardState.error], which [ErrorBanner] would otherwise render) can both be set at the
+     * same time — both are [com.quietmetrix.dashboard.api.ErrorKind.Network] failures, but from
+     * independent code paths, so nothing previously stopped them from being true simultaneously.
+     * Only one banner must render: see [ServerUnreachableBanner]'s KDoc for why this banner wins.
+     */
+    @Test
+    fun onlyTheServerUnreachableBannerRendersWhenBothErrorMechanismsAreSetAtOnce() {
+        val state = DashboardState(
+            error = RuntimeException("Connection refused").toUiError("POST /projects"),
+        ).withSectionError(
+            DataSection.Aggregates,
+            RuntimeException("Connection refused").toUiError("GET /projects/{id}/aggregates"),
+        )
+        renderShellAt(state) {
+            // The connectivity banner is present...
+            onNodeWithText("We can't reach your QuietMetrix server.", substring = true).assertExists()
+            // ...and ErrorBanner is not — its dismiss (✕) button is the one node unique to it
+            // (ServerUnreachableBanner has no dismiss button at all), so its absence proves
+            // ErrorBanner itself did not render, not just that its text happens to differ.
+            onAllNodesWithContentDescription("Dismiss").assertCountEquals(0)
+        }
+    }
 }

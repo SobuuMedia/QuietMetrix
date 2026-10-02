@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ApiProject
+import com.quietmetrix.dashboard.api.ErrorKind
 import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.api.UiError
 import com.quietmetrix.dashboard.nav.NavDestination
@@ -160,8 +161,13 @@ fun DashboardShell(
         ) { padding ->
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
                 HeaderProgressBar(visible = state.loading || state.refreshing)
-                state.serverUnreachableError?.let { ServerUnreachableBanner(it, onRetry = { viewModel.refresh() }) }
-                state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
+                // Mutually exclusive, not stacked — see this block's KDoc note below for why.
+                val serverUnreachable = state.serverUnreachableError
+                if (serverUnreachable != null) {
+                    ServerUnreachableBanner(serverUnreachable, onRetry = { viewModel.refresh() })
+                } else {
+                    state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
+                }
                 Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     if (state.refreshing) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -242,6 +248,21 @@ internal fun HeaderProgressBarTrack(fraction: Float, modifier: Modifier = Modifi
  * fixed — connectivity, not a specific action, is what it reports — and it has no dismiss button:
  * [onRetry] (wired to [DashboardViewModel.refresh] by the caller) is the only way past it, since
  * the underlying data really is unreachable until the next successful fetch.
+ *
+ * **Mutually exclusive with [ErrorBanner], never stacked.** Both [DashboardState.sectionErrors]
+ * (which [DashboardState.serverUnreachableError] reads) and [DashboardState.error] can
+ * independently end up holding an [ErrorKind.Network] failure at the same time — e.g. a
+ * background loader on the active screen fails to reach the server (recorded in
+ * `sectionErrors`, surfacing this banner) while the user separately retries a user-initiated
+ * action (e.g. "New project") that *also* fails with a connection error (recorded in `error`,
+ * which [ErrorBanner] would otherwise render). Showing both at once would stack two banners
+ * under the header describing the same underlying outage with inconsistent, confusing
+ * affordances (one dismissible with no retry, one non-dismissible with retry). [DashboardShell]
+ * resolves this by giving this banner priority: whenever [DashboardState.serverUnreachableError]
+ * is non-null, [ErrorBanner] is not rendered at all, regardless of [DashboardState.error] or its
+ * kind — the connectivity-level banner is the more actionable, more encompassing signal (a
+ * dismissed per-action error would wrongly imply the problem is resolved when the server is
+ * still unreachable), and it clears on its own once the next loader succeeds.
  */
 @Composable
 internal fun ServerUnreachableBanner(error: UiError, onRetry: () -> Unit, modifier: Modifier = Modifier) {

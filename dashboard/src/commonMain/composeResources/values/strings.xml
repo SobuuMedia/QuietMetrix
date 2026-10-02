@@ -259,10 +259,16 @@
 
     <!-- Funnels -->
     <string name="funnels_title">Funnels</string>
+    <!-- TODO: \' renders as a literal backslash in this project's KMP compose-resources version
+         (English strings.xml only — confirmed values-es/strings.xml has no \' occurrences), not
+         an apostrophe — see Task 17's report. Should be a bare '. Not fixed here (out of that
+         task's scope); fix the text below when next touched. -->
     <string name="funnel_empty">No funnels yet — declare one in your app\'s SDK config and it will appear here.</string>
     <string name="funnel_tutorial_title">How funnels work</string>
     <string name="funnel_tutorial_intro">A funnel shows how many people complete a sequence of steps — like viewing your signup screen, then submitting it — and exactly where the rest drop off.</string>
+    <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="funnel_tutorial_step1">Steps reference events you already track (e.g. screen_view, button_click). Declare the funnel once in your app\'s SDK config as a FunnelManifest — no dashboard setup needed.</string>
+    <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="funnel_tutorial_step2">Each device evaluates its own progress against the funnel\'s steps in real time and reports only how far it got. The funnel appears here automatically once your app registers it.</string>
     <string name="funnel_none_selected">Select a funnel to see its results.</string>
     <string name="funnel_pick_funnel">Select a funnel</string>
@@ -309,6 +315,7 @@
     <string name="experiment_editor_traffic_label">Traffic %</string>
     <string name="experiment_editor_countries_label">Countries (optional)</string>
     <string name="experiment_editor_countries_hint">Leave empty for all countries. Example: ES, FR, MX</string>
+    <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="experiment_editor_countries_invalid">Some codes aren\'t valid 2-letter country codes</string>
     <string name="experiment_editor_submit">Create</string>
     <string name="experiment_screen_label">Screen: %1$s</string>
@@ -340,6 +347,7 @@
     <string name="experiments_guide_step3_body">"none" means: show your current version.</string>
     <string name="experiments_guide_step4_title">Record the interaction</string>
     <string name="experiments_guide_step4_code">trackExperimentInteraction("checkout_cta")</string>
+    <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="experiments_guide_step4_body">Call this in the button\'s click handler.</string>
     <string name="experiments_guide_step5_title">Start and read results</string>
     <string name="experiments_guide_step5_body">Press Start. New app sessions pick it up on their next launch. Results appear once each variant has enough sessions (privacy threshold).</string>
@@ -366,6 +374,7 @@
     <string name="error_kind_rate_limited">Too many requests. Please wait a moment and try again.</string>
     <string name="error_kind_invalid">The server rejected that request. Please check your input.</string>
     <string name="error_kind_server">The server ran into a problem. Please try again in a moment.</string>
+    <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="error_kind_incompatible">Some data couldn\'t be loaded because this dashboard and the server are out of step. Try refreshing; if it persists, the server may need updating.</string>
     <string name="error_kind_unknown">Something went wrong. Please try again.</string>
     <string name="action_copy_error_details">Copy error details</string>
