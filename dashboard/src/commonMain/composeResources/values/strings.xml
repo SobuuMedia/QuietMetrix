@@ -590,4 +590,5 @@
     <string name="retention_insight_eyebrow_emoji">✨</string>
     <string name="retention_insight_not_enough_data">Not enough cohort history yet to spot a trend — check back once you have two cohorts old enough to compare.</string>
     <string name="retention_insight_ask_why">Ask why</string>
+    <string name="retention_insight_scope_note">Comparing your 2 most recent cohorts — not whatever grouping the heatmap above is set to.</string>
 </resources>

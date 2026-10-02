@@ -534,4 +534,5 @@
     <string name="retention_insight_eyebrow_emoji">✨</string>
     <string name="retention_insight_not_enough_data">Todavía no hay suficiente historial de cohortes para ver una tendencia — vuelve cuando tengas dos cohortes con la edad suficiente para comparar.</string>
     <string name="retention_insight_ask_why">Preguntar por qué</string>
+    <string name="retention_insight_scope_note">Comparando tus 2 cohortes más recientes — no la agrupación que tenga el mapa de calor arriba.</string>
 </resources>

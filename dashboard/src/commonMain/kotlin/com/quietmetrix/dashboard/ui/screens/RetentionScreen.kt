@@ -98,10 +98,12 @@ import com.quietmetrix.dashboard.resources.retention_h1_tail
 import com.quietmetrix.dashboard.resources.retention_insight_ask_why
 import com.quietmetrix.dashboard.resources.retention_insight_eyebrow_emoji
 import com.quietmetrix.dashboard.resources.retention_insight_not_enough_data
+import com.quietmetrix.dashboard.resources.retention_insight_scope_note
 import com.quietmetrix.dashboard.resources.state_no_retention
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.ui.components.CohortGrouping
 import com.quietmetrix.dashboard.ui.components.CohortHeatmap
 import com.quietmetrix.dashboard.ui.components.CohortHeatmapRow
 import com.quietmetrix.dashboard.ui.components.EmptyState
@@ -608,6 +610,15 @@ private fun RetentionComparisonColumnsRow(rowA: CohortHeatmapRow, rowB: CohortHe
  * "Ask why" is a stubbed callback: the real AI Ask drawer this should open is Task 40's scope, not
  * this one's — same "stub now, wire for real later" convention [RetentionVitalCard]'s own click
  * handler already established.
+ *
+ * **Scope note (post-review fix)**: this card ALWAYS compares the 2 most recent individual
+ * [RetentionCohort]s (see [computeRetentionClosingInsightTakeaway]'s KDoc) regardless of whatever
+ * [CohortGrouping] the [CohortHeatmap] above it happens to be toggled to — a user comparing two
+ * `ByWeek` rows up there (size-weighted-averaged, possibly trending a different direction) would
+ * otherwise see this card's cohort-over-cohort sentence with no cue that it's a DIFFERENT
+ * comparison scope, not a contradiction. [retention_insight_scope_note] makes that explicit in the
+ * rendered text rather than silently leaving two differently-scoped numbers side by side on the
+ * same screen.
  */
 @Composable
 internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, modifier: Modifier = Modifier) {
@@ -625,7 +636,14 @@ internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, modifie
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(stringResource(Res.string.retention_insight_eyebrow_emoji), style = MaterialTheme.typography.headlineSmall)
-            Text(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(sentence, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(Res.string.retention_insight_scope_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Pill(
                 text = stringResource(Res.string.retention_insight_ask_why),
                 variant = PillVariant.Neutral,
