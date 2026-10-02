@@ -274,14 +274,20 @@
     <string name="funnel_pick_funnel">Select a funnel</string>
     <string name="funnel_badge_sdk">From app</string>
     <string name="funnel_delete">Delete</string>
-    <string name="funnel_kpi_entered">Entered</string>
-    <string name="funnel_kpi_converted">Converted</string>
-    <string name="funnel_kpi_overall_conversion">Overall conversion</string>
+    <string name="funnel_kpi_started">🚪 Started</string>
+    <string name="funnel_kpi_completed">🏁 Made it to the end</string>
+    <string name="funnel_kpi_success_rate">🎯 Success rate</string>
     <string name="funnel_card_steps">Steps</string>
     <string name="funnel_no_entrants">No entrants in this range.</string>
     <string name="funnel_delete_confirm_title">Delete funnel</string>
     <string name="funnel_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
     <string name="funnel_editor_cancel">Cancel</string>
+    <string name="funnel_eyebrow_emoji">🪜</string>
+    <string name="funnel_headline_lead">Out of 10 people who started “%1$s”, </string>
+    <string name="funnel_headline_highlight">%1$d</string>
+    <string name="funnel_headline_tail"> make it all the way through.</string>
+    <string name="funnel_new_action">New funnel</string>
+    <string name="funnel_new_unavailable">Funnels are declared in your app SDK config now — there is no dashboard builder for them.</string>
 
     <!-- Experiments (A/B testing) -->
     <string name="experiments_title">Experiments</string>

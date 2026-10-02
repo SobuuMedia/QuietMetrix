@@ -1,5 +1,6 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,9 +32,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.FunnelDto
+import com.quietmetrix.dashboard.api.FunnelResultsResponse
 import com.quietmetrix.dashboard.api.FunnelStepResultDto
 import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.format.formatCount
@@ -57,11 +62,16 @@ import com.quietmetrix.dashboard.resources.funnel_delete_confirm_body
 import com.quietmetrix.dashboard.resources.funnel_delete_confirm_title
 import com.quietmetrix.dashboard.resources.funnel_editor_cancel
 import com.quietmetrix.dashboard.resources.funnel_empty
-import com.quietmetrix.dashboard.resources.funnel_kpi_converted
-import com.quietmetrix.dashboard.resources.funnel_kpi_entered
-import com.quietmetrix.dashboard.resources.funnel_kpi_overall_conversion
+import com.quietmetrix.dashboard.resources.funnel_eyebrow_emoji
+import com.quietmetrix.dashboard.resources.funnel_headline_highlight
+import com.quietmetrix.dashboard.resources.funnel_headline_lead
+import com.quietmetrix.dashboard.resources.funnel_headline_tail
+import com.quietmetrix.dashboard.resources.funnel_kpi_completed
+import com.quietmetrix.dashboard.resources.funnel_kpi_started
+import com.quietmetrix.dashboard.resources.funnel_kpi_success_rate
+import com.quietmetrix.dashboard.resources.funnel_new_action
+import com.quietmetrix.dashboard.resources.funnel_new_unavailable
 import com.quietmetrix.dashboard.resources.funnel_none_selected
-import com.quietmetrix.dashboard.resources.funnel_pick_funnel
 import com.quietmetrix.dashboard.resources.funnel_tutorial_intro
 import com.quietmetrix.dashboard.resources.funnel_tutorial_step1
 import com.quietmetrix.dashboard.resources.funnel_tutorial_step2
@@ -70,14 +80,19 @@ import com.quietmetrix.dashboard.resources.funnels_title
 import com.quietmetrix.dashboard.resources.ic_delete
 import com.quietmetrix.dashboard.resources.ic_funnel
 import com.quietmetrix.dashboard.resources.ic_info
+import com.quietmetrix.dashboard.resources.ic_plus
+import com.quietmetrix.dashboard.resources.nav_funnels
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
+import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.ui.components.ContentState
 import com.quietmetrix.dashboard.ui.components.EmptyState
 import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
+import com.quietmetrix.dashboard.ui.components.Pill
+import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.charts.FunnelChartCanvas
 import com.quietmetrix.dashboard.ui.components.charts.FunnelStepData
@@ -95,7 +110,8 @@ import com.quietmetrix.dashboard.ui.components.table.Column as TableColumn
 /**
  * Funnels are declared entirely in app code (the SDK's `FunnelManifest`) and evaluated
  * on-device — the dashboard shows results and lets an operator delete a definition, but it is
- * not a source of truth for funnel steps any more, so there is no create/edit UI here.
+ * not a source of truth for funnel steps any more, so there is no create/edit UI here. See
+ * [NewFunnelButton]'s KDoc for how this collides with the design handoff's "＋ New funnel" button.
  */
 @Composable
 fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
@@ -117,7 +133,6 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                     overflow = TextOverflow.Ellipsis,
                 )
                 ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                FunnelPicker(state.funnels, state.selectedFunnelKey) { viewModel.selectFunnel(it) }
                 WindowPicker(state.range) { viewModel.selectRange(it) }
                 IconButton(onClick = { viewModel.showTabInfo(AppTab.Funnels) }, modifier = Modifier.handCursor()) {
                     Icon(
@@ -153,8 +168,10 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                     } else {
                         FunnelDetail(
                             state = state,
+                            funnels = state.funnels,
                             funnel = funnel,
                             sizeClass = sizeClass,
+                            onSelectFunnel = { viewModel.selectFunnel(it) },
                             onDelete = { pendingDelete = funnel },
                         )
                     }
@@ -237,10 +254,16 @@ private fun FunnelTutorialStep(number: Int, text: String) {
 @Composable
 private fun FunnelDetail(
     state: DashboardState,
+    funnels: List<FunnelDto>,
     funnel: FunnelDto,
     sizeClass: WindowSizeClass,
+    onSelectFunnel: (String) -> Unit,
     onDelete: () -> Unit,
 ) {
+    FunnelHero(funnel, state.funnelResults, modifier = Modifier.fillMaxWidth())
+
+    FunnelSwitcherRow(funnels = funnels, currentKey = funnel.funnelKey, onSelect = onSelectFunnel)
+
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (funnel.source == "sdk") {
             AssistChip(onClick = {}, label = { Text(stringResource(Res.string.funnel_badge_sdk)) })
@@ -252,26 +275,7 @@ private fun FunnelDetail(
     }
 
     val results = state.funnelResults
-    ResponsiveRowOrColumn(sizeClass) {
-        when (contentStateFor(state.loading, results == null)) {
-            ContentState.Loading -> {
-                KpiSkeleton(Modifier.fillSlot())
-                KpiSkeleton(Modifier.fillSlot())
-                KpiSkeleton(Modifier.fillSlot())
-            }
-            else -> {
-                KpiCard(stringResource(Res.string.funnel_kpi_entered), formatCount((results?.entered ?: 0).toLong()), Modifier.fillSlot())
-                KpiCard(stringResource(Res.string.funnel_kpi_converted), formatCount((results?.converted ?: 0).toLong()), Modifier.fillSlot())
-                val overallInterval = results?.let { wilsonInterval(it.converted.toLong(), it.entered.toLong()) }
-                KpiCard(
-                    stringResource(Res.string.funnel_kpi_overall_conversion),
-                    formatPercent(results?.overallConversion ?: 0.0),
-                    Modifier.fillSlot(),
-                    sub = overallInterval?.let { formatWilsonRange(it) },
-                )
-            }
-        }
-    }
+    FunnelStatCardsRow(results, sizeClass, state.loading)
 
     if (results != null) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -337,20 +341,169 @@ private fun funnelStepColumns(entered: Int, firstStepKey: String?): List<TableCo
     TableColumn(stringResource(Res.string.col_dropped), 0.8f, { Text(formatCount(it.dropped.toLong())) }),
 )
 
+// ---------------------------------------------------------------------------
+// H1 headline, funnel-switcher pill row + "＋ New funnel" button, stat cards
+// — Task 27
+// ---------------------------------------------------------------------------
+
+/**
+ * The "🪜 Funnels" eyebrow + the plain-language H1 (design handoff: "H1 is a plain-language
+ * headline generated from the funnel's numbers (e.g. 'Out of 10 people who open Shelves, 4 end up
+ * adding a book')"), with the live out-of-10 number lime-highlighted — same visual idiom as
+ * [RetentionHero]'s D1/D7 numbers.
+ *
+ * **Wording deviation from the design handoff, found by inspecting its own mockup** (same category
+ * of finding as `OverviewHeroLogic.kt`'s "Relabeling" KDoc): `_source/07-funnels-normal.png`'s H1
+ * region (fully visible, unobscured by the Ask-drawer overlay) literally renders "Out of 10 people
+ * who open Shelves, 4 end up adding a book." — turning the funnel's first/last step event names
+ * into an English verb phrase ("open Shelves", "adding a book"). [FunnelStepResultDto]/[FunnelDto]
+ * carry no such phrase; a step's `name`/`key` is an arbitrary app-defined string (e.g.
+ * `screen_view`, `cta_click`) with no reliable grammatical shape, so generating "who open X"/"end
+ * up Y-ing" from it would mean guessing at semantics this dashboard doesn't have — the same
+ * category of fabrication risk the Overview hero's "people"/"18% more" wording was corrected for.
+ * This headline instead names the funnel by its own human-authored [FunnelDto.name] ("Out of 10
+ * people who started “Shelves”, 4 make it all the way through."), which is real,
+ * already-labeled data, while keeping the exact same "out of 10, highlighted number" shape and
+ * real [funnelHeadlineOutOfTen] math the mockup's example demonstrates.
+ *
+ * Falls back to [Res.string.funnel_no_entrants] when [funnelHeadlineOutOfTen] returns null (no
+ * entrants yet this range) rather than fabricating a number — the same string the steps card below
+ * already shows for the identical condition.
+ */
 @Composable
-private fun FunnelPicker(funnels: List<FunnelDto>, currentKey: String?, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val current = funnels.firstOrNull { it.funnelKey == currentKey }
-    OutlinedButton(onClick = { expanded = true }, enabled = funnels.isNotEmpty(), modifier = Modifier.handCursor()) {
-        Text(current?.name ?: stringResource(Res.string.funnel_pick_funnel))
+internal fun FunnelHero(funnel: FunnelDto, results: FunnelResultsResponse?, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val lime = SpanStyle(background = extended.lime, color = extended.onLime)
+    val outOfTen = funnelHeadlineOutOfTen(results)
+
+    val lead = outOfTen?.let { stringResource(Res.string.funnel_headline_lead, funnel.name) }
+    val highlight = outOfTen?.let { stringResource(Res.string.funnel_headline_highlight, it) }
+    val tail = stringResource(Res.string.funnel_headline_tail)
+    val noEntrants = stringResource(Res.string.funnel_no_entrants)
+
+    Column(modifier = modifier) {
+        Text(
+            stringResource(Res.string.funnel_eyebrow_emoji) + " " + stringResource(Res.string.nav_funnels),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val sentence = buildAnnotatedString {
+            if (outOfTen == null) {
+                append(noEntrants)
+            } else {
+                append(lead!!)
+                withStyle(lime) { append(highlight!!) }
+                append(tail)
+            }
+        }
+        Text(sentence, style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onBackground)
     }
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+}
+
+/**
+ * The funnel-switcher pill row (design handoff: "Funnel-switcher pill row + '＋ New funnel' button
+ * (opens builder modal)") — real functionality, mirroring [StartFromRow]'s established pattern
+ * (`FlowScreen.kt`): one [Pill] per real [FunnelDto], the current selection highlighted
+ * [PillVariant.Lime], clicking another calls [onSelect] (already wired to
+ * [DashboardViewModel.selectFunnel] by the caller). See [NewFunnelButton]'s KDoc for why the
+ * trailing button is a disabled stub rather than a real builder modal.
+ */
+@Composable
+internal fun FunnelSwitcherRow(
+    funnels: List<FunnelDto>,
+    currentKey: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         funnels.forEach { f ->
-            DropdownMenuItem(
-                text = { Text(f.name) },
-                onClick = { onSelect(f.funnelKey); expanded = false },
-                modifier = Modifier.handCursor(),
+            Pill(
+                text = f.name,
+                variant = if (f.funnelKey == currentKey) PillVariant.Lime else PillVariant.Neutral,
+                onClick = { onSelect(f.funnelKey) },
             )
+        }
+        NewFunnelButton()
+    }
+}
+
+/**
+ * The design handoff's "＋ New funnel" button (opens a builder modal to create a funnel from
+ * scratch). **This dashboard has no such capability any more, by deliberate design, not oversight**
+ * — see [FunnelsTab]'s class KDoc: a prior change removed the dashboard-side create/edit funnel UI
+ * entirely (`DashboardViewModel` has no `createFunnel`/`updateFunnel` any more, only
+ * [DashboardViewModel.deleteFunnel]) once funnels became SDK-`FunnelManifest`-declared and
+ * evaluated on-device (`FunnelCounterAnalyzer`'s server-side KDoc: "now that evaluation is always
+ * device-local"). A dashboard-authored funnel would have no on-device evaluator backing it, so
+ * resurrecting a create flow here would not just be "not built yet" (the honest category the
+ * drill-down-drawer stubs elsewhere in this plan are in) — it would reintroduce a capability the
+ * architecture migration specifically retired.
+ *
+ * Rendered disabled (not merely an inert `onClick = {}`) so the one user-facing signal is honest:
+ * this action is unavailable, not silently broken. Flagged for a product decision before Task 28
+ * (the "New funnel modal" task) attempts to build a real modal behind it — see this task's report.
+ */
+@Composable
+private fun NewFunnelButton(modifier: Modifier = Modifier) {
+    val unavailable = stringResource(Res.string.funnel_new_unavailable)
+    OutlinedButton(
+        onClick = {},
+        enabled = false,
+        modifier = modifier.semantics { contentDescription = unavailable },
+    ) {
+        Icon(painter = painterResource(Res.drawable.ic_plus), contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(stringResource(Res.string.funnel_new_action))
+    }
+}
+
+/**
+ * The 3 stat cards (design handoff: "3 stat cards (Started / Made it to the end / Success rate —
+ * the last one lime-filled), each clickable to a funnel-wide drill drawer"). [results] is null
+ * while still loading (handled by [loading]) or genuinely absent; its 0-valued defaults render
+ * honestly as zeros rather than this row inventing its own empty state, matching every other
+ * `KpiCard` row in this plan ([RetentionVitalCardsRow], the Overview vitals grid).
+ *
+ * The click handlers are stubs — same "stub now, wire for real later" convention
+ * [RetentionVitalCard]'s own click handler already established — since the real funnel-wide drill
+ * drawer is Task 41's scope, not this one's.
+ */
+@Composable
+internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: WindowSizeClass, loading: Boolean) {
+    ResponsiveRowOrColumn(sizeClass) {
+        when (contentStateFor(loading, results == null)) {
+            ContentState.Loading -> {
+                KpiSkeleton(Modifier.fillSlot())
+                KpiSkeleton(Modifier.fillSlot())
+                KpiSkeleton(Modifier.fillSlot())
+            }
+            else -> {
+                KpiCard(
+                    stringResource(Res.string.funnel_kpi_started),
+                    formatCount((results?.entered ?: 0).toLong()),
+                    Modifier.fillSlot(),
+                    onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+                )
+                KpiCard(
+                    stringResource(Res.string.funnel_kpi_completed),
+                    formatCount((results?.converted ?: 0).toLong()),
+                    Modifier.fillSlot(),
+                    onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+                )
+                val overallInterval = results?.let { wilsonInterval(it.converted.toLong(), it.entered.toLong()) }
+                KpiCard(
+                    stringResource(Res.string.funnel_kpi_success_rate),
+                    formatPercent(results?.overallConversion ?: 0.0),
+                    Modifier.fillSlot(),
+                    sub = overallInterval?.let { formatWilsonRange(it) },
+                    highlighted = true,
+                    onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+                )
+            }
         }
     }
 }

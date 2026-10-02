@@ -268,14 +268,20 @@
     <string name="funnel_pick_funnel">Selecciona un embudo</string>
     <string name="funnel_badge_sdk">Desde la app</string>
     <string name="funnel_delete">Eliminar</string>
-    <string name="funnel_kpi_entered">Entraron</string>
-    <string name="funnel_kpi_converted">Convirtieron</string>
-    <string name="funnel_kpi_overall_conversion">Conversión total</string>
+    <string name="funnel_kpi_started">🚪 Entraron</string>
+    <string name="funnel_kpi_completed">🏁 Llegaron al final</string>
+    <string name="funnel_kpi_success_rate">🎯 Tasa de éxito</string>
     <string name="funnel_card_steps">Pasos</string>
     <string name="funnel_no_entrants">No hay entradas en este rango.</string>
     <string name="funnel_delete_confirm_title">Eliminar embudo</string>
     <string name="funnel_delete_confirm_body">¿Eliminar "%1$s"? Esto no se puede deshacer.</string>
     <string name="funnel_editor_cancel">Cancelar</string>
+    <string name="funnel_eyebrow_emoji">🪜</string>
+    <string name="funnel_headline_lead">De cada 10 personas que empezaron “%1$s”, </string>
+    <string name="funnel_headline_highlight">%1$d</string>
+    <string name="funnel_headline_tail"> llegan hasta el final.</string>
+    <string name="funnel_new_action">Nuevo embudo</string>
+    <string name="funnel_new_unavailable">Los embudos se declaran ahora en la configuración del SDK de tu app: no hay creador en el panel.</string>
 
     <!-- Experimentos (pruebas A/B) -->
     <string name="experiments_title">Experimentos</string>

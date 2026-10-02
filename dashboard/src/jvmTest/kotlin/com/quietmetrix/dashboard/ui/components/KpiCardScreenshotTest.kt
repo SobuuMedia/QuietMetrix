@@ -117,6 +117,37 @@ class KpiCardScreenshotTest {
     // existing screenshot-golden infra is built on.
     @Suppress("DEPRECATION")
     @Test
+    fun highlightedCardMatchesGolden() = runComposeUiTest {
+        // Task 27's lime-filled variant (Funnels' "Success rate" card) — no delta/compare-note,
+        // matching that screen's actual call site.
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(24.dp),
+                ) {
+                    KpiCard(
+                        label = "🎯 Success rate",
+                        value = "40%",
+                        sub = "[62%, 71%] (95% confidence)",
+                        modifier = Modifier.width(280.dp),
+                        highlighted = true,
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        onRoot().captureToImage().assertMatchesGolden("kpi-card/highlighted.png")
+    }
+
+    // See QuietMetrixThemeScreenshotTest's @Suppress comment (Task 1's
+    // reviewed convention, commit ab300e0): v1 runComposeUiTest is what the
+    // existing screenshot-golden infra is built on.
+    @Suppress("DEPRECATION")
+    @Test
     fun hoveringClickableCardChangesRenderedPixels() = runComposeUiTest {
         // Direct coverage for the hover half of the hover/press idiom
         // (KpiCard's KDoc): actually drives pointer-enter on the card's

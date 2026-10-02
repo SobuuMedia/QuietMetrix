@@ -127,6 +127,16 @@ private val HOVER_ELEVATION = 12.dp
  * is off.
  * @param onClick opens the drill-down drawer for this metric; when null the
  * card is a static, non-interactive tile with no hover/press styling.
+ * @param highlighted renders the card filled with [LocalExtendedColors]'
+ * `lime`/`onLime` tokens instead of the default surface/hairline-border
+ * treatment, for the one "primary/positive" stat a row calls out — e.g. the
+ * Funnels screen's "Success rate" card (design handoff: "3 stat cards
+ * (Started / Made it to the end / Success rate — the last one lime-filled)").
+ * Same token pairing [Pill]'s `PillVariant.Lime` already uses, so a
+ * lime-filled [KpiCard] and a lime [Pill] never disagree about the color.
+ * Hover/press still brightens the lime container towards white exactly like
+ * the default surface color does — only the base container/text colors and
+ * the (now omitted) hairline border change.
  */
 @Composable
 fun KpiCard(
@@ -138,13 +148,23 @@ fun KpiCard(
     deltaPositive: Boolean = false,
     compareNote: String? = null,
     onClick: (() -> Unit)? = null,
+    highlighted: Boolean = false,
 ) {
     val extended = LocalExtendedColors.current
     val shape = MaterialTheme.shapes.extraLarge
-    val border = BorderStroke(1.dp, extended.hairline)
+    val border = if (highlighted) null else BorderStroke(1.dp, extended.hairline)
+    val restingContainer = if (highlighted) extended.lime else MaterialTheme.colorScheme.surface
 
     val body: @Composable () -> Unit = {
-        KpiCardContent(label = label, value = value, sub = sub, delta = delta, deltaPositive = deltaPositive, compareNote = compareNote)
+        KpiCardContent(
+            label = label,
+            value = value,
+            sub = sub,
+            delta = delta,
+            deltaPositive = deltaPositive,
+            compareNote = compareNote,
+            highlighted = highlighted,
+        )
     }
 
     if (onClick != null) {
@@ -160,9 +180,8 @@ fun KpiCard(
         val hovered by interactionSource.collectIsHoveredAsState()
 
         val scale by animateFloatAsState(if (pressed) PRESS_SCALE else 1f, label = "kpiCardScale")
-        val baseContainer = MaterialTheme.colorScheme.surface
         val containerColor by animateColorAsState(
-            if (hovered) lerp(baseContainer, Color.White, HOVER_BRIGHTEN_FRACTION) else baseContainer,
+            if (hovered) lerp(restingContainer, Color.White, HOVER_BRIGHTEN_FRACTION) else restingContainer,
             label = "kpiCardBrighten",
         )
 
@@ -184,7 +203,7 @@ fun KpiCard(
         Card(
             modifier = modifier,
             shape = shape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(containerColor = restingContainer),
             border = border,
         ) {
             body()
@@ -205,8 +224,11 @@ private fun KpiCardContent(
     delta: String?,
     deltaPositive: Boolean,
     compareNote: String?,
+    highlighted: Boolean = false,
 ) {
     val extended = LocalExtendedColors.current
+    val mutedColor = if (highlighted) extended.onLime.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val valueColor = if (highlighted) extended.onLime else Color.Unspecified
     Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -214,7 +236,7 @@ private fun KpiCardContent(
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = mutedColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -222,7 +244,7 @@ private fun KpiCardContent(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(value, style = MaterialTheme.typography.displaySmall)
+            Text(value, style = MaterialTheme.typography.displaySmall, color = valueColor)
             if (delta != null) {
                 Pill(
                     text = delta,
@@ -234,7 +256,7 @@ private fun KpiCardContent(
             Text(
                 sub,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = mutedColor,
             )
         }
         if (compareNote != null) {
