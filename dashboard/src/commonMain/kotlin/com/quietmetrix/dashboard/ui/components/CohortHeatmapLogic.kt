@@ -1,0 +1,180 @@
+package com.quietmetrix.dashboard.ui.components
+
+import com.quietmetrix.dashboard.api.RetentionCohort
+import com.quietmetrix.dashboard.ui.screens.effectiveDayValue
+import com.quietmetrix.dashboard.ui.screens.epochDayFromIsoOrNull
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+
+/**
+ * The 5 cohort-age columns the heatmap always shows, regardless of [CohortGrouping] — [RetentionCohort]'s
+ * own fixed field set (`day1`/`day3`/`day7`/`day14`/`day30`; see [rawDayValue]). The design handoff's HTML
+ * prototype shows a DIFFERENT column set per grouping (`Day 1/2/3/5/7` for "By day" vs. `Day 1/3/7/14/30`
+ * for "By week"), but that is demo-only fiction from its own synthetic `dayData`/`weekData` arrays — the
+ * real [RetentionCohort] the server actually returns only ever has these 5 fixed fields, period, so both
+ * groupings render the SAME 5 columns here. Documented judgment call, not a spec requirement either way.
+ */
+internal val COHORT_HEATMAP_DAY_NUMBERS: List<Int> = listOf(1, 3, 7, 14, 30)
+
+/** Milliseconds in a day — mirrors [com.quietmetrix.dashboard.ui.screens.computeRetentionVitals]'s own
+ *  private constant of the same value (kept file-local rather than exposed across files, matching this
+ *  codebase's standing per-file-duplication convention for small shared constants). */
+private const val MILLIS_PER_DAY = 86_400_000L
+
+/**
+ * The cohort heatmap's "By week" / "By day" segmented toggle (design handoff: "title + By week/By day
+ * segmented toggle"; prototype's `retGroup: 'week' | 'day'` state field). [ByDay] shows one row per
+ * [RetentionCohort] exactly as the server returns it; [ByWeek] aggregates those same cohorts into
+ * 7-day buckets (see [buildCohortHeatmapRows]'s KDoc for the aggregation rule).
+ */
+internal enum class CohortGrouping { ByDay, ByWeek }
+
+/**
+ * One (cohort-row × day-column) cell's resolved value. [fraction] is `null` exactly when the cell is
+ * genuinely too young to show anything yet (the row's data honestly doesn't exist for this day-column)
+ * — see [effectiveDayValue]'s KDoc for why a null here is NEVER "nobody returned" (that's a real `0.0`,
+ * a normal, renderable [fraction]). The composable renders `null` as the dashed "·" placeholder and
+ * any non-null [fraction] — including `0.0` — as a real shaded cell.
+ */
+internal data class CohortHeatmapCell(val fraction: Double?)
+
+/**
+ * One heatmap row: a stable [id] (used for [toggleCohortHeatmapSelection]'s A/B bookkeeping), the
+ * install-date [label] shown in the "Installed" column, the row's cohort [size], and its
+ * [COHORT_HEATMAP_DAY_NUMBERS]-ordered [cells].
+ */
+internal data class CohortHeatmapRow(
+    val id: String,
+    val label: String,
+    val size: Int,
+    val cells: List<CohortHeatmapCell>,
+)
+
+/** [RetentionCohort]'s raw (possibly ambiguous — see [effectiveDayValue]) field for [dayNumber], or
+ *  null for any [dayNumber] outside [COHORT_HEATMAP_DAY_NUMBERS]. */
+private fun rawDayValue(cohort: RetentionCohort, dayNumber: Int): Double? = when (dayNumber) {
+    1 -> cohort.day1
+    3 -> cohort.day3
+    7 -> cohort.day7
+    14 -> cohort.day14
+    30 -> cohort.day30
+    else -> null
+}
+
+/**
+ * Builds the heatmap's rows from the raw [cohorts] the server returned, grouped per [grouping], each
+ * cell resolved through [effectiveDayValue] (Task 24's disambiguation, reused verbatim here — see that
+ * function's KDoc) rather than the raw field, at [todayEpochDay] (days since the Unix epoch, UTC;
+ * defaults to the real current day, overridable for deterministic tests).
+ *
+ * [CohortGrouping.ByDay] passes each cohort through untouched (one row per server-side cohort,
+ * newest first). [CohortGrouping.ByWeek] buckets cohorts into 7-day windows anchored to the Unix
+ * epoch (`epochDay / 7`, integer division) — NOT calendar weeks aligned to a particular weekday. This
+ * is a documented judgment call (the brief flagged by-week/by-day reshaping as something to clarify
+ * if genuinely unclear; a rolling epoch-anchored bucket is unambiguous, deterministic, dependency-free
+ * — matching [epochDayFromIsoOrNull]'s own "no kotlinx-datetime" precedent — and distributes daily
+ * cohorts into stable, non-overlapping 7-day groups, which is the one property the spec's "a cohort is
+ * everyone who installed in the same week" framing actually requires; it is NOT guaranteed to start on
+ * a Monday). A week row's [CohortHeatmapRow.size] is the sum of its member cohorts' sizes; a week
+ * row's per-day cell is [effectiveDayValue]-weighted-averaged across member cohorts — see
+ * [weightedWeekCell]'s KDoc for exactly how. Cohorts whose `cohortDate` fails to parse
+ * ([epochDayFromIsoOrNull] returns null) are dropped from [ByWeek] grouping entirely (there is no
+ * sane week bucket for them); [ByDay] still shows them (their own row doesn't need a week bucket).
+ */
+@OptIn(ExperimentalTime::class)
+internal fun buildCohortHeatmapRows(
+    cohorts: List<RetentionCohort>,
+    grouping: CohortGrouping,
+    todayEpochDay: Long = Clock.System.now().toEpochMilliseconds().floorDiv(MILLIS_PER_DAY),
+): List<CohortHeatmapRow> = when (grouping) {
+    CohortGrouping.ByDay -> cohorts
+        .map { cohort ->
+            CohortHeatmapRow(
+                id = cohort.cohortDate,
+                label = cohort.cohortDate,
+                size = cohort.size,
+                cells = COHORT_HEATMAP_DAY_NUMBERS.map { dayNumber ->
+                    CohortHeatmapCell(effectiveDayValue(cohort, dayNumber, rawDayValue(cohort, dayNumber), todayEpochDay))
+                },
+            )
+        }
+        .sortedByDescending { it.id }
+    CohortGrouping.ByWeek -> buildByWeekRows(cohorts, todayEpochDay)
+}
+
+/** [buildCohortHeatmapRows]'s [CohortGrouping.ByWeek] branch — see that function's KDoc for the
+ *  epoch-anchored 7-day bucketing rule and why it's a documented judgment call, not a spec mandate. */
+private fun buildByWeekRows(cohorts: List<RetentionCohort>, todayEpochDay: Long): List<CohortHeatmapRow> {
+    val byWeekBucket = cohorts
+        .mapNotNull { cohort -> epochDayFromIsoOrNull(cohort.cohortDate)?.let { it.floorDiv(7) to cohort } }
+        .groupBy({ it.first }, { it.second })
+    return byWeekBucket.entries
+        .sortedByDescending { it.key }
+        .map { (weekBucket, members) ->
+            CohortHeatmapRow(
+                id = "week-$weekBucket",
+                // Earliest install date in the bucket, matching the prototype's own "label the week by
+                // its first day" convention (`weekData`'s `'Aug 11'` entries are each a bucket's Monday).
+                label = members.minOf { it.cohortDate },
+                size = members.sumOf { it.size },
+                cells = COHORT_HEATMAP_DAY_NUMBERS.map { dayNumber -> weightedWeekCell(members, dayNumber, todayEpochDay) },
+            )
+        }
+}
+
+/**
+ * A "By week" cell's value for [dayNumber]: the cohort-size-weighted average of [effectiveDayValue]
+ * across [members] (the week's daily cohorts) — EXCLUDING any member for which [effectiveDayValue]
+ * itself resolves to null (that member hasn't reached [dayNumber] yet, so it contributes neither a
+ * real observed ratio nor a confirmed zero; mixing its absence in as a zero-weight no-op is exactly
+ * right, since a weighted average with zero weight is the same as not including the term at all).
+ * If EVERY member is still too young (no member contributes), the whole week cell is honestly null
+ * too — never a fabricated average of nothing. This mirrors [effectiveDayValue]'s own per-cohort rule
+ * one level up: a week is only as "observed" as its most-advanced contributing member.
+ */
+private fun weightedWeekCell(members: List<RetentionCohort>, dayNumber: Int, todayEpochDay: Long): CohortHeatmapCell {
+    val contributions = members.mapNotNull { cohort ->
+        effectiveDayValue(cohort, dayNumber, rawDayValue(cohort, dayNumber), todayEpochDay)?.let { value -> cohort.size to value }
+    }
+    val totalWeight = contributions.sumOf { it.first }
+    if (totalWeight <= 0) return CohortHeatmapCell(null)
+    val weightedSum = contributions.sumOf { it.first * it.second }
+    return CohortHeatmapCell(weightedSum / totalWeight)
+}
+
+/**
+ * Cell background alpha (`0.12f..1.0f`) for a resolved, non-null [fraction] (0..1) — "brighter lime =
+ * higher retention" (design handoff). Mirrors the design prototype's own cell-shading formula verbatim
+ * (`QuietMetrix Prototype.dc.html`'s `cohorts` mapper: `'rgba(200,242,90,' + (0.12 + v/50*0.88) + ')'`,
+ * where `v` is a 0..100 percentage — here `v == fraction * 100`). The `0.12` floor means a legitimate,
+ * confirmed `0.0` fraction (see [CohortHeatmapCell]'s KDoc) still renders as a visibly-shaded, lightest
+ * cell — never indistinguishable from the dashed "too early" placeholder, which has no fill at all.
+ * The ceiling of `1.0f` is reached at `fraction == 0.5` (50% retention) and clamped beyond that: this
+ * metric only rarely exceeds 50%, so "cap the ramp at 50%, call anything higher equally brightest"
+ * reads as "very high" without needing a hypothetical scale past what real data plausibly produces.
+ */
+internal fun cohortHeatmapCellAlpha(fraction: Double): Float {
+    val percent = fraction.coerceIn(0.0, 1.0) * 100.0
+    return (0.12 + (percent / 50.0) * 0.88).toFloat().coerceIn(0.12f, 1.0f)
+}
+
+/**
+ * Whether a resolved cell's percentage text should use the dark-on-lime [com.quietmetrix.dashboard.theme.ExtendedColors.onLime]
+ * color instead of the normal body-text color, once its [cohortHeatmapCellAlpha] shading is bright
+ * enough that light text would lose contrast. Mirrors the prototype's own threshold verbatim
+ * (`color: v >= 25 ? '#16131a' : 'var(--ink)'`, `v` a 0..100 percentage — here `fraction >= 0.25`).
+ */
+internal fun cohortHeatmapCellTextIsDark(fraction: Double): Boolean = fraction >= 0.25
+
+/**
+ * Applies the design handoff's "checkbox-like A/B compare selector" tick rule to the cohort heatmap's
+ * row-selection state (design handoff: "Ticking two rows shows a '⚖️ Comparing A vs B' panel below";
+ * prototype's `cmp` state field): ticking an already-selected [id] untick it; ticking a new [id] when
+ * fewer than 2 rows are selected simply adds it; ticking a THIRD [id] replaces the OLDEST selection
+ * (A) rather than refusing the click or silently doing nothing — same `.slice(-2)` "keep only the last
+ * 2" semantics the prototype's own `toggleCmp` uses, so the newest two ticks always win. The actual
+ * "⚖️ Comparing A vs B" panel this selection state feeds is Task 26's scope, not this component's —
+ * this only owns the list of up to 2 selected row ids.
+ */
+internal fun toggleCohortHeatmapSelection(current: List<String>, id: String): List<String> =
+    if (id in current) current - id else (current + id).takeLast(2)

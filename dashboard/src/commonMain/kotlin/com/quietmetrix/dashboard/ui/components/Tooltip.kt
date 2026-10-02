@@ -91,8 +91,13 @@ fun tooltipPlacement(
  * content around; [Popup] renders it as a true overlay, matching the
  * spec's "fixed-position tooltip" wording (README's state-model section:
  * "`tip`: currently-hovered tooltip target + position").
+ *
+ * `internal` (not `private`) so [com.quietmetrix.dashboard.ui.components.CohortHeatmap] (Task 25)
+ * can reuse this SAME anchor-relative placement for its per-cell hover bubbles instead of
+ * duplicating the above/below flip math a second time — only the trigger (an arbitrary hovered
+ * cell, not the ⓘ icon) and bubble content differ there, not the positioning.
  */
-private class TooltipPositionProvider(private val gap: Int) : PopupPositionProvider {
+internal class TooltipPositionProvider(val gap: Int) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,

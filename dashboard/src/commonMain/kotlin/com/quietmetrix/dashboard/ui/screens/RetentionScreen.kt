@@ -81,6 +81,7 @@ import com.quietmetrix.dashboard.resources.state_no_retention
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.ui.components.CohortHeatmap
 import com.quietmetrix.dashboard.ui.components.EmptyState
 import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
@@ -101,13 +102,17 @@ import com.quietmetrix.dashboard.nav.NavDestination as AppTab
 // Retention screen (Task 24: extracted from DashboardScreen.kt's old inline
 // RetentionTab, plus a new H1 headline + 3 vital cards with a 10-dot grid —
 // see RetentionLogic.kt for the pure day1/day7/day30 selection and dot-count
-// math this screen renders).
+// math this screen renders. Task 25 added the CohortHeatmap below the vital
+// cards — see ui/components/CohortHeatmapLogic.kt for its pure grid-building
+// logic).
 // ---------------------------------------------------------------------------
 
 /**
  * The Retention screen: header (project picker + info), the plain-language D1/D7 headline, the
- * 3 vital cards (Next day / After a week / After a month), and the existing per-cohort data table
- * (the cohort heatmap replacing this table is Task 25's scope, not this one's).
+ * 3 vital cards (Next day / After a week / After a month), the [CohortHeatmap] (Task 25), and the
+ * existing per-cohort data table (kept alongside the heatmap for power users/Expert-style detail,
+ * per the design handoff's own "a real cohort table for power users" framing — the heatmap is a
+ * friendlier summary view, not a replacement for this table's full precision/Wilson-interval detail).
  */
 @Composable
 internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
@@ -147,6 +152,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 val vitals = computeRetentionVitals(state.retention)
                 RetentionHero(vitals)
                 RetentionVitalCardsRow(vitals, sizeClass)
+                CohortHeatmap(cohorts)
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         DataTable(

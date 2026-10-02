@@ -557,4 +557,21 @@
     <string name="retention_dot_filled_emoji">🙂</string>
     <string name="retention_dot_filled_content_description">Came back</string>
     <string name="retention_dot_empty_content_description">Didn't come back (yet)</string>
+
+    <!-- Cohort heatmap (Task 25) -->
+    <string name="cohort_heatmap_title_by_week">🗓️ Week by week</string>
+    <string name="cohort_heatmap_title_by_day">📆 Day by day</string>
+    <string name="cohort_heatmap_desc_by_week">Each row is the group of people who installed that week. Brighter = more of them came back. Tick A and B on two rows to compare them.</string>
+    <string name="cohort_heatmap_desc_by_day">Each row is the group of people who installed that day. Brighter = more of them came back. Tick A and B on two rows to compare them.</string>
+    <string name="cohort_heatmap_toggle_by_week">By week</string>
+    <string name="cohort_heatmap_toggle_by_day">By day</string>
+    <string name="cohort_heatmap_col_installed">Installed</string>
+    <string name="cohort_heatmap_col_people">People</string>
+    <string name="cohort_heatmap_placeholder_glyph">·</string>
+    <string name="cohort_heatmap_checkbox_a">A</string>
+    <string name="cohort_heatmap_checkbox_b">B</string>
+    <string name="cohort_heatmap_checkbox_content_description_unselected">Select %1$s to compare</string>
+    <string name="cohort_heatmap_checkbox_content_description_selected">%1$s is selected as %2$s for comparison</string>
+    <string name="cohort_heatmap_tooltip_known">Of the %1$s people who installed %2$s, %3$s (%4$s) opened the app again on %5$s.</string>
+    <string name="cohort_heatmap_tooltip_unknown">Too early. Come back after %1$s to see this one ⏳</string>
 </resources>

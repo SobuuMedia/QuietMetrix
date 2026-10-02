@@ -99,8 +99,14 @@ private fun mostRecentObserved(
  * cohort is at least [dayNumber] days old, it has genuinely had its chance and `0.0` is returned (a
  * real, confirmed zero); if it's younger than that — or its date fails to parse — null is returned,
  * honestly meaning "can't tell yet."
+ *
+ * `internal` (not `private`) since Task 25's `CohortHeatmapLogic.kt` (`ui/components/`) reuses this
+ * SAME disambiguation per-cell across the cohort heatmap's (cohort × day) grid, rather than
+ * reimplementing a similar-but-subtly-different version of it — the grid multiplies this exact
+ * ambiguity across every cell, so one shared resolver is the only way both screens can agree on
+ * what a given cell/card honestly means.
  */
-private fun effectiveDayValue(cohort: RetentionCohort, dayNumber: Int, rawValue: Double?, todayEpochDay: Long): Double? {
+internal fun effectiveDayValue(cohort: RetentionCohort, dayNumber: Int, rawValue: Double?, todayEpochDay: Long): Double? {
     if (cohort.size <= 0) return null
     if (rawValue != null) return rawValue
     val cohortEpochDay = epochDayFromIsoOrNull(cohort.cohortDate) ?: return null
