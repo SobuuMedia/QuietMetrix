@@ -469,10 +469,7 @@
     <string name="flow_h1_tail">.</string>
     <string name="flow_platform_label">Plataforma</string>
     <string name="flow_platform_all">🌈 Todas</string>
-    <string name="flow_platform_android">🤖 Android</string>
-    <string name="flow_platform_ios">🍎 iOS</string>
-    <string name="flow_platform_web">🌐 Web</string>
-    <string name="flow_platform_not_tracked_cd">El desglose por plataforma aún no se registra</string>
+    <string name="flow_platform_unavailable_caption">El filtrado por plataforma aún no está disponible.</string>
     <string name="flow_start_from_label">Empezar desde</string>
     <string name="flow_path_label">Ruta:</string>
     <string name="flow_path_arrow">→</string>

@@ -525,10 +525,7 @@
     <string name="flow_h1_tail">.</string>
     <string name="flow_platform_label">Platform</string>
     <string name="flow_platform_all">🌈 All</string>
-    <string name="flow_platform_android">🤖 Android</string>
-    <string name="flow_platform_ios">🍎 iOS</string>
-    <string name="flow_platform_web">🌐 Web</string>
-    <string name="flow_platform_not_tracked_cd">Per-platform breakdown isn't tracked yet</string>
+    <string name="flow_platform_unavailable_caption">Per-platform filtering isn't available yet.</string>
     <string name="flow_start_from_label">Start from</string>
     <string name="flow_path_label">Path:</string>
     <string name="flow_path_arrow">→</string>

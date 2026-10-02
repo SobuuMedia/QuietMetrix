@@ -27,16 +27,19 @@ import kotlin.test.assertEquals
  * header (`FlowHero` + `PlatformFilterRow`) and the breadcrumb (`FlowBreadcrumbSection`), derived
  * per `goldens/README.md`'s "How a task derives its own golden" process.
  *
- * **Header region** (`flow/header.png`): real-crop-derived from `_source/05-flow-normal.png` at
- * `(0,226,465,479)` — the "🧭 Flow" eyebrow, the two-line H1 with its lime-highlighted "where they
- * go next" span (cut off mid-word by the Ask-drawer overlay at this frame's x≈465, same finding
- * every other Flow/Overview header golden records), and the "Platform" row with its 4 pills
- * ("🌈 All" rendered active — `--ink` bg/`--bg` text per the prototype's default `pill()` style,
- * i.e. `PillVariant.NavActive`, NOT the lime accent `pill(on, '#c8f25a')` only the "Start from" row
- * uses — "🤖 Android"/"🍎 iOS" visible, "🌐 Web" cut off past x≈465) are all visible and verified
- * by direct PIL crop before recording. Rendered via `QuietMetrixTheme(Dark)` at the default
+ * **Header region** (`flow/header.png`): the "🧭 Flow" eyebrow and the two-line H1 with its
+ * lime-highlighted "where they go next" span are real-crop-derived from `_source/05-flow-normal.png`
+ * at `(0,226,465,479)` (cut off mid-word by the Ask-drawer overlay at this frame's x≈465, same
+ * finding every other Flow/Overview header golden records) — "🌈 All" rendered active (`--ink`
+ * bg/`--bg` text per the prototype's default `pill()` style, i.e. `PillVariant.NavActive`, NOT the
+ * lime accent `pill(on, '#c8f25a')` only the "Start from" row uses) also matches that crop. The
+ * source frame's "🤖 Android"/"🍎 iOS" pills (before "🌐 Web" is cut off at x≈465) are deliberately
+ * NOT reproduced here — see `PlatformFilterRow`'s KDoc (`FlowScreen.kt`) for the post-review finding
+ * that a disabled `Pill` is visually indistinguishable from a live one elsewhere on this screen, and
+ * the fix: only the one real option ("🌈 All") renders as a pill, replaced-3-pills' disclosure is a
+ * single always-visible caption instead. Rendered via `QuietMetrixTheme(Dark)` at the default
  * 1024x768 `runComposeUiTest` canvas, content width-constrained to `Modifier.width(465.dp)` to
- * match the source rect, recorded with `-Pgolden.record=true`.
+ * match the source rect's H1 wrapping, recorded with `-Pgolden.record=true`.
  *
  * **Breadcrumb region** (`flow/breadcrumb-*.png`): real-crop derivation checked and REJECTED —
  * the breadcrumb card sits below the Platform row, entirely covered by the pinned-open Ask-drawer

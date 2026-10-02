@@ -33,8 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -68,11 +66,8 @@ import com.quietmetrix.dashboard.resources.flow_h1_tail
 import com.quietmetrix.dashboard.resources.flow_path_arrow
 import com.quietmetrix.dashboard.resources.flow_path_label
 import com.quietmetrix.dashboard.resources.flow_platform_all
-import com.quietmetrix.dashboard.resources.flow_platform_android
-import com.quietmetrix.dashboard.resources.flow_platform_ios
 import com.quietmetrix.dashboard.resources.flow_platform_label
-import com.quietmetrix.dashboard.resources.flow_platform_not_tracked_cd
-import com.quietmetrix.dashboard.resources.flow_platform_web
+import com.quietmetrix.dashboard.resources.flow_platform_unavailable_caption
 import com.quietmetrix.dashboard.resources.flow_start_from_label
 import com.quietmetrix.dashboard.resources.flow_state_empty_path
 import com.quietmetrix.dashboard.resources.ic_flow
@@ -384,40 +379,43 @@ internal fun FlowHero(modifier: Modifier = Modifier) {
 }
 
 /**
- * Platform filter row (🌈 All / 🤖 Android / 🍎 iOS / 🌐 Web — design handoff README > Flow).
- * **Data-honesty decision:** only [FlowPlatform.All] is selectable/clickable. The other 3 pills
- * render (matching the design's screenshot) but carry no `onClick` and are dimmed, with a
- * content description explaining why — see [filterTransitionsByPlatform]'s KDoc (`FlowPathLogic.kt`)
- * for the backend-side finding (`Transition`/`TransitionItem` have no platform field) behind this.
+ * Platform filter row (design handoff README > Flow: "🌈 All / 🤖 Android / 🍎 iOS / 🌐 Web").
+ *
+ * **Data-honesty decision, revised after review:** an earlier version of this composable rendered
+ * all 4 pills with the 3 non-"All" ones carrying no `onClick` — but a disabled `Pill` renders
+ * pixel-identical to a live, clickable one elsewhere on this same screen (`StartFromRow`'s
+ * clickable, non-selected pills use that exact same [PillVariant.Neutral] styling), so a sighted
+ * user tapping "🤖 Android" would get silent nothing with zero visual signal that it was never
+ * going to do anything — exactly the confusion the honest-disable approach was meant to avoid.
+ * The only disclosure was an accessibility-only `contentDescription`, which a sighted user never
+ * sees.
+ *
+ * Fixed per review: only [FlowPlatform.All] is rendered as a pill at all (and it's the only real
+ * option there is to pick, so it needs no on/off state of its own); the 3 non-functional options
+ * are replaced by a single, always-visible caption instead of an inert-looking row of buttons. See
+ * [filterTransitionsByPlatform]'s KDoc (`FlowPathLogic.kt`) for the backend-side finding
+ * (`Transition`/`TransitionItem` carry no platform field at all, confirmed down through the SDK's
+ * counter declaration) behind why no real per-platform filter exists yet.
  */
 @Composable
 internal fun PlatformFilterRow(modifier: Modifier = Modifier) {
-    val notTracked = stringResource(Res.string.flow_platform_not_tracked_cd)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-    ) {
+    Column(modifier = modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(Res.string.flow_platform_label),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Pill(text = stringResource(Res.string.flow_platform_all), variant = PillVariant.NavActive)
+        }
+        Spacer(Modifier.height(4.dp))
         Text(
-            stringResource(Res.string.flow_platform_label),
-            style = MaterialTheme.typography.bodyMedium,
+            stringResource(Res.string.flow_platform_unavailable_caption),
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Pill(text = stringResource(Res.string.flow_platform_all), variant = PillVariant.NavActive)
-        Pill(
-            text = stringResource(Res.string.flow_platform_android),
-            variant = PillVariant.Neutral,
-            modifier = Modifier.semantics { contentDescription = notTracked },
-        )
-        Pill(
-            text = stringResource(Res.string.flow_platform_ios),
-            variant = PillVariant.Neutral,
-            modifier = Modifier.semantics { contentDescription = notTracked },
-        )
-        Pill(
-            text = stringResource(Res.string.flow_platform_web),
-            variant = PillVariant.Neutral,
-            modifier = Modifier.semantics { contentDescription = notTracked },
         )
     }
 }
