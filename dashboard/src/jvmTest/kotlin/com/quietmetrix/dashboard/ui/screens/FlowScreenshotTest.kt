@@ -15,7 +15,10 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.api.AggregatesResponse
+import com.quietmetrix.dashboard.api.BreakdownItem
 import com.quietmetrix.dashboard.api.Transition
+import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.testutil.assertMatchesGolden
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
 import com.quietmetrix.dashboard.theme.ThemeMode
@@ -49,6 +52,16 @@ import kotlin.test.assertEquals
  * column/bar/exit-row layout, scoped down per `FlowPathLogic.kt`'s top-of-file data-honesty KDoc:
  * each column reports its screen's own real outgoing-transition total, never a fabricated
  * cross-hop "people" figure.
+ *
+ * **3-card row region** (`flow/cards-*.png`, Task 23): real-crop derivation checked and REJECTED
+ * — this row sits below the breadcrumb, which `breadcrumbEmptyMatchesGolden`'s own Notes entry
+ * above already established is entirely covered by the Ask-drawer overlay and "MOCKUP ONLY"
+ * toolbar strip in `_source/05-flow-normal.png` (909x540; the row would sit even lower, well past
+ * both). Derived instead from the design prototype's own spec text (design handoff README > Flow:
+ * "3-card row — Countries (bar list), Platforms (3 stat tiles + top OS versions), Device types
+ * (phone/tablet/desktop progress bars)") and the real [FlowBreakdownCardsSection] composable — see
+ * `FlowPathLogic.kt`'s Task 23 section KDoc for the data-honesty investigation behind what's real
+ * (platforms) vs. honestly empty (countries, device types) vs. honestly omitted (OS versions).
  */
 @OptIn(ExperimentalTestApi::class)
 class FlowScreenshotTest {
@@ -113,6 +126,145 @@ class FlowScreenshotTest {
         }
         waitForIdle()
         onRoot().captureToImage().assertMatchesGolden("flow/breadcrumb-with-path.png")
+    }
+
+    // -- 3-card row (Task 23) -------------------------------------------------------------
+
+    private val sizeClass = WindowSizeClass.Expanded
+
+    // Platforms real (totalsByPlatform is a tracked counter dimension); countries/deviceClasses
+    // populated here only to exercise the bar-list/progress-bar rendering path itself — see this
+    // class's KDoc and `FlowPathLogic.kt`'s Task 23 section KDoc for why both are always `[]` in
+    // every real deployment today.
+    private val loadedCardsAgg = AggregatesResponse(
+        platforms = listOf(BreakdownItem("android", 540), BreakdownItem("ios", 380), BreakdownItem("web", 80)),
+        countries = listOf(BreakdownItem("Spain", 410), BreakdownItem("Mexico", 180), BreakdownItem("Argentina", 110)),
+        deviceClasses = listOf(BreakdownItem("phone", 720), BreakdownItem("tablet", 150), BreakdownItem("desktop", 90)),
+    )
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun cardsNormalStateMatchesGolden() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FlowBreakdownCardsSection(
+                        agg = loadedCardsAgg,
+                        loading = false,
+                        sizeClass = sizeClass,
+                        modifier = Modifier.width(960.dp),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onRoot().captureToImage().assertMatchesGolden("flow/cards-normal.png")
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun cardsLoadingStateMatchesGolden() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FlowBreakdownCardsSection(
+                        agg = null,
+                        loading = true,
+                        sizeClass = sizeClass,
+                        modifier = Modifier.width(960.dp),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onRoot().captureToImage().assertMatchesGolden("flow/cards-loading.png")
+    }
+
+    // The real, honest state for every field today: AggregatesResponse() defaults countries/
+    // platforms/deviceClasses to emptyList(), so all 3 cards show EmptyState — not a hypothetical,
+    // this is what a real server's /aggregates response renders as right now (see this class's
+    // KDoc and FlowPathLogic.kt's Task 23 section KDoc).
+    @Suppress("DEPRECATION")
+    @Test
+    fun cardsEmptyStateMatchesGolden() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FlowBreakdownCardsSection(
+                        agg = AggregatesResponse(),
+                        loading = false,
+                        sizeClass = sizeClass,
+                        modifier = Modifier.width(960.dp),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onRoot().captureToImage().assertMatchesGolden("flow/cards-empty.png")
+    }
+
+    // Deliberately asserts against the SAME golden as cardsNormalStateMatchesGolden —
+    // FlowBreakdownCardsSection has no server-reachability awareness of its own, matching
+    // Overview's ScreensPlatformsCountriesSection/VitalsSection/DailyVolumeSection convention (the
+    // screen-level InlineErrorNotice this task added for DataSection.Aggregates is what surfaces
+    // the error; this row still renders whatever `agg` it was last given).
+    @Suppress("DEPRECATION")
+    @Test
+    fun cardsErrorsStateMatchesGolden() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FlowBreakdownCardsSection(
+                        agg = loadedCardsAgg,
+                        loading = false,
+                        sizeClass = sizeClass,
+                        modifier = Modifier.width(960.dp),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onRoot().captureToImage().assertMatchesGolden("flow/cards-normal.png")
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun platformsCardShowsAtMostThreeStatTilesAndTheOsVersionsCaption() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FlowBreakdownCardsSection(
+                        agg = loadedCardsAgg,
+                        loading = false,
+                        sizeClass = sizeClass,
+                        modifier = Modifier.width(960.dp),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onNodeWithText("android").assertExists()
+        onNodeWithText("ios").assertExists()
+        onNodeWithText("web").assertExists()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun deviceTypesCardShowsEmptyStateWhenDeviceClassesIsEmpty() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FlowBreakdownCardsSection(
+                        agg = AggregatesResponse(platforms = loadedCardsAgg.platforms),
+                        loading = false,
+                        sizeClass = sizeClass,
+                        modifier = Modifier.width(960.dp),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onNodeWithText("phone").assertDoesNotExist()
     }
 
     // -- behavioral coverage (not golden-gated) -----------------------------------------

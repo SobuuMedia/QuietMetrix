@@ -533,4 +533,7 @@
     <string name="flow_after_screen">After %1$s · %2$s transitions seen</string>
     <string name="flow_caption">💡 Click a screen to keep following. 👋 means they left the app.</string>
     <string name="flow_state_empty_path">Pick a screen above to see where people go next.</string>
+
+    <!-- Flow screen (Task 23): Countries/Platforms/Device types 3-card row -->
+    <string name="flow_os_versions_caption">OS version breakdown isn't tracked yet.</string>
 </resources>

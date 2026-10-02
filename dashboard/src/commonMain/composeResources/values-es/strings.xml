@@ -477,4 +477,7 @@
     <string name="flow_after_screen">Después de %1$s · %2$s transiciones vistas</string>
     <string name="flow_caption">💡 Haz clic en una pantalla para seguir el rastro. 👋 significa que salieron de la app.</string>
     <string name="flow_state_empty_path">Elige una pantalla arriba para ver a dónde van después.</string>
+
+    <!-- Flow screen (Task 23): Countries/Platforms/Device types 3-card row -->
+    <string name="flow_os_versions_caption">El desglose por versión de SO aún no se registra.</string>
 </resources>

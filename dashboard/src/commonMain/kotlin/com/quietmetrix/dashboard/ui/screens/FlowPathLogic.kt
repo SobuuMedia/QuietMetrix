@@ -1,5 +1,6 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import com.quietmetrix.dashboard.api.BreakdownItem
 import com.quietmetrix.dashboard.api.Transition
 
 // ---------------------------------------------------------------------------
@@ -138,3 +139,65 @@ fun buildFlowBreadcrumb(path: List<String>, transitions: List<Transition>): List
  * (to match the design's screenshot) but disabled.
  */
 fun filterTransitionsByPlatform(transitions: List<Transition>, platform: FlowPlatform): List<Transition> = transitions
+
+// ---------------------------------------------------------------------------
+// Task 23: Flow 3-card row (Countries/Platforms/Device types) — pure logic.
+//
+// **Data-honesty investigation.** `AggregatesResponse.countries`/`.platforms`/`.deviceClasses`
+// (api/Models.kt:155-157) are all `List<BreakdownItem>`, the same shape Overview's "What they
+// use"/"Where they are" cards already consume via [computeBreakdownRows] (`OverviewTopListsLogic.kt`).
+// Checking what each one actually carries server-side (servers/ktor/.../DashboardRoutes.kt:106-150,
+// mirrored in php-hosting/src/routes/dashboard.php):
+//  - **Platforms is real.** `platforms = counterRepo.totalsByPlatform(id, "event", ...)` — the
+//    `Counters` table's `platform` column (`persistence/Tables.kt`) is a real per-cell dimension
+//    every event counter carries, so this is genuine aggregate data, not a placeholder.
+//  - **Countries and device classes are NOT tracked, anywhere.** Both routes hard-code
+//    `countries = emptyList()` / `device_classes = emptyList()` — the Ktor comment is explicit:
+//    "countries/browsers/os/device_classes/languages are not tracked as counter dimensions yet, so
+//    those fields are empty rather than silently faked". The `Counters` table's only dimension
+//    columns are `platform`/`app_version`/`country` — `country` exists as a column but is never
+//    populated by any route — confirming this isn't a UI oversight, it's a real backend gap.
+//  - **"Top OS versions" has NO backing data at all, anywhere in the pipeline.** There is no
+//    `os_version` counter dimension, column, or `dims` key in any metric (`event`, `screen_transition`,
+//    `screen_dwell`, `session`, `value`, `friction`, `search`, `retention`, `activation`,
+//    `funnel_step`) — unlike countries/device-classes, which at least have an emptied-out response
+//    field reserved for them, OS version isn't modeled anywhere. [computePlatformStatTiles] below
+//    therefore only builds the 3 stat tiles; the "top OS versions" sub-list the design handoff
+//    README describes is honestly omitted — `FlowScreen.kt`'s Platforms card shows a plain caption
+//    disclosing this instead of rendering an empty or fabricated list.
+//
+// Consequence for the 3 cards (`FlowScreen.kt`): Countries and Device types both render their real
+// [computeBreakdownRows] output and fall back to the shared empty state when it's empty (true for
+// every real deployment today, since the backend always returns `[]` for both) — the bar-list/
+// progress-bar UI itself is still genuinely built against [BreakdownItem], ready for the day either
+// field is populated. Platforms is the one card with real content today.
+// ---------------------------------------------------------------------------
+
+/**
+ * The Flow "Platforms" card's 3 stat tiles (design handoff README > Flow: "Platforms (3 stat tiles
+ * + top OS versions)") — the top 3 real, non-zero platforms by count, reusing
+ * [computeBreakdownRows]'s ranking/ratio computation verbatim (same real `totalsByPlatform` data
+ * Overview's "What they use" card already uses). Never pads to 3 — fewer than 3 real platforms
+ * yields fewer tiles, same no-padding precedent as [computeWorthALookObservations]. See this file's
+ * section KDoc above for why "top OS versions" has no equivalent function: there is no real data to
+ * compute it from.
+ */
+fun computePlatformStatTiles(platforms: List<BreakdownItem>): List<BreakdownRow> =
+    computeBreakdownRows(platforms).take(3)
+
+/** Known device-class names (design handoff README > Flow: "Device types (phone/tablet/desktop)"),
+ *  lowercased, matching whatever casing a future real `device_classes` breakdown might use. */
+private val DEVICE_CLASS_EMOJI = mapOf(
+    "phone" to "📱",
+    "tablet" to "📟",
+    "desktop" to "🖥️",
+)
+
+/**
+ * Emoji glyph for one Device types progress-bar row (see this file's section KDoc: `deviceClasses`
+ * is always empty today, but the row UI is built against the real [BreakdownItem] shape for when it
+ * isn't). Matches [name] case-insensitively against the known phone/tablet/desktop classes the
+ * design calls out; any other value (including [BreakdownItem.displayName]'s `"(unknown)"`
+ * fallback) gets a generic glyph rather than a guessed one.
+ */
+fun deviceClassEmoji(name: String): String = DEVICE_CLASS_EMOJI[name.lowercase()] ?: "📦"

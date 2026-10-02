@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.FrictionScreenItem
 import com.quietmetrix.dashboard.api.SearchScreenItem
 import com.quietmetrix.dashboard.api.Transition
@@ -67,12 +69,15 @@ import com.quietmetrix.dashboard.resources.flow_path_arrow
 import com.quietmetrix.dashboard.resources.flow_path_label
 import com.quietmetrix.dashboard.resources.flow_platform_all
 import com.quietmetrix.dashboard.resources.flow_platform_label
+import com.quietmetrix.dashboard.resources.flow_os_versions_caption
 import com.quietmetrix.dashboard.resources.flow_platform_unavailable_caption
 import com.quietmetrix.dashboard.resources.flow_start_from_label
 import com.quietmetrix.dashboard.resources.flow_state_empty_path
 import com.quietmetrix.dashboard.resources.ic_flow
 import com.quietmetrix.dashboard.resources.ic_info
+import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.nav_flow
+import com.quietmetrix.dashboard.resources.state_no_data
 import com.quietmetrix.dashboard.resources.state_no_transitions
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
@@ -84,8 +89,7 @@ import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
-import com.quietmetrix.dashboard.ui.components.charts.DonutChart
-import com.quietmetrix.dashboard.ui.components.charts.DonutData
+import com.quietmetrix.dashboard.ui.components.SkeletonBox
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.table.Column
 import com.quietmetrix.dashboard.ui.components.table.DataTable
@@ -137,6 +141,12 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
             }
 
             state.sectionErrors[DataSection.Transitions]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
+            }
+            // Task 23: the 3-card row below now reads `state.aggregates` for real (Countries/
+            // Platforms/Device types), so an aggregates-fetch failure needs the same surfaced
+            // retry affordance Overview gives it, not just a silently-empty row.
+            state.sectionErrors[DataSection.Aggregates]?.let {
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
@@ -302,51 +312,233 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
                 }
             }
 
-            val agg2 = state.aggregates
-            ResponsiveRowOrColumn(sizeClass) {
-                Card(modifier = Modifier.fillSlot()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            stringResource(Res.string.card_countries),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        DonutChart(
-                            (agg2?.countries ?: emptyList()).map { DonutData(it.displayName, it.count.toFloat()) },
-                            sizeClass,
-                        )
-                    }
-                }
-                Card(modifier = Modifier.fillSlot()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            stringResource(Res.string.card_platforms),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        DonutChart(
-                            (agg2?.platforms ?: emptyList()).map { DonutData(it.displayName, it.count.toFloat()) },
-                            sizeClass,
-                        )
-                    }
-                }
+            FlowBreakdownCardsSection(
+                agg = state.aggregates,
+                loading = state.loading,
+                sizeClass = sizeClass,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task 23: Flow 3-card row — Countries (bar list), Platforms (3 stat tiles + top OS versions),
+// Device types (phone/tablet/desktop progress bars). See `FlowPathLogic.kt`'s Task 23 section KDoc
+// for the full data-honesty investigation: platforms is real (`totalsByPlatform`); countries and
+// device classes are real-shaped but always empty today (never tracked server-side); OS versions
+// have no backing data anywhere in the pipeline and are honestly omitted rather than built.
+//
+// Replaces the plain `DonutChart` treatment this row used since Task 22's Flow extraction (that
+// task's own KDoc deferred the literal bar-list/stat-tile/progress-bar spec to this task, matching
+// how Overview's hero/vitals/chart/top-lists were split across Tasks 18-21).
+// ---------------------------------------------------------------------------
+
+/**
+ * The Flow screen's 3-card row: real [AggregatesResponse.countries]/`.platforms`/`.deviceClasses`
+ * rendered with 3 distinct treatments per the design handoff (Countries = bar list, Platforms = 3
+ * stat tiles, Device types = progress bars) — see this file's section KDoc above. [loading] shows a
+ * skeleton per card, matching Overview's `ScreensPlatformsCountriesSection` convention; each card
+ * falls back to the shared [EmptyState] independently when its own list is empty (true for
+ * Countries/Device types in every real deployment today).
+ */
+@Composable
+internal fun FlowBreakdownCardsSection(
+    agg: AggregatesResponse?,
+    loading: Boolean,
+    sizeClass: WindowSizeClass,
+    modifier: Modifier = Modifier,
+) {
+    ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
+        if (loading) {
+            FlowCardSkeleton(Modifier.fillSlot())
+            FlowCardSkeleton(Modifier.fillSlot())
+            FlowCardSkeleton(Modifier.fillSlot())
+        } else {
+            FlowCountriesCard(agg, Modifier.fillSlot())
+            FlowPlatformsCard(agg, Modifier.fillSlot())
+            FlowDeviceTypesCard(agg, Modifier.fillSlot())
+        }
+    }
+}
+
+/** Countries card: a ranked bar list, identical row idiom to Overview's "Where they are" card
+ *  (same [computeBreakdownRows] data), reused here rather than re-invented — see this file's
+ *  section KDoc for why this is empty in every real deployment today. */
+@Composable
+private fun FlowCountriesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier) {
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                stringResource(Res.string.card_countries),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            val rows = computeBreakdownRows(agg?.countries.orEmpty())
+            if (rows.isEmpty()) {
+                EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+            } else {
+                rows.forEach { FlowBarListRow(it) }
             }
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.card_device_classes),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    DonutChart(
-                        (agg2?.deviceClasses ?: emptyList()).map { DonutData(it.displayName, it.count.toFloat()) },
-                        sizeClass,
-                    )
+        }
+    }
+}
+
+/** One row of the Countries bar list: name + share-of-total percent on one line, a lime
+ *  [FlowBar] sized to [BreakdownRow.barFraction] below it. */
+@Composable
+private fun FlowBarListRow(row: BreakdownRow) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(row.name, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                formatPercent(row.shareOfTotal),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        FlowBar(fraction = row.barFraction.toFloat(), color = LocalExtendedColors.current.lime)
+    }
+}
+
+/** Platforms card: up to 3 real stat tiles ([computePlatformStatTiles]) plus an honest caption
+ *  disclosing that "top OS versions" (design handoff README > Flow) has no real data anywhere in
+ *  the counter pipeline — see `FlowPathLogic.kt`'s Task 23 section KDoc. This is the one card of
+ *  the 3 with real content in every real deployment today (platform is a tracked dimension). */
+@Composable
+private fun FlowPlatformsCard(agg: AggregatesResponse?, modifier: Modifier = Modifier) {
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                stringResource(Res.string.card_platforms),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            val tiles = computePlatformStatTiles(agg?.platforms.orEmpty())
+            if (tiles.isEmpty()) {
+                EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    tiles.forEach { tile -> FlowPlatformStatTile(tile, Modifier.weight(1f)) }
                 }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    stringResource(Res.string.flow_os_versions_caption),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
+        }
+    }
+}
+
+/** One of the Platforms card's 3 stat tiles: a flat tonal [QmShapeTokens.chip]-shaped surface with
+ *  the platform name, its real count, and its share-of-total percent — a visually distinct unit
+ *  from the Countries/Device types bar rows, per the design handoff's 3 different treatments. */
+@Composable
+private fun FlowPlatformStatTile(row: BreakdownRow, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    Column(
+        modifier = modifier.background(extended.chipFill, QmShapeTokens.chip).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            row.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Text(formatCount(row.count), style = MaterialTheme.typography.titleMedium)
+        Text(
+            formatPercent(row.shareOfTotal),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Device types card: progress-bar rows ([computeBreakdownRows] over
+ *  [AggregatesResponse.deviceClasses]), each prefixed with [deviceClassEmoji] and laid out
+ *  inline (icon + name + bar + percent on one line) — deliberately a different row shape from
+ *  the Countries card's two-line bar-list rows, and a lavender fill instead of lime, so the 3
+ *  cards read as 3 distinct treatments rather than 3 copies of the same component. Empty in every
+ *  real deployment today — see this file's section KDoc. */
+@Composable
+private fun FlowDeviceTypesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier) {
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                stringResource(Res.string.card_device_classes),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            val rows = computeBreakdownRows(agg?.deviceClasses.orEmpty())
+            if (rows.isEmpty()) {
+                EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+            } else {
+                rows.forEach { FlowDeviceTypeRow(it) }
+            }
+        }
+    }
+}
+
+/** One Device types progress-bar row: emoji + name, the bar itself taking the remaining width,
+ *  then the percent — see [FlowDeviceTypesCard]'s KDoc for why this is a single-line layout
+ *  distinct from [FlowBarListRow]'s stacked one. */
+@Composable
+private fun FlowDeviceTypeRow(row: BreakdownRow) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(deviceClassEmoji(row.name), style = MaterialTheme.typography.bodyMedium)
+        Text(row.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(72.dp))
+        FlowBar(
+            fraction = row.barFraction.toFloat(),
+            color = LocalExtendedColors.current.lavender,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            formatPercent(row.shareOfTotal),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Thin horizontal bar: a subtle [ExtendedColors.chipFill] track + a solid [color] fill sized to
+ *  [fraction] (0f-1f) — the same "track + solid fill" idiom `OverviewScreen.kt`'s own `UsageBar`
+ *  uses (file-private there, so re-declared here rather than exposed across files), parameterized
+ *  on [color] so [FlowBarListRow] (lime) and [FlowDeviceTypeRow] (lavender) read as visually
+ *  distinct bars. */
+@Composable
+private fun FlowBar(fraction: Float, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    Box(modifier = modifier.fillMaxWidth().height(4.dp).background(extended.chipFill, RoundedCornerShape(2.dp))) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .height(4.dp)
+                .background(color, RoundedCornerShape(2.dp)),
+        )
+    }
+}
+
+/** Flat skeleton placeholder for one 3-card-row card while [AggregatesResponse] is loading — same
+ *  flat tonal-fill idiom as `OverviewScreen.kt`'s own `TopListSkeletonCard` (file-private there). */
+@Composable
+private fun FlowCardSkeleton(modifier: Modifier = Modifier) {
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SkeletonBox(Modifier.width(100.dp).height(16.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(14.dp))
         }
     }
 }

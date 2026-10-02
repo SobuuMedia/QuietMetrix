@@ -1,5 +1,6 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import com.quietmetrix.dashboard.api.BreakdownItem
 import com.quietmetrix.dashboard.api.Transition
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -121,5 +122,51 @@ class FlowPathLogicTest {
         FlowPlatform.entries.forEach { platform ->
             assertEquals(sample, filterTransitionsByPlatform(sample, platform))
         }
+    }
+
+    // -- computePlatformStatTiles (Task 23: Flow 3-card row) --------------------------------
+
+    @Test
+    fun computePlatformStatTilesRanksByCountDescending() {
+        val tiles = computePlatformStatTiles(listOf(BreakdownItem("ios", 38), BreakdownItem("android", 54), BreakdownItem("web", 8)))
+        assertEquals(listOf("android", "ios", "web"), tiles.map { it.name })
+    }
+
+    @Test
+    fun computePlatformStatTilesCapsAtThreeTilesButNeverPadsBelowThat() {
+        val fourPlatforms = listOf(
+            BreakdownItem("android", 100), BreakdownItem("ios", 80), BreakdownItem("web", 40), BreakdownItem("other", 10),
+        )
+        assertEquals(listOf("android", "ios", "web"), computePlatformStatTiles(fourPlatforms).map { it.name })
+
+        val onePlatform = listOf(BreakdownItem("android", 100))
+        assertEquals(listOf("android"), computePlatformStatTiles(onePlatform).map { it.name })
+    }
+
+    @Test
+    fun computePlatformStatTilesEmptyInputIsEmpty() {
+        assertEquals(emptyList(), computePlatformStatTiles(emptyList()))
+    }
+
+    @Test
+    fun computePlatformStatTilesFiltersZeroCountPlatforms() {
+        val tiles = computePlatformStatTiles(listOf(BreakdownItem("android", 54), BreakdownItem("web", 0)))
+        assertEquals(listOf("android"), tiles.map { it.name })
+    }
+
+    // -- deviceClassEmoji (Task 23: Flow 3-card row) -----------------------------------------
+
+    @Test
+    fun deviceClassEmojiMapsKnownClassesCaseInsensitively() {
+        assertEquals("📱", deviceClassEmoji("phone"))
+        assertEquals("📱", deviceClassEmoji("Phone"))
+        assertEquals("📟", deviceClassEmoji("tablet"))
+        assertEquals("🖥️", deviceClassEmoji("DESKTOP"))
+    }
+
+    @Test
+    fun deviceClassEmojiFallsBackToAGenericGlyphForAnUnrecognizedClass() {
+        assertEquals("📦", deviceClassEmoji("smart-tv"))
+        assertEquals("📦", deviceClassEmoji("(unknown)"))
     }
 }
