@@ -51,14 +51,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.AccessTokenDto
 import com.quietmetrix.dashboard.api.ApiProject
-import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.api.TimeRange
-import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatDateOnly
-import com.quietmetrix.dashboard.format.formatDuration
-import com.quietmetrix.dashboard.format.formatPercent
-import com.quietmetrix.dashboard.format.formatWilsonRange
-import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_close
@@ -68,14 +62,6 @@ import com.quietmetrix.dashboard.resources.action_regenerate
 import com.quietmetrix.dashboard.resources.api_key_label
 import com.quietmetrix.dashboard.resources.badge_demo
 import com.quietmetrix.dashboard.resources.badge_offline
-import com.quietmetrix.dashboard.resources.col_cohort
-import com.quietmetrix.dashboard.resources.col_cohort_size
-import com.quietmetrix.dashboard.resources.col_day1
-import com.quietmetrix.dashboard.resources.col_day14
-import com.quietmetrix.dashboard.resources.col_day3
-import com.quietmetrix.dashboard.resources.col_day30
-import com.quietmetrix.dashboard.resources.col_activation
-import com.quietmetrix.dashboard.resources.col_day7
 import com.quietmetrix.dashboard.resources.create_app_action
 import com.quietmetrix.dashboard.resources.create_project_button
 import com.quietmetrix.dashboard.resources.create_project_cancel
@@ -88,7 +74,6 @@ import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_plus
 import com.quietmetrix.dashboard.resources.ic_projects
 import com.quietmetrix.dashboard.resources.ic_refresh
-import com.quietmetrix.dashboard.resources.ic_retention
 import com.quietmetrix.dashboard.resources.ic_search
 import com.quietmetrix.dashboard.resources.invite_link_body
 import com.quietmetrix.dashboard.resources.invite_link_title
@@ -125,7 +110,6 @@ import com.quietmetrix.dashboard.resources.snackbar_api_key_copied
 import com.quietmetrix.dashboard.resources.snackbar_invite_link_copied
 import com.quietmetrix.dashboard.resources.snackbar_token_copied
 import com.quietmetrix.dashboard.resources.state_no_projects
-import com.quietmetrix.dashboard.resources.state_no_retention
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.tab_info_flow
 import com.quietmetrix.dashboard.resources.tab_info_experiments
@@ -156,28 +140,19 @@ import com.quietmetrix.dashboard.resources.tokens_scope_read_analytics
 import com.quietmetrix.dashboard.resources.tokens_scope_read_analytics_hint
 import com.quietmetrix.dashboard.resources.tokens_scope_read_projects
 import com.quietmetrix.dashboard.resources.tokens_title
-import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.LocalThemeMode
 import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.ThemeMode
 import com.quietmetrix.dashboard.ui.components.ContentState
 import com.quietmetrix.dashboard.ui.components.EmptyState
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
-import com.quietmetrix.dashboard.ui.components.table.Column
-import com.quietmetrix.dashboard.ui.components.table.DataTable
-import com.quietmetrix.dashboard.ui.components.table.SortColumn
-import com.quietmetrix.dashboard.ui.components.table.filterItems
-import com.quietmetrix.dashboard.ui.components.table.paginate
-import com.quietmetrix.dashboard.ui.components.table.screenLabel
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import com.quietmetrix.dashboard.viewmodel.DataSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -199,7 +174,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
         when (state.activeDestination) {
             AppTab.Overview  -> OverviewScreen(viewModel, state, sizeClass)
             AppTab.Flow      -> FlowScreen(viewModel, state, sizeClass)
-            AppTab.Retention -> RetentionTab(viewModel, state, sizeClass)
+            AppTab.Retention -> RetentionScreen(viewModel, state, sizeClass)
             AppTab.Projects  -> ProjectsTab(viewModel, state, sizeClass)
             AppTab.Funnels   -> FunnelsTab(viewModel, state, sizeClass)
             AppTab.Experiments -> ExperimentsTab(viewModel, state, sizeClass)
@@ -424,116 +399,6 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
             },
         )
     }
-}
-
-// ---------------------------------------------------------------------------
-// Retention tab
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun RetentionTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Retention) },
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.tab_info_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            state.sectionErrors[DataSection.Retention]?.let {
-                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
-            }
-
-            val cohorts = state.retention?.cohorts ?: emptyList()
-            if (cohorts.isEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    EmptyState(Res.drawable.ic_retention, Res.string.state_no_retention, Modifier.padding(16.dp))
-                }
-            } else {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        DataTable(
-                            columns = listOf(
-                                Column<RetentionCohort>(
-                                    title = stringResource(Res.string.col_cohort),
-                                    weight = 1f,
-                                    cell = { c -> Text(c.cohortDate, style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.cohortDate },
-                                ),
-                                Column<RetentionCohort>(
-                                    title = stringResource(Res.string.col_cohort_size),
-                                    weight = 0.6f,
-                                    cell = { c -> Text(formatCount(c.size.toLong()), style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.size },
-                                ),
-                                retentionDayColumn(stringResource(Res.string.col_day1)) { it.day1 },
-                                retentionDayColumn(stringResource(Res.string.col_day3)) { it.day3 },
-                                retentionDayColumn(stringResource(Res.string.col_day7)) { it.day7 },
-                                retentionDayColumn(stringResource(Res.string.col_day14)) { it.day14 },
-                                retentionDayColumn(stringResource(Res.string.col_day30)) { it.day30 },
-                                retentionDayColumn(stringResource(Res.string.col_activation)) { it.activationRate },
-                            ),
-                            rows = cohorts,
-                            sizeClass = sizeClass,
-                            initialSort = SortColumn(0, ascending = false),
-                            rowKey = { it.cohortDate },
-                            modifier = Modifier.heightIn(max = 500.dp).fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * One day-N retention column: the observed percentage, with its Wilson score interval shown
- * as a smaller range underneath — the honest-error-bars default every rate in this dashboard
- * is shown with (see [wilsonInterval]'s doc comment). Null (not yet observable at this cohort's
- * age) renders as [value_none]; a zero-size cohort has no interval to show either.
- */
-@Composable
-private fun retentionDayColumn(title: String, dayValue: (RetentionCohort) -> Double?): Column<RetentionCohort> {
-    val none = stringResource(Res.string.value_none)
-    return Column(
-        title = title,
-        weight = 0.9f,
-        cell = { c ->
-            val fraction = dayValue(c)
-            if (fraction == null || c.size <= 0) {
-                Text(none, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                val successes = kotlin.math.round(fraction * c.size).toLong()
-                val interval = wilsonInterval(successes, c.size.toLong())
-                Column {
-                    Text(formatPercent(fraction), style = MaterialTheme.typography.bodyMedium)
-                    if (interval != null) {
-                        Text(
-                            formatWilsonRange(interval),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        },
-        sortSelector = { dayValue(it) },
-    )
 }
 
 // ---------------------------------------------------------------------------

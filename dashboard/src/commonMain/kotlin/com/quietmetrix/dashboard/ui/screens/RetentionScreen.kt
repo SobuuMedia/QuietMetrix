@@ -1,0 +1,425 @@
+package com.quietmetrix.dashboard.ui.screens
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import com.quietmetrix.dashboard.api.RetentionCohort
+import com.quietmetrix.dashboard.format.formatCount
+import com.quietmetrix.dashboard.format.formatPercent
+import com.quietmetrix.dashboard.format.formatWilsonRange
+import com.quietmetrix.dashboard.format.wilsonInterval
+import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.col_activation
+import com.quietmetrix.dashboard.resources.col_cohort
+import com.quietmetrix.dashboard.resources.col_cohort_size
+import com.quietmetrix.dashboard.resources.col_day1
+import com.quietmetrix.dashboard.resources.col_day14
+import com.quietmetrix.dashboard.resources.col_day3
+import com.quietmetrix.dashboard.resources.col_day30
+import com.quietmetrix.dashboard.resources.col_day7
+import com.quietmetrix.dashboard.resources.ic_info
+import com.quietmetrix.dashboard.resources.ic_retention
+import com.quietmetrix.dashboard.resources.nav_retention
+import com.quietmetrix.dashboard.resources.retention_card_caption_day1
+import com.quietmetrix.dashboard.resources.retention_card_caption_day30
+import com.quietmetrix.dashboard.resources.retention_card_caption_day7
+import com.quietmetrix.dashboard.resources.retention_card_day1_label
+import com.quietmetrix.dashboard.resources.retention_card_day30_label
+import com.quietmetrix.dashboard.resources.retention_card_day7_label
+import com.quietmetrix.dashboard.resources.retention_card_too_early
+import com.quietmetrix.dashboard.resources.retention_dot_empty_content_description
+import com.quietmetrix.dashboard.resources.retention_dot_filled_content_description
+import com.quietmetrix.dashboard.resources.retention_dot_filled_emoji
+import com.quietmetrix.dashboard.resources.retention_eyebrow_emoji
+import com.quietmetrix.dashboard.resources.retention_h1_day1_highlight
+import com.quietmetrix.dashboard.resources.retention_h1_day1_only_tail
+import com.quietmetrix.dashboard.resources.retention_h1_day7_highlight
+import com.quietmetrix.dashboard.resources.retention_h1_day7_only_lead
+import com.quietmetrix.dashboard.resources.retention_h1_lead
+import com.quietmetrix.dashboard.resources.retention_h1_mid
+import com.quietmetrix.dashboard.resources.retention_h1_not_enough_data
+import com.quietmetrix.dashboard.resources.retention_h1_tail
+import com.quietmetrix.dashboard.resources.state_no_retention
+import com.quietmetrix.dashboard.resources.tab_info_content_description
+import com.quietmetrix.dashboard.resources.value_none
+import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.ui.components.EmptyState
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
+import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
+import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
+import com.quietmetrix.dashboard.ui.components.handCursor
+import com.quietmetrix.dashboard.ui.components.table.Column
+import com.quietmetrix.dashboard.ui.components.table.DataTable
+import com.quietmetrix.dashboard.ui.components.table.SortColumn
+import com.quietmetrix.dashboard.viewmodel.DashboardState
+import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+import com.quietmetrix.dashboard.nav.NavDestination as AppTab
+
+// ---------------------------------------------------------------------------
+// Retention screen (Task 24: extracted from DashboardScreen.kt's old inline
+// RetentionTab, plus a new H1 headline + 3 vital cards with a 10-dot grid —
+// see RetentionLogic.kt for the pure day1/day7/day30 selection and dot-count
+// math this screen renders).
+// ---------------------------------------------------------------------------
+
+/**
+ * The Retention screen: header (project picker + info), the plain-language D1/D7 headline, the
+ * 3 vital cards (Next day / After a week / After a month), and the existing per-cohort data table
+ * (the cohort heatmap replacing this table is Task 25's scope, not this one's).
+ */
+@Composable
+internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
+    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
+                IconButton(
+                    onClick = { viewModel.showTabInfo(AppTab.Retention) },
+                    modifier = Modifier.handCursor(),
+                ) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_info),
+                        contentDescription = stringResource(Res.string.tab_info_content_description),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            state.sectionErrors[DataSection.Retention]?.let {
+                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
+            }
+
+            val cohorts = state.retention?.cohorts ?: emptyList()
+            if (cohorts.isEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    EmptyState(Res.drawable.ic_retention, Res.string.state_no_retention, Modifier.padding(16.dp))
+                }
+            } else {
+                val vitals = computeRetentionVitals(state.retention)
+                RetentionHero(vitals)
+                RetentionVitalCardsRow(vitals, sizeClass)
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        DataTable(
+                            columns = listOf(
+                                Column<RetentionCohort>(
+                                    title = stringResource(Res.string.col_cohort),
+                                    weight = 1f,
+                                    cell = { c -> Text(c.cohortDate, style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.cohortDate },
+                                ),
+                                Column<RetentionCohort>(
+                                    title = stringResource(Res.string.col_cohort_size),
+                                    weight = 0.6f,
+                                    cell = { c -> Text(formatCount(c.size.toLong()), style = MaterialTheme.typography.bodyMedium) },
+                                    sortSelector = { it.size },
+                                ),
+                                retentionDayColumn(stringResource(Res.string.col_day1)) { it.day1 },
+                                retentionDayColumn(stringResource(Res.string.col_day3)) { it.day3 },
+                                retentionDayColumn(stringResource(Res.string.col_day7)) { it.day7 },
+                                retentionDayColumn(stringResource(Res.string.col_day14)) { it.day14 },
+                                retentionDayColumn(stringResource(Res.string.col_day30)) { it.day30 },
+                                retentionDayColumn(stringResource(Res.string.col_activation)) { it.activationRate },
+                            ),
+                            rows = cohorts,
+                            sizeClass = sizeClass,
+                            initialSort = SortColumn(0, ascending = false),
+                            rowKey = { it.cohortDate },
+                            modifier = Modifier.heightIn(max = 500.dp).fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One day-N retention column: the observed percentage, with its Wilson score interval shown
+ * as a smaller range underneath — the honest-error-bars default every rate in this dashboard
+ * is shown with (see [wilsonInterval]'s doc comment). Null (not yet observable at this cohort's
+ * age) renders as [value_none]; a zero-size cohort has no interval to show either.
+ */
+@Composable
+private fun retentionDayColumn(title: String, dayValue: (RetentionCohort) -> Double?): Column<RetentionCohort> {
+    val none = stringResource(Res.string.value_none)
+    return Column(
+        title = title,
+        weight = 0.9f,
+        cell = { c ->
+            val fraction = dayValue(c)
+            if (fraction == null || c.size <= 0) {
+                Text(none, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                val successes = kotlin.math.round(fraction * c.size).toLong()
+                val interval = wilsonInterval(successes, c.size.toLong())
+                Column {
+                    Text(formatPercent(fraction), style = MaterialTheme.typography.bodyMedium)
+                    if (interval != null) {
+                        Text(
+                            formatWilsonRange(interval),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        sortSelector = { dayValue(it) },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Headline (H1) — Task 24
+// ---------------------------------------------------------------------------
+
+/**
+ * The "🔁 Retention" eyebrow + the plain-language D1/D7 headline sentence, with the two live
+ * numbers lime-highlighted (design handoff: "H1 states the D1/D7 headline in plain words with a
+ * lime highlight"; `QuietMetrix Prototype.dc.html:243`'s literal markup: "Out of 10 new people,
+ * **4 come back** the next day and 2 are still around a week later."). Both numbers are the same
+ * out-of-10 dot count [RetentionVitalCardsRow]'s cards render below — reusing [dotCountForFraction]
+ * rather than a second, independent rounding keeps the headline and the cards from ever disagreeing
+ * about what "4 come back" means.
+ *
+ * Falls back honestly ([retentionHeadlineKind]) when Day-1 and/or Day-7 haven't been observed by
+ * any cohort yet, rather than fabricating a number — see [RetentionVitals]'s KDoc for why that's a
+ * genuinely possible state (a very young project) rather than a product-config gap.
+ */
+@Composable
+internal fun RetentionHero(vitals: RetentionVitals, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val lime = SpanStyle(background = extended.lime, color = extended.onLime)
+
+    val lead = stringResource(Res.string.retention_h1_lead)
+    val mid = stringResource(Res.string.retention_h1_mid)
+    val tail = stringResource(Res.string.retention_h1_tail)
+    val day1OnlyTail = stringResource(Res.string.retention_h1_day1_only_tail)
+    val day7OnlyLead = stringResource(Res.string.retention_h1_day7_only_lead)
+    val notEnoughData = stringResource(Res.string.retention_h1_not_enough_data)
+    val day1Highlight = vitals.day1?.let { stringResource(Res.string.retention_h1_day1_highlight, dotCountForFraction(it)) }
+    val day7Highlight = vitals.day7?.let { stringResource(Res.string.retention_h1_day7_highlight, dotCountForFraction(it)) }
+
+    Column(modifier = modifier) {
+        Text(
+            stringResource(Res.string.retention_eyebrow_emoji) + " " + stringResource(Res.string.nav_retention),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val sentence = buildAnnotatedString {
+            when (retentionHeadlineKind(vitals.day1, vitals.day7)) {
+                RetentionHeadlineKind.Both -> {
+                    append(lead)
+                    withStyle(lime) { append(day1Highlight!!) }
+                    append(" ")
+                    append(mid)
+                    withStyle(lime) { append(day7Highlight!!) }
+                    append(tail)
+                }
+                RetentionHeadlineKind.Day1Only -> {
+                    append(lead)
+                    withStyle(lime) { append(day1Highlight!!) }
+                    append(day1OnlyTail)
+                }
+                RetentionHeadlineKind.Day7Only -> {
+                    append(day7OnlyLead)
+                    withStyle(lime) { append(day7Highlight!!) }
+                    append(tail)
+                }
+                RetentionHeadlineKind.NotEnoughData -> append(notEnoughData)
+            }
+        }
+        Text(sentence, style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onBackground)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 3 vital cards — Task 24
+// ---------------------------------------------------------------------------
+
+/**
+ * The "Next day / After a week / After a month" 3-card row (design handoff: "3 cards ... a 10-dot
+ * 'people' grid (🙂 filled vs dashed empty), big %, one-line caption. Clickable → drill drawer"),
+ * one card per [RetentionVitals] field.
+ */
+@Composable
+internal fun RetentionVitalCardsRow(vitals: RetentionVitals, sizeClass: WindowSizeClass, modifier: Modifier = Modifier) {
+    ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
+        RetentionVitalCard(
+            label = stringResource(Res.string.retention_card_day1_label),
+            fraction = vitals.day1,
+            captionRes = Res.string.retention_card_caption_day1,
+            modifier = Modifier.fillSlot(),
+        )
+        RetentionVitalCard(
+            label = stringResource(Res.string.retention_card_day7_label),
+            fraction = vitals.day7,
+            captionRes = Res.string.retention_card_caption_day7,
+            modifier = Modifier.fillSlot(),
+        )
+        RetentionVitalCard(
+            label = stringResource(Res.string.retention_card_day30_label),
+            fraction = vitals.day30,
+            captionRes = Res.string.retention_card_caption_day30,
+            modifier = Modifier.fillSlot(),
+        )
+    }
+}
+
+/**
+ * Fraction [RetentionVitalCard]'s container color is blended towards white while hovered — same
+ * value and rationale as [KpiCard]'s own `HOVER_BRIGHTEN_FRACTION`, duplicated here (rather than
+ * exposed across files) so this file stays self-contained, matching this codebase's standing
+ * per-file-duplication convention for small shared constants (see `OverviewVitalsLogic.kt`'s
+ * `sessionMomentumFrom` KDoc for the same reasoning applied to logic instead of styling).
+ */
+private const val HOVER_BRIGHTEN_FRACTION = 0.12f
+
+/** Scale applied to a [RetentionVitalCard] while pressed — same value as [KpiCard]'s `PRESS_SCALE`. */
+private const val PRESS_SCALE = 0.97f
+
+/** Elevation a [RetentionVitalCard] gains while hovered — same value as [KpiCard]'s `HOVER_ELEVATION`. */
+private val HOVER_ELEVATION = 12.dp
+
+/**
+ * One vital card: label, big percentage, a 10-dot "people" grid, and a one-line caption — or, when
+ * [fraction] is null, an honest "too early to tell" placeholder instead of a fabricated 0%
+ * (see [RetentionVitals]'s KDoc: null here means no cohort has reached this age yet, not that the
+ * metric is unconfigured).
+ *
+ * Clickable per the design handoff ("Clickable → drill drawer"), reusing [KpiCard]'s hover/press
+ * idiom (brighten-on-hover, scale-on-press, Material3-owned elevation — see that function's KDoc
+ * for the full rationale, including why elevation is left to `Card` itself rather than a second
+ * manual animation) rather than inventing a new one. The click handler itself is a stub — same
+ * "stub now, wire for real later" convention [OverviewHeroNormal]'s "Tell me more"/"Copy" actions
+ * already established — since the real drill-down drawer is Task 41's scope, not this one's.
+ */
+@Composable
+private fun RetentionVitalCard(
+    label: String,
+    fraction: Double?,
+    captionRes: StringResource,
+    modifier: Modifier = Modifier,
+) {
+    val extended = LocalExtendedColors.current
+    val shape = MaterialTheme.shapes.extraLarge
+    val border = BorderStroke(1.dp, extended.hairline)
+    val tooEarly = stringResource(Res.string.retention_card_too_early)
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val scale by animateFloatAsState(if (pressed) PRESS_SCALE else 1f, label = "retentionCardScale")
+    val baseContainer = MaterialTheme.colorScheme.surface
+    val containerColor by animateColorAsState(
+        if (hovered) lerp(baseContainer, Color.White, HOVER_BRIGHTEN_FRACTION) else baseContainer,
+        label = "retentionCardBrighten",
+    )
+
+    Card(
+        onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+        modifier = modifier.graphicsLayer(scaleX = scale, scaleY = scale).handCursor(),
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, hoveredElevation = HOVER_ELEVATION, pressedElevation = 0.dp),
+        border = border,
+        interactionSource = interactionSource,
+    ) {
+        Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            if (fraction != null) {
+                Text(formatPercent(fraction), style = MaterialTheme.typography.displaySmall)
+                val filled = dotCountForFraction(fraction)
+                RetentionDotGrid(filled)
+                Text(
+                    stringResource(captionRes, filled),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(stringResource(Res.string.value_none), style = MaterialTheme.typography.displaySmall)
+                Text(tooEarly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/**
+ * A row of [totalDots] "person" dots, [filledCount] of them lime-filled (🙂), the rest a dashed
+ * outline — the design handoff's literal per-dot styling (`QuietMetrix Prototype.dc.html:1092`'s
+ * `dots(n)` helper: filled = lime circle + 🙂, empty = transparent + dashed border). Each dot
+ * carries its own accessible content description rather than relying on sighted-only color/face.
+ */
+@Composable
+private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    val filledFace = stringResource(Res.string.retention_dot_filled_emoji)
+    val filledCd = stringResource(Res.string.retention_dot_filled_content_description)
+    val emptyCd = stringResource(Res.string.retention_dot_empty_content_description)
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        repeat(totalDots) { i ->
+            val isFilled = i < filledCount
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .let {
+                        if (isFilled) it.background(extended.lime, CircleShape)
+                        else it.border(2.dp, extended.hairline, CircleShape)
+                    }
+                    .semantics { contentDescription = if (isFilled) filledCd else emptyCd },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isFilled) Text(filledFace, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}

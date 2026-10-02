@@ -480,4 +480,25 @@
 
     <!-- Flow screen (Task 23): Countries/Platforms/Device types 3-card row -->
     <string name="flow_os_versions_caption">El desglose por versión de SO aún no se registra.</string>
+
+    <!-- Retention screen (Task 24): H1 + 3 vital cards with a 10-dot "people" grid -->
+    <string name="retention_eyebrow_emoji">🔁</string>
+    <string name="retention_h1_lead">De cada 10 personas nuevas, </string>
+    <string name="retention_h1_day1_highlight">%1$d vuelven</string>
+    <string name="retention_h1_mid">al día siguiente y </string>
+    <string name="retention_h1_day7_highlight">%1$d siguen ahí</string>
+    <string name="retention_h1_day1_only_tail"> al día siguiente.</string>
+    <string name="retention_h1_day7_only_lead">De cada 10 personas nuevas, </string>
+    <string name="retention_h1_tail"> una semana después.</string>
+    <string name="retention_h1_not_enough_data">Todavía no hay datos suficientes para contar tu historia de retención — vuelve cuando la gente haya tenido tiempo de regresar.</string>
+    <string name="retention_card_day1_label">🌅 Al día siguiente</string>
+    <string name="retention_card_day7_label">📅 Después de una semana</string>
+    <string name="retention_card_day30_label">🗓️ Después de un mes</string>
+    <string name="retention_card_caption_day1">%1$d de cada 10 la abrieron de nuevo al día siguiente de instalarla.</string>
+    <string name="retention_card_caption_day7">%1$d de cada 10 siguen ahí 7 días después.</string>
+    <string name="retention_card_caption_day30">%1$d de cada 10 siguen ahí 30 días después.</string>
+    <string name="retention_card_too_early">⏳ Aún es pronto — ninguna cohorte ha llegado a esta edad todavía.</string>
+    <string name="retention_dot_filled_emoji">🙂</string>
+    <string name="retention_dot_filled_content_description">Volvió</string>
+    <string name="retention_dot_empty_content_description">No volvió (todavía)</string>
 </resources>

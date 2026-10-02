@@ -536,4 +536,25 @@
 
     <!-- Flow screen (Task 23): Countries/Platforms/Device types 3-card row -->
     <string name="flow_os_versions_caption">OS version breakdown isn't tracked yet.</string>
+
+    <!-- Retention screen (Task 24): H1 + 3 vital cards with a 10-dot "people" grid -->
+    <string name="retention_eyebrow_emoji">🔁</string>
+    <string name="retention_h1_lead">Out of 10 new people, </string>
+    <string name="retention_h1_day1_highlight">%1$d come back</string>
+    <string name="retention_h1_mid">the next day and </string>
+    <string name="retention_h1_day7_highlight">%1$d are still around</string>
+    <string name="retention_h1_day1_only_tail"> the next day.</string>
+    <string name="retention_h1_day7_only_lead">Out of 10 new people, </string>
+    <string name="retention_h1_tail"> a week later.</string>
+    <string name="retention_h1_not_enough_data">Not enough data yet to tell your retention story — check back once people have had time to come back.</string>
+    <string name="retention_card_day1_label">🌅 Next day</string>
+    <string name="retention_card_day7_label">📅 After a week</string>
+    <string name="retention_card_day30_label">🗓️ After a month</string>
+    <string name="retention_card_caption_day1">%1$d in 10 opened it again the day after installing.</string>
+    <string name="retention_card_caption_day7">%1$d in 10 are still around 7 days later.</string>
+    <string name="retention_card_caption_day30">%1$d in 10 are still around 30 days later.</string>
+    <string name="retention_card_too_early">⏳ Too early to tell — no cohort has reached this age yet.</string>
+    <string name="retention_dot_filled_emoji">🙂</string>
+    <string name="retention_dot_filled_content_description">Came back</string>
+    <string name="retention_dot_empty_content_description">Didn't come back (yet)</string>
 </resources>
