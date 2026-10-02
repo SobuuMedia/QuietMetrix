@@ -377,4 +377,34 @@
     <string name="header_progress_bar_cd">Cargando</string>
     <string name="header_server_unreachable_message">No podemos conectar con tu servidor de QuietMetrix.</string>
     <string name="action_try_again">Intentar de nuevo</string>
+
+    <!-- Overview hero + privacy card (Task 18) -->
+    <string name="overview_hero_greeting">👋 Hola, equipo de %1$s. Aquí tienes tu resumen de %2$s.</string>
+    <string name="overview_hero_people">%1$s personas</string>
+    <string name="overview_hero_opened">abrieron %1$s</string>
+    <string name="overview_hero_more">más</string>
+    <string name="overview_hero_fewer">menos</string>
+    <string name="overview_hero_change">%1$d% %2$s</string>
+    <string name="overview_hero_than_before">que antes.</string>
+    <string name="overview_hero_tail_standout">Gran parte fue %1$s.</string>
+    <string name="overview_hero_tail_generic">Atento a lo que venga a continuación.</string>
+    <string name="overview_hero_ai_chip">✨ Escrito por IA a partir de tus datos</string>
+    <string name="overview_hero_tell_me_more">Cuéntame más</string>
+    <string name="overview_hero_copy">⧉ Copiar</string>
+    <string name="overview_hero_loading">🧮 Contando a tus usuarios…</string>
+    <string name="overview_empty_greeting">👋 Bienvenido a %1$s</string>
+    <string name="overview_empty_headline_lead">Aún no hay datos. Vamos a registrar tu</string>
+    <string name="overview_empty_headline_highlight">primer evento</string>
+    <string name="overview_empty_headline_tail">en unos 5 minutos.</string>
+    <string name="overview_error_headline">Aquí tienes tus números de %1$s.</string>
+    <string name="overview_error_ai_nap_title">El resumen de la IA está descansando</string>
+    <string name="overview_error_ai_nap_body">No pudimos escribir el resumen de esta semana porque el modelo de IA no respondió. Tus datos de abajo no se han visto afectados.</string>
+    <string name="overview_privacy_title">Revisión de privacidad: todo en orden</string>
+    <string name="overview_privacy_body">0 datos personales almacenados. Sin cookies, sin IDs de publicidad, sin huellas digitales. Tus usuarios permanecen anónimos.</string>
+    <string name="overview_privacy_gdpr_chip">RGPD ✓</string>
+    <string name="overview_privacy_no_banner_chip">No necesita aviso de cookies</string>
+    <string name="overview_privacy_info_cd">¿Qué significa esta revisión de privacidad?</string>
+    <string name="overview_privacy_lock_emoji">🔒</string>
+    <string name="overview_privacy_info_glyph">ⓘ</string>
+    <string name="overview_error_ai_nap_emoji">😴</string>
 </resources>
