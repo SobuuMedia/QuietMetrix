@@ -106,6 +106,12 @@ data class DashboardState(
     /** The single bottom-center toast currently showing, or null. Set by [DashboardViewModel.showToast],
      *  cleared by [DashboardViewModel.dismissToast] or its own ~5s auto-dismiss timer. */
     val toast: Toast? = null,
+    /** Ids of "Worth a look" observations ([com.quietmetrix.dashboard.ui.screens.WorthALookObservation.id])
+     *  the user has dismissed or snoozed this session — set by [DashboardViewModel.hideWorthALook],
+     *  cleared by that same call's undo toast action. Session-only (matches the design handoff's
+     *  State Management section: `dismissed: array of dismissed "worth a look" ids`), not
+     *  persisted — there is no server-side endpoint for it. */
+    val dismissedWorthALookIds: Set<String> = emptySet(),
 ) {
     /** Global role of the signed-in user. */
     val role: String? get() = user?.role
@@ -914,5 +920,39 @@ class DashboardViewModel(
         toastDismissJob?.cancel()
         toastDismissJob = null
         _state.update { it.copy(toast = null) }
+    }
+
+    // ---- "Worth a look" dismiss/snooze (Task 21) ----
+
+    /**
+     * Hides the "Worth a look" card [id] immediately and shows an undo toast through the SAME
+     * [showToast] queue every other toast on this screen uses (design_handoff_dashboard_redesign/
+     * README.md > Interactions & Behavior > "Dismiss/snooze": "both remove a 'Worth a look' card
+     * immediately and show an undo toast for ~5s") — no separate/ad-hoc hide mechanism.
+     *
+     * [snooze] only changes the toast's copy/emoji (💤 "Snoozed until tomorrow." vs. 👋 "Hidden.")
+     * — mirroring the design prototype's own `hide(w, snooze)`, where both branches do the exact
+     * same state change and only the toast differs. There is no actual "come back tomorrow" timer:
+     * [id] simply stays out of [DashboardState.dismissedWorthALookIds] once undone, or for the
+     * rest of this session if it isn't.
+     */
+    fun hideWorthALook(id: String, snooze: Boolean) {
+        _state.update { it.copy(dismissedWorthALookIds = it.dismissedWorthALookIds + id) }
+        showToast(
+            Toast(
+                emoji = if (snooze) "💤" else "👋",
+                title = if (snooze) "Snoozed until tomorrow." else "Hidden.",
+                body = if (snooze) "It comes back if it's still true." else "You won't see this one again.",
+                actionLabel = "Undo",
+                action = { undoHideWorthALook(id) },
+            ),
+        )
+    }
+
+    /** Restores a card hidden by [hideWorthALook] and closes its undo toast — the toast's "Undo"
+     *  action button, same pattern every other toast's `action` callback follows. */
+    private fun undoHideWorthALook(id: String) {
+        _state.update { it.copy(dismissedWorthALookIds = it.dismissedWorthALookIds - id) }
+        dismissToast()
     }
 }

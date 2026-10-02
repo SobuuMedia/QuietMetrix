@@ -457,4 +457,65 @@
     <string name="overview_chart_metric_visits">Visits</string>
     <string name="overview_chart_metric_actions">Actions</string>
     <string name="overview_chart_record_day">🔥 Busiest day: %1$s</string>
+
+    <!-- Task 21: 3-card row (screens/platforms/countries) + "Worth a look" + key card. See
+         OverviewTopListsLogic.kt's WorthALookObservation KDoc for the full data-honesty
+         investigation behind the "Worth a look" copy below — each string names a single plain,
+         mechanically-derived fact (an offline count, a real top screen, a real majority platform
+         share), never a fabricated trend/insight. The key card's "Manage key" CTA (not a literal
+         "Copy" button) and status line are a second, smaller data-honesty finding — see
+         OverviewScreen.kt's KeyCard KDoc: the full plaintext API key is never recoverable/held in
+         state during a normal Overview visit (same "only a hash is stored server-side" fact
+         DashboardScreen.kt's ProjectCard already documents), so there is nothing real for a Copy
+         button here to copy, and no real per-event timestamp exists to back a literal "last
+         received" status line. -->
+    <string name="overview_card_screens_title">📍 Where people hang out</string>
+    <string name="overview_card_platforms_title">📱 What they use</string>
+    <string name="overview_card_countries_title">🌍 Where they are</string>
+    <string name="overview_screen_row_visits">%1$s visits</string>
+    <string name="overview_breakdown_filter_cd">Show only %1$s</string>
+
+    <string name="overview_worth_a_look_title">👀 Worth a look</string>
+    <string name="overview_worth_a_look_empty_title">🎈 All caught up!</string>
+    <string name="overview_worth_a_look_empty_body">We'll let you know when something new is worth a look.</string>
+    <string name="overview_worth_a_look_snooze_cd">Snooze until tomorrow</string>
+    <string name="overview_worth_a_look_offline_title">%1$s actions arrived while offline</string>
+    <string name="overview_worth_a_look_offline_body">People used the app offline (planes, subways, dead zones). The SDK saved everything on-device and synced it once they reconnected.</string>
+    <string name="overview_worth_a_look_top_screen_title">%1$s is your most-visited screen</string>
+    <string name="overview_worth_a_look_top_screen_body">%1$s visits this period — see the full ranking below.</string>
+    <string name="overview_worth_a_look_dominant_platform_title">%1$s is where most of your traffic comes from</string>
+    <string name="overview_worth_a_look_dominant_platform_body">%1$s of sessions this period.</string>
+
+    <string name="overview_key_card_title">🔑 Your %1$s key</string>
+    <string name="overview_key_card_manage">Manage key →</string>
+    <string name="overview_key_card_status_receiving">🟢 Receiving data</string>
+    <string name="overview_key_card_status_waiting">⚪ No events yet this period</string>
+    <string name="overview_key_card_status_unknown">⚠️ Status unknown — can't reach server</string>
+
+    <!-- Task 21: Empty-state setup instructions — replaces the 3-card row/"Worth a look"/key card
+         region (not the vitals grid or daily-volume chart, which already have their own honest
+         all-zero/EmptyState treatments per Tasks 19-20) when OverviewTopListsLogic.kt's
+         isOverviewEmpty is true, per design_handoff_dashboard_redesign/README.md > Interactions &
+         Behavior > "Empty state": "numbered setup instructions (SDK install snippet, init
+         snippet, 'open your app' step) ... a shared Kotlin(KMP)/Swift/JavaScript language switch
+         controls every code snippet". Code snippets are shortened real excerpts from
+         docs/sdk/android.md, docs/sdk/ios.md and docs/sdk/web.md (the same `qm_ak_your_api_key`/
+         `https://your-server.com/api/v1` placeholders those docs themselves use — never this
+         project's real API key, which per OverviewScreen.kt's KeyCard KDoc isn't recoverable
+         anyway). -->
+    <string name="overview_empty_setup_title">Let's get your first event</string>
+    <string name="overview_empty_setup_lang_kotlin">Kotlin (Android/KMP)</string>
+    <string name="overview_empty_setup_lang_swift">Swift (iOS)</string>
+    <string name="overview_empty_setup_lang_js">JavaScript (Web)</string>
+    <string name="overview_empty_setup_step1_title">1. Install the SDK</string>
+    <string name="overview_empty_setup_step2_title">2. Initialize it</string>
+    <string name="overview_empty_setup_step3_title">3. Open your app</string>
+    <string name="overview_empty_setup_step3_body">Open your app on a device, simulator, or browser — QuietMetrix starts tracking automatically.</string>
+    <string name="overview_empty_setup_waiting">⏳ Waiting for your first event…</string>
+    <string name="overview_empty_setup_code_install_kotlin">implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")</string>
+    <string name="overview_empty_setup_code_init_kotlin">QuietMetrix.init(QuietMetrixConfig(\n    trackingEndpoint = "https://your-server.com/api/v1",\n    apiKey = "qm_ak_your_api_key",\n))</string>
+    <string name="overview_empty_setup_code_install_swift">.package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.4.0")</string>
+    <string name="overview_empty_setup_code_init_swift">QuietMetrix.shared.initialize(config: QuietMetrixConfig(\n    trackingEndpoint: "https://your-server.com/api/v1",\n    apiKey: "qm_ak_your_api_key"\n))</string>
+    <string name="overview_empty_setup_code_install_js">npm install @sobuumedia/quietmetrix-sdk</string>
+    <string name="overview_empty_setup_code_init_js">import { init } from "@sobuumedia/quietmetrix-sdk";\n\ninit({\n    trackingEndpoint: "https://your-server.com/api/v1",\n    apiKey: "qm_ak_your_api_key",\n});</string>
 </resources>

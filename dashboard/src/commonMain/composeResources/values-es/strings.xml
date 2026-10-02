@@ -423,4 +423,43 @@
     <string name="overview_chart_metric_visits">Visitas</string>
     <string name="overview_chart_metric_actions">Acciones</string>
     <string name="overview_chart_record_day">🔥 Día con más actividad: %1$s</string>
+
+    <string name="overview_card_screens_title">📍 Dónde pasa el tiempo la gente</string>
+    <string name="overview_card_platforms_title">📱 Qué usan</string>
+    <string name="overview_card_countries_title">🌍 Dónde están</string>
+    <string name="overview_screen_row_visits">%1$s visitas</string>
+    <string name="overview_breakdown_filter_cd">Mostrar solo %1$s</string>
+
+    <string name="overview_worth_a_look_title">👀 Vale la pena mirar</string>
+    <string name="overview_worth_a_look_empty_title">🎈 ¡Todo al día!</string>
+    <string name="overview_worth_a_look_empty_body">Te avisaremos cuando haya algo nuevo que valga la pena mirar.</string>
+    <string name="overview_worth_a_look_snooze_cd">Posponer hasta mañana</string>
+    <string name="overview_worth_a_look_offline_title">%1$s acciones llegaron sin conexión</string>
+    <string name="overview_worth_a_look_offline_body">La gente usó la app sin conexión (aviones, metro, zonas sin señal). El SDK lo guardó todo en el dispositivo y lo sincronizó al reconectarse.</string>
+    <string name="overview_worth_a_look_top_screen_title">%1$s es tu pantalla más visitada</string>
+    <string name="overview_worth_a_look_top_screen_body">%1$s visitas este periodo — mira el ranking completo abajo.</string>
+    <string name="overview_worth_a_look_dominant_platform_title">%1$s es de donde viene la mayoría de tu tráfico</string>
+    <string name="overview_worth_a_look_dominant_platform_body">%1$s de las sesiones este periodo.</string>
+
+    <string name="overview_key_card_title">🔑 Tu clave de %1$s</string>
+    <string name="overview_key_card_manage">Gestionar clave →</string>
+    <string name="overview_key_card_status_receiving">🟢 Recibiendo datos</string>
+    <string name="overview_key_card_status_waiting">⚪ Sin eventos todavía este periodo</string>
+    <string name="overview_key_card_status_unknown">⚠️ Estado desconocido — no se puede conectar con el servidor</string>
+
+    <string name="overview_empty_setup_title">Consigamos tu primer evento</string>
+    <string name="overview_empty_setup_lang_kotlin">Kotlin (Android/KMP)</string>
+    <string name="overview_empty_setup_lang_swift">Swift (iOS)</string>
+    <string name="overview_empty_setup_lang_js">JavaScript (Web)</string>
+    <string name="overview_empty_setup_step1_title">1. Instala el SDK</string>
+    <string name="overview_empty_setup_step2_title">2. Inicialízalo</string>
+    <string name="overview_empty_setup_step3_title">3. Abre tu app</string>
+    <string name="overview_empty_setup_step3_body">Abre tu app en un dispositivo, simulador o navegador — QuietMetrix empieza a registrar automáticamente.</string>
+    <string name="overview_empty_setup_waiting">⏳ Esperando tu primer evento…</string>
+    <string name="overview_empty_setup_code_install_kotlin">implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")</string>
+    <string name="overview_empty_setup_code_init_kotlin">QuietMetrix.init(QuietMetrixConfig(\n    trackingEndpoint = "https://your-server.com/api/v1",\n    apiKey = "qm_ak_your_api_key",\n))</string>
+    <string name="overview_empty_setup_code_install_swift">.package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.4.0")</string>
+    <string name="overview_empty_setup_code_init_swift">QuietMetrix.shared.initialize(config: QuietMetrixConfig(\n    trackingEndpoint: "https://your-server.com/api/v1",\n    apiKey: "qm_ak_your_api_key"\n))</string>
+    <string name="overview_empty_setup_code_install_js">npm install @sobuumedia/quietmetrix-sdk</string>
+    <string name="overview_empty_setup_code_init_js">import { init } from "@sobuumedia/quietmetrix-sdk";\n\ninit({\n    trackingEndpoint: "https://your-server.com/api/v1",\n    apiKey: "qm_ak_your_api_key",\n});</string>
 </resources>
