@@ -287,7 +287,21 @@
     <string name="funnel_headline_highlight">%1$d</string>
     <string name="funnel_headline_tail"> make it all the way through.</string>
     <string name="funnel_new_action">New funnel</string>
-    <string name="funnel_new_unavailable">Funnels are declared in your app SDK config now — there is no dashboard builder for them.</string>
+    <string name="funnel_dropoff_message">😢 %1$s people left here (%2$s)</string>
+    <string name="funnel_dropoff_why">✨ Why did they leave?</string>
+    <string name="funnel_expert_toggle">🤓 Expert</string>
+    <string name="funnel_expert_table_title">🤓 Step table</string>
+    <string name="funnel_copy_csv">⧉ Copy as CSV</string>
+    <string name="funnel_copy_csv_copied">✓ Copied</string>
+    <string name="funnel_new_guide_title">🪜 Declare a funnel</string>
+    <string name="funnel_new_guide_intro">Funnels are declared in your SDK config, not here — add one and it shows up on this screen automatically.</string>
+    <string name="funnel_new_guide_step1_title">1. Add it to your SDK config</string>
+    <string name="funnel_new_guide_code_kotlin">val signupFunnel = Funnel(\n    key = "signup",\n    name = "Signup",\n    steps = listOf(\n        FunnelStep(key = "view", event = "screen_view", screen = "signup"),\n        FunnelStep(key = "submit", event = "signup_submitted"),\n    ),\n)\n\nQuietMetrix.init(QuietMetrixConfig(\n    apiKey = "qm_ak_your_api_key",\n    funnels = listOf(signupFunnel),\n))</string>
+    <string name="funnel_new_guide_code_swift">let signupFunnel = Funnel(\n    key: "signup",\n    name: "Signup",\n    steps: [\n        FunnelStep(key: "view", event: "screen_view", screen: "signup"),\n        FunnelStep(key: "submit", event: "signup_submitted"),\n    ]\n)\n\nlet config = QuietMetrixConfig(\n    apiKey: "qm_ak_your_api_key",\n    funnels: [signupFunnel]\n)\nQuietMetrix.shared.initialize(config: config)</string>
+    <string name="funnel_new_guide_code_js">init({\n    apiKey: "qm_ak_your_api_key",\n    funnels: [\n        {\n            key: "signup",\n            name: "Signup",\n            steps: [\n                { key: "view", event: "screen_view", screen: "signup" },\n                { key: "submit", event: "signup_submitted" },\n            ],\n        },\n    ],\n});</string>
+    <string name="funnel_new_guide_step2_title">2. All set</string>
+    <string name="funnel_new_guide_step2_body">Once your app registers the funnel, it appears on this screen automatically — no dashboard setup needed. Edit the steps in code and ship an update to change them.</string>
+    <string name="funnel_new_guide_done">Done</string>
 
     <!-- Experiments (A/B testing) -->
     <string name="experiments_title">Experiments</string>

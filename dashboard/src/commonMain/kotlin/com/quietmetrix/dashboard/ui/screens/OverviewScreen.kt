@@ -1308,8 +1308,10 @@ internal fun KeyCard(
 
 /** Which language's install/init snippets [SetupInstructionsSection] shows — the design handoff's
  *  "shared Kotlin(KMP)/Swift/JavaScript language switch" (design_handoff_dashboard_redesign/
- *  README.md > Interactions & Behavior > "Empty state"). */
-private enum class SetupLanguage { Kotlin, Swift, JavaScript }
+ *  README.md > Interactions & Behavior > "Empty state"). `internal` (not `private`) so Task 28's
+ *  "＋ New funnel" instructional panel (`FunnelsScreen.kt`'s `NewFunnelGuideModal`) can reuse the
+ *  exact same language switch rather than declaring a parallel enum. */
+internal enum class SetupLanguage { Kotlin, Swift, JavaScript }
 
 /**
  * Numbered first-run setup instructions shown instead of the 3-card row/"Worth a look"/key card
@@ -1392,11 +1394,11 @@ internal fun SetupInstructionsSection(modifier: Modifier = Modifier) {
 }
 
 /** Monospace code block for [SetupInstructionsSection] — same "tonal surface + padded monospace
- *  text" idiom `ExperimentsGuide.kt`'s private `CodeBlock` already establishes, duplicated rather
- *  than shared across files (same file-self-containment precedent `OverviewVitalsLogic.kt`'s KDoc
- *  documents for its own momentum-calculation duplication). */
+ *  text" idiom `ExperimentsGuide.kt`'s private `CodeBlock` already establishes. `internal` (not
+ *  `private`) so Task 28's `NewFunnelGuideModal` (`FunnelsScreen.kt`) genuinely reuses this
+ *  exact composable for its own code snippets instead of a third, parallel duplicate. */
 @Composable
-private fun SetupCodeBlock(code: String) {
+internal fun SetupCodeBlock(code: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()

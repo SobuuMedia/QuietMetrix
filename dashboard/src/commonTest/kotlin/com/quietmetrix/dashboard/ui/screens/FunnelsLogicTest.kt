@@ -2,6 +2,7 @@ package com.quietmetrix.dashboard.ui.screens
 
 import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
+import com.quietmetrix.dashboard.api.FunnelStepResultDto
 import com.quietmetrix.dashboard.api.FunnelSummaryDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -114,5 +115,55 @@ class FunnelsLogicTest {
         // Defensive: overallConversion should never exceed 1.0, but a clamp keeps a stray server
         // value (e.g. a mid-window step count anomaly) from rendering as an impossible "11 out of 10".
         assertEquals(10, funnelHeadlineOutOfTen(results(entered = 10, converted = 11, overallConversion = 1.1)))
+    }
+
+    // ---- shouldShowDropoffBefore (Task 28) ----
+
+    private fun step(dropped: Int) = FunnelStepResultDto(key = "k", count = 10, dropped = dropped)
+
+    @Test
+    fun noDropoffCalloutBeforeTheFirstStep() {
+        // Nothing precedes the entry step, even if its `dropped` field were somehow non-zero.
+        assertFalse(shouldShowDropoffBefore(step(dropped = 5), isFirstStep = true))
+    }
+
+    @Test
+    fun dropoffCalloutShowsWhenAPriorStepLostPeople() {
+        assertTrue(shouldShowDropoffBefore(step(dropped = 42), isFirstStep = false))
+    }
+
+    @Test
+    fun noDropoffCalloutWhenNobodyLeftAtThisStep() {
+        assertFalse(shouldShowDropoffBefore(step(dropped = 0), isFirstStep = false))
+    }
+
+    // ---- funnelStepsToCsv (Task 28, Expert-mode raw table CSV copy) ----
+
+    private fun resultStep(key: String, name: String?, count: Int, fromEntry: Double, fromPrev: Double, dropped: Int) =
+        FunnelStepResultDto(
+            key = key,
+            name = name,
+            count = count,
+            conversionFromEntry = fromEntry,
+            conversionFromPrevious = fromPrev,
+            dropped = dropped,
+        )
+
+    @Test
+    fun csvHasAHeaderRowAndOneRowPerStep() {
+        val steps = listOf(
+            resultStep("view", "View", count = 200, fromEntry = 1.0, fromPrev = 0.0, dropped = 0),
+            resultStep("submit", null, count = 80, fromEntry = 0.4, fromPrev = 0.4, dropped = 120),
+        )
+        val lines = funnelStepsToCsv(steps).lines()
+        assertEquals("step,count,% of entry,% of previous,dropped", lines[0])
+        assertEquals("View,200,100%,0%,0", lines[1])
+        // Falls back to the raw `key` when `name` is null, same as the on-screen table (funnelStepColumns).
+        assertEquals("submit,80,40%,40%,120", lines[2])
+    }
+
+    @Test
+    fun csvOfNoStepsIsJustTheHeader() {
+        assertEquals("step,count,% of entry,% of previous,dropped", funnelStepsToCsv(emptyList()))
     }
 }

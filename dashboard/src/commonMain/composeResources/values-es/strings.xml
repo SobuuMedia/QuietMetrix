@@ -281,7 +281,21 @@
     <string name="funnel_headline_highlight">%1$d</string>
     <string name="funnel_headline_tail"> llegan hasta el final.</string>
     <string name="funnel_new_action">Nuevo embudo</string>
-    <string name="funnel_new_unavailable">Los embudos se declaran ahora en la configuración del SDK de tu app: no hay creador en el panel.</string>
+    <string name="funnel_dropoff_message">😢 %1$s personas se fueron aquí (%2$s)</string>
+    <string name="funnel_dropoff_why">✨ ¿Por qué se fueron?</string>
+    <string name="funnel_expert_toggle">🤓 Experto</string>
+    <string name="funnel_expert_table_title">🤓 Tabla de pasos</string>
+    <string name="funnel_copy_csv">⧉ Copiar como CSV</string>
+    <string name="funnel_copy_csv_copied">✓ Copiado</string>
+    <string name="funnel_new_guide_title">🪜 Declara un embudo</string>
+    <string name="funnel_new_guide_intro">Los embudos se declaran en la configuración del SDK de tu app, no aquí: añade uno y aparecerá en esta pantalla automáticamente.</string>
+    <string name="funnel_new_guide_step1_title">1. Añádelo a la configuración del SDK</string>
+    <string name="funnel_new_guide_code_kotlin">val signupFunnel = Funnel(\n    key = "signup",\n    name = "Signup",\n    steps = listOf(\n        FunnelStep(key = "view", event = "screen_view", screen = "signup"),\n        FunnelStep(key = "submit", event = "signup_submitted"),\n    ),\n)\n\nQuietMetrix.init(QuietMetrixConfig(\n    apiKey = "qm_ak_your_api_key",\n    funnels = listOf(signupFunnel),\n))</string>
+    <string name="funnel_new_guide_code_swift">let signupFunnel = Funnel(\n    key: "signup",\n    name: "Signup",\n    steps: [\n        FunnelStep(key: "view", event: "screen_view", screen: "signup"),\n        FunnelStep(key: "submit", event: "signup_submitted"),\n    ]\n)\n\nlet config = QuietMetrixConfig(\n    apiKey: "qm_ak_your_api_key",\n    funnels: [signupFunnel]\n)\nQuietMetrix.shared.initialize(config: config)</string>
+    <string name="funnel_new_guide_code_js">init({\n    apiKey: "qm_ak_your_api_key",\n    funnels: [\n        {\n            key: "signup",\n            name: "Signup",\n            steps: [\n                { key: "view", event: "screen_view", screen: "signup" },\n                { key: "submit", event: "signup_submitted" },\n            ],\n        },\n    ],\n});</string>
+    <string name="funnel_new_guide_step2_title">2. Ya está</string>
+    <string name="funnel_new_guide_step2_body">En cuanto tu app registre el embudo, aparecerá en esta pantalla automáticamente: no hace falta configurar nada aquí. Edita los pasos en el código y publica una actualización para cambiarlos.</string>
+    <string name="funnel_new_guide_done">Listo</string>
 
     <!-- Experimentos (pruebas A/B) -->
     <string name="experiments_title">Experimentos</string>

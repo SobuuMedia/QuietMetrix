@@ -8,12 +8,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
+import com.quietmetrix.dashboard.api.FunnelStepResultDto
 import com.quietmetrix.dashboard.api.FunnelSummaryDto
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.testutil.assertMatchesGolden
@@ -160,5 +165,91 @@ class FunnelsScreenshotTest {
         }
         waitForIdle()
         onRoot().captureToImage().assertMatchesGolden("funnels/cards-loading.png")
+    }
+
+    // ---- Step list + drop-off callouts (Task 28) ----
+
+    private fun resultStep(key: String, name: String?, count: Int, fromEntry: Double, fromPrev: Double, dropped: Int, dropRate: Double) =
+        FunnelStepResultDto(
+            key = key,
+            name = name,
+            count = count,
+            conversionFromEntry = fromEntry,
+            conversionFromPrevious = fromPrev,
+            dropped = dropped,
+            dropRate = dropRate,
+        )
+
+    private val threeStepFunnel = listOf(
+        resultStep("screen_view", "View signup", count = 200, fromEntry = 1.0, fromPrev = 0.0, dropped = 0, dropRate = 0.0),
+        resultStep("form_started", "Start form", count = 120, fromEntry = 0.6, fromPrev = 0.6, dropped = 80, dropRate = 0.4),
+        resultStep("signup_submitted", null, count = 80, fromEntry = 0.4, fromPrev = 0.667, dropped = 40, dropRate = 0.333),
+    )
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun stepListMatchesGolden() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FunnelStepList(threeStepFunnel, modifier = Modifier.width(820.dp))
+                }
+            }
+        }
+        waitForIdle()
+        onRoot().captureToImage().assertMatchesGolden("funnels/step-list-normal.png")
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun stepListShowsTheDropoffCalloutsButNotBeforeTheFirstStep() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FunnelStepList(threeStepFunnel, modifier = Modifier.width(820.dp))
+                }
+            }
+        }
+        waitForIdle()
+        // Exactly one callout per step with dropped > 0 (steps 2 and 3) — none for the entry step.
+        onNodeWithText("😢 80 people left here (40%)").assertExists()
+        onNodeWithText("😢 40 people left here (33%)").assertExists()
+        onAllNodesWithText("✨ Why did they leave?").assertCountEquals(2)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun stepListShowsNoDropoffCalloutWhenEveryStepFullyConverts() = runComposeUiTest {
+        val noDrop = listOf(
+            resultStep("a", "A", count = 50, fromEntry = 1.0, fromPrev = 0.0, dropped = 0, dropRate = 0.0),
+            resultStep("b", "B", count = 50, fromEntry = 1.0, fromPrev = 1.0, dropped = 0, dropRate = 0.0),
+        )
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    FunnelStepList(noDrop, modifier = Modifier.width(820.dp))
+                }
+            }
+        }
+        waitForIdle()
+        onAllNodesWithText("people left here", substring = true).assertCountEquals(0)
+    }
+
+    // ---- Expert-mode raw table CSV copy (Task 28) ----
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun csvCopyButtonShowsCopiedConfirmation() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    CsvCopyButton(csv = funnelStepsToCsv(threeStepFunnel))
+                }
+            }
+        }
+        waitForIdle()
+        onNodeWithText("⧉ Copy as CSV").performClick()
+        waitForIdle()
+        onNodeWithText("✓ Copied").assertExists()
     }
 }
