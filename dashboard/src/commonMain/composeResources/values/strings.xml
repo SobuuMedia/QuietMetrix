@@ -422,4 +422,25 @@
     <string name="overview_privacy_lock_emoji">🔒</string>
     <string name="overview_privacy_info_glyph">ⓘ</string>
     <string name="overview_error_ai_nap_emoji">😴</string>
+
+    <!-- Task 19: Overview vitals grid. "Sessions" (not "People") and "Errors" (not "Crashes")
+         are honest relabelings of 2 of the design handoff's 4 vitals — same standard Task 18 set
+         for the hero: "People" would claim a distinct-device count this dashboard doesn't track
+         (it's total sessions); "Crashes" would claim crash-only precision this dashboard doesn't
+         have (the backend counts error/crash/exception events together). See
+         OverviewVitalsLogic.kt's KDoc for the full reasoning. The %1$s argument in the trend
+         strings is a pre-formatted "N%" string built in Kotlin, not a literal "%" in this XML —
+         deliberately avoiding the Compose-resources "%%" unescaping bug Task 18 found (see its
+         report). -->
+    <string name="overview_vital_sessions_label">Sessions</string>
+    <string name="overview_vital_sessions_caption">How often people open your app.</string>
+    <string name="overview_vital_trend_up">▲ %1$s</string>
+    <string name="overview_vital_trend_down">▼ %1$s</string>
+    <string name="overview_vital_duration_label">Time per visit</string>
+    <string name="overview_vital_duration_caption">Average time spent per visit.</string>
+    <string name="overview_vital_retention_label">Came back next day</string>
+    <string name="overview_vital_retention_caption">Share of new users still active the next day.</string>
+    <string name="overview_vital_retention_not_tracked">Not tracked yet — visit Retention for cohort details.</string>
+    <string name="overview_vital_errors_caption">Includes crashes, errors, and exceptions.</string>
+    <string name="overview_vital_filter_chip">Showing only %1$s ✕</string>
 </resources>

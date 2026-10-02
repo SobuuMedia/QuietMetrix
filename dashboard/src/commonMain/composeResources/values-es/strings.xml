@@ -405,4 +405,16 @@
     <string name="overview_privacy_lock_emoji">🔒</string>
     <string name="overview_privacy_info_glyph">ⓘ</string>
     <string name="overview_error_ai_nap_emoji">😴</string>
+
+    <string name="overview_vital_sessions_label">Sesiones</string>
+    <string name="overview_vital_sessions_caption">Con qué frecuencia abren tu app.</string>
+    <string name="overview_vital_trend_up">▲ %1$s</string>
+    <string name="overview_vital_trend_down">▼ %1$s</string>
+    <string name="overview_vital_duration_label">Tiempo por visita</string>
+    <string name="overview_vital_duration_caption">Tiempo medio por visita.</string>
+    <string name="overview_vital_retention_label">Volvieron al día siguiente</string>
+    <string name="overview_vital_retention_caption">Porcentaje de usuarios nuevos activos al día siguiente.</string>
+    <string name="overview_vital_retention_not_tracked">Aún no se registra — consulta Retención para ver las cohortes.</string>
+    <string name="overview_vital_errors_caption">Incluye fallos, errores y excepciones.</string>
+    <string name="overview_vital_filter_chip">Mostrando solo %1$s ✕</string>
 </resources>

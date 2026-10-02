@@ -20,6 +20,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -29,6 +33,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.AggregatesResponse
+import com.quietmetrix.dashboard.api.RetentionResponse
 import com.quietmetrix.dashboard.api.ScreenDuration
 import com.quietmetrix.dashboard.api.SessionsResponse
 import com.quietmetrix.dashboard.api.TimeRange
@@ -39,6 +44,7 @@ import com.quietmetrix.dashboard.format.formatBucketLabel
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatDuration
 import com.quietmetrix.dashboard.format.formatMinorUnits
+import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.card_daily_volume
@@ -51,11 +57,7 @@ import com.quietmetrix.dashboard.resources.ic_events
 import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_live
 import com.quietmetrix.dashboard.resources.ic_overview
-import com.quietmetrix.dashboard.resources.kpi_avg_duration
 import com.quietmetrix.dashboard.resources.kpi_errors
-import com.quietmetrix.dashboard.resources.kpi_events
-import com.quietmetrix.dashboard.resources.kpi_offline_captured
-import com.quietmetrix.dashboard.resources.kpi_sessions
 import com.quietmetrix.dashboard.resources.overview_empty_greeting
 import com.quietmetrix.dashboard.resources.overview_empty_headline_highlight
 import com.quietmetrix.dashboard.resources.overview_empty_headline_lead
@@ -82,6 +84,17 @@ import com.quietmetrix.dashboard.resources.overview_privacy_info_glyph
 import com.quietmetrix.dashboard.resources.overview_privacy_lock_emoji
 import com.quietmetrix.dashboard.resources.overview_privacy_no_banner_chip
 import com.quietmetrix.dashboard.resources.overview_privacy_title
+import com.quietmetrix.dashboard.resources.overview_vital_duration_caption
+import com.quietmetrix.dashboard.resources.overview_vital_duration_label
+import com.quietmetrix.dashboard.resources.overview_vital_errors_caption
+import com.quietmetrix.dashboard.resources.overview_vital_filter_chip
+import com.quietmetrix.dashboard.resources.overview_vital_retention_caption
+import com.quietmetrix.dashboard.resources.overview_vital_retention_label
+import com.quietmetrix.dashboard.resources.overview_vital_retention_not_tracked
+import com.quietmetrix.dashboard.resources.overview_vital_sessions_caption
+import com.quietmetrix.dashboard.resources.overview_vital_sessions_label
+import com.quietmetrix.dashboard.resources.overview_vital_trend_down
+import com.quietmetrix.dashboard.resources.overview_vital_trend_up
 import com.quietmetrix.dashboard.resources.state_no_data
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
@@ -194,33 +207,23 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 }
             }
 
-            ResponsiveRowOrColumn(sizeClass) {
-                when (contentStateFor(state.loading, agg == null)) {
-                    ContentState.Loading -> {
-                        KpiSkeleton(Modifier.fillSlot())
-                        KpiSkeleton(Modifier.fillSlot())
-                        KpiSkeleton(Modifier.fillSlot())
-                    }
-                    else -> {
-                        KpiCard(stringResource(Res.string.kpi_events), formatCount(agg?.totals?.events ?: 0), Modifier.fillSlot())
-                        KpiCard(stringResource(Res.string.kpi_offline_captured), formatCount(agg?.totals?.offline ?: 0), Modifier.fillSlot())
-                        KpiCard(stringResource(Res.string.kpi_errors), formatCount(agg?.totals?.errors ?: 0), Modifier.fillSlot())
-                    }
-                }
-            }
-
-            ResponsiveRowOrColumn(sizeClass) {
-                when (contentStateFor(state.loading, sess == null)) {
-                    ContentState.Loading -> {
-                        KpiSkeleton(Modifier.fillSlot())
-                        KpiSkeleton(Modifier.fillSlot())
-                    }
-                    else -> {
-                        KpiCard(stringResource(Res.string.kpi_sessions), formatCount((sess?.totalSessions ?: 0).toLong()), Modifier.fillSlot())
-                        KpiCard(stringResource(Res.string.kpi_avg_duration), formatDuration(sess?.avgDurationSec ?: 0), Modifier.fillSlot())
-                    }
-                }
-            }
+            // Task 19: the redesigned 4-vital grid (Sessions/Time per visit/Came back next
+            // day/Errors — see VitalsSection's KDoc) replaces the pre-redesign 5-card Events/
+            // Offline-captured/Errors/Sessions/Avg-duration rows above. Events and
+            // Offline-captured are no longer shown as standalone vitals cards per the new
+            // design (they aren't among its 4 vitals); events remain visible via the daily
+            // volume chart below.
+            var activeVitalsFilter by remember { mutableStateOf<String?>(null) }
+            VitalsSection(
+                agg = agg,
+                sess = sess,
+                retention = state.retention,
+                loading = state.loading,
+                sizeClass = sizeClass,
+                activeFilter = activeVitalsFilter,
+                onClearFilter = { activeVitalsFilter = null },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -612,6 +615,126 @@ internal fun PrivacyCard(modifier: Modifier = Modifier) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Pill(stringResource(Res.string.overview_privacy_gdpr_chip), PillVariant.Neutral)
                 Pill(stringResource(Res.string.overview_privacy_no_banner_chip), PillVariant.Neutral)
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Vitals grid (Task 19)
+// ---------------------------------------------------------------------------
+
+/**
+ * The redesigned Overview vitals grid: 4 [KpiCard]s — Sessions, Time per visit, Came back next
+ * day, Errors — laid out via [ResponsiveRowOrColumn], preceded by an optional lavender "Showing
+ * only {X} ✕" filter chip (design_handoff_dashboard_redesign/README.md > Overview: "Clicking any
+ * of these three [screens/platforms/countries, a later task's 3-card row] shows a lavender
+ * 'Showing only {X} ✕' filter chip above the vitals grid"). See [VitalsNumbers]'s KDoc for why 2
+ * of the 4 cards are labeled "Sessions"/"Errors" rather than the design handoff's "People"/
+ * "Crashes" — the same data-honesty standard Task 18 established for the hero.
+ *
+ * Only Sessions gets a delta pill: it's the only one of the 4 with a daily historical series
+ * ([SessionsResponse.dailySessions]) to honestly compute a trend from (see [VitalsNumbers]'s
+ * KDoc). The design handoff's "was N (last week)" Compare-mode note
+ * ([KpiCard]'s `compareNote` parameter) is deliberately never populated with real data here for
+ * the same reason: there is no previous-period total anywhere in
+ * [AggregatesResponse]/[SessionsResponse]/[RetentionResponse] to honestly show as "last week"
+ * (the exact gap Task 18's review already flagged and fixed for the hero's percent-change) — a
+ * "Compare" toggle also doesn't reach this screen at all yet (`DashboardShell.kt`'s `compareOn` is
+ * local header state, never threaded down to screen content), so this is a double gap: no
+ * plumbing AND no honest number to plumb. `KpiCard.compareNote`'s capability is proven separately
+ * by `KpiCardScreenshotTest`'s own fixture.
+ *
+ * [activeFilter]/[onClearFilter] are driven by [OverviewScreen]'s own local `remember` state for
+ * now — there is no filter SOURCE yet (the 3-card row that would set it, per the README excerpt
+ * above, is a later task), so in the running app [activeFilter] is always null and this chip never
+ * actually appears yet. It's built and screenshot-tested here (see
+ * `OverviewVitalsScreenshotTest.withActiveFilterChipMatchesGolden`) so that later task only has to
+ * call `onClearFilter`'s sibling setter, not build the chip itself — same "stub now, wire for real
+ * later" convention as the hero's "Tell me more"/"Copy" links (Task 18).
+ *
+ * Loading shows 4 [KpiSkeleton]s; every other case (real data, including all-zero "first run"
+ * data, and stale data rendered while the server is unreachable — this composable has no
+ * server-reachability awareness of its own, matching the pre-redesign KPI rows it replaces) shows
+ * the 4 real cards.
+ */
+@Composable
+internal fun VitalsSection(
+    agg: AggregatesResponse?,
+    sess: SessionsResponse?,
+    retention: RetentionResponse?,
+    loading: Boolean,
+    sizeClass: WindowSizeClass,
+    modifier: Modifier = Modifier,
+    activeFilter: String? = null,
+    onClearFilter: () -> Unit = {},
+) {
+    val vitals = computeVitalsNumbers(agg, sess, retention)
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (activeFilter != null) {
+            Pill(
+                text = stringResource(Res.string.overview_vital_filter_chip, activeFilter),
+                variant = PillVariant.Lavender,
+                onClick = onClearFilter,
+            )
+        }
+        ResponsiveRowOrColumn(sizeClass) {
+            when (contentStateFor(loading, vitals == null)) {
+                ContentState.Loading -> {
+                    KpiSkeleton(Modifier.fillSlot())
+                    KpiSkeleton(Modifier.fillSlot())
+                    KpiSkeleton(Modifier.fillSlot())
+                    KpiSkeleton(Modifier.fillSlot())
+                }
+                else -> {
+                    val v = vitals ?: VitalsNumbers(
+                        sessionCount = 0L,
+                        sessionTrendChange = null,
+                        sessionTrendIsIncrease = true,
+                        avgDurationSec = 0,
+                        retentionDay1 = null,
+                        errorsCount = 0L,
+                    )
+                    val sessionDelta = v.sessionTrendChange?.let { change ->
+                        stringResource(
+                            if (v.sessionTrendIsIncrease) Res.string.overview_vital_trend_up else Res.string.overview_vital_trend_down,
+                            "$change%",
+                        )
+                    }
+                    KpiCard(
+                        label = stringResource(Res.string.overview_vital_sessions_label),
+                        value = formatCount(v.sessionCount),
+                        sub = stringResource(Res.string.overview_vital_sessions_caption),
+                        delta = sessionDelta,
+                        deltaPositive = v.sessionTrendIsIncrease,
+                        modifier = Modifier.fillSlot(),
+                    )
+                    KpiCard(
+                        label = stringResource(Res.string.overview_vital_duration_label),
+                        value = formatDuration(v.avgDurationSec),
+                        sub = stringResource(Res.string.overview_vital_duration_caption),
+                        modifier = Modifier.fillSlot(),
+                    )
+                    val retentionValue = v.retentionDay1?.let { formatPercent(it) } ?: stringResource(Res.string.value_none)
+                    val retentionCaption = if (v.retentionDay1 != null) {
+                        stringResource(Res.string.overview_vital_retention_caption)
+                    } else {
+                        stringResource(Res.string.overview_vital_retention_not_tracked)
+                    }
+                    KpiCard(
+                        label = stringResource(Res.string.overview_vital_retention_label),
+                        value = retentionValue,
+                        sub = retentionCaption,
+                        modifier = Modifier.fillSlot(),
+                    )
+                    KpiCard(
+                        label = stringResource(Res.string.kpi_errors),
+                        value = formatCount(v.errorsCount),
+                        sub = stringResource(Res.string.overview_vital_errors_caption),
+                        modifier = Modifier.fillSlot(),
+                    )
+                }
             }
         }
     }
