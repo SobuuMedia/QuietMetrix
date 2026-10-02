@@ -154,9 +154,22 @@ fun filterTransitionsByPlatform(transitions: List<Transition>, platform: FlowPla
 //  - **Countries and device classes are NOT tracked, anywhere.** Both routes hard-code
 //    `countries = emptyList()` / `device_classes = emptyList()` — the Ktor comment is explicit:
 //    "countries/browsers/os/device_classes/languages are not tracked as counter dimensions yet, so
-//    those fields are empty rather than silently faked". The `Counters` table's only dimension
-//    columns are `platform`/`app_version`/`country` — `country` exists as a column but is never
-//    populated by any route — confirming this isn't a UI oversight, it's a real backend gap.
+//    those fields are empty rather than silently faked". For countries specifically, the actual
+//    chain (corrected after review — see task-23-report.md's "Fix: country-data finding" section)
+//    is two separate gaps, not one: (1) the SDK never sends a country value in the first place —
+//    `CounterFlusher.buildBatches` (quietmetrix-sdk/.../counters/CounterFlusher.kt) builds every
+//    `CounterAppInfoDto(version = appVersion)` with no `country` argument, so it's always null on
+//    the wire, even though `CounterIngestProcessor.process` (servers/ktor/.../CounterIngestProcessor.kt)
+//    *does* write whatever it receives into the `Counters.country` column
+//    (`country = request.app?.country?.uppercase()?.take(2).orEmpty()`) — ingest isn't the gap, the
+//    SDK payload is. (There's a separate, unrelated `deviceCountry()` in the SDK
+//    (quietmetrix-sdk/.../experiments/DeviceCountry.kt) that reads the device's locale region for
+//    on-device experiment-country-eligibility checks — its own KDoc states it's "never transmitted
+//    in any network payload"; it has nothing to do with counters.) (2) Separately, even though the
+//    column exists and ingest writes to it, no dashboard route ever queries `Counters.country` to
+//    build a response — `DashboardRoutes.kt`'s aggregates handler hard-codes `countries =
+//    emptyList()` rather than reading it. Both gaps would need fixing for countries to ever be
+//    real; today the column is always empty string "" in practice regardless.
 //  - **"Top OS versions" has NO backing data at all, anywhere in the pipeline.** There is no
 //    `os_version` counter dimension, column, or `dims` key in any metric (`event`, `screen_transition`,
 //    `screen_dwell`, `session`, `value`, `friction`, `search`, `retention`, `activation`,
