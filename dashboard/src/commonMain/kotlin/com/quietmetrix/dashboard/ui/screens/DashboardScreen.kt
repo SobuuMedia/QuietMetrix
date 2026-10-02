@@ -52,10 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.AccessTokenDto
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.RetentionCohort
-import com.quietmetrix.dashboard.api.FrictionScreenItem
-import com.quietmetrix.dashboard.api.SearchScreenItem
 import com.quietmetrix.dashboard.api.TimeRange
-import com.quietmetrix.dashboard.api.Transition
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatDateOnly
 import com.quietmetrix.dashboard.format.formatDuration
@@ -71,25 +68,14 @@ import com.quietmetrix.dashboard.resources.action_regenerate
 import com.quietmetrix.dashboard.resources.api_key_label
 import com.quietmetrix.dashboard.resources.badge_demo
 import com.quietmetrix.dashboard.resources.badge_offline
-import com.quietmetrix.dashboard.resources.card_countries
-import com.quietmetrix.dashboard.resources.card_device_classes
-import com.quietmetrix.dashboard.resources.card_platforms
-import com.quietmetrix.dashboard.resources.card_friction
-import com.quietmetrix.dashboard.resources.card_search_zero_result
 import com.quietmetrix.dashboard.resources.col_cohort
 import com.quietmetrix.dashboard.resources.col_cohort_size
-import com.quietmetrix.dashboard.resources.col_count
-import com.quietmetrix.dashboard.resources.col_screen
-import com.quietmetrix.dashboard.resources.col_rage_taps
-import com.quietmetrix.dashboard.resources.col_zero_result_rate
 import com.quietmetrix.dashboard.resources.col_day1
 import com.quietmetrix.dashboard.resources.col_day14
 import com.quietmetrix.dashboard.resources.col_day3
 import com.quietmetrix.dashboard.resources.col_day30
 import com.quietmetrix.dashboard.resources.col_activation
 import com.quietmetrix.dashboard.resources.col_day7
-import com.quietmetrix.dashboard.resources.col_from
-import com.quietmetrix.dashboard.resources.col_to
 import com.quietmetrix.dashboard.resources.create_app_action
 import com.quietmetrix.dashboard.resources.create_project_button
 import com.quietmetrix.dashboard.resources.create_project_cancel
@@ -98,7 +84,6 @@ import com.quietmetrix.dashboard.resources.create_project_dialog_title
 import com.quietmetrix.dashboard.resources.create_project_name_label
 import com.quietmetrix.dashboard.resources.ic_copy
 import com.quietmetrix.dashboard.resources.ic_delete
-import com.quietmetrix.dashboard.resources.ic_flow
 import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_plus
 import com.quietmetrix.dashboard.resources.ic_projects
@@ -141,7 +126,6 @@ import com.quietmetrix.dashboard.resources.snackbar_invite_link_copied
 import com.quietmetrix.dashboard.resources.snackbar_token_copied
 import com.quietmetrix.dashboard.resources.state_no_projects
 import com.quietmetrix.dashboard.resources.state_no_retention
-import com.quietmetrix.dashboard.resources.state_no_transitions
 import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.tab_info_flow
 import com.quietmetrix.dashboard.resources.tab_info_experiments
@@ -183,8 +167,6 @@ import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
-import com.quietmetrix.dashboard.ui.components.charts.DonutChart
-import com.quietmetrix.dashboard.ui.components.charts.DonutData
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.table.Column
@@ -216,7 +198,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
     ) { sizeClass ->
         when (state.activeDestination) {
             AppTab.Overview  -> OverviewScreen(viewModel, state, sizeClass)
-            AppTab.Flow      -> FlowTab(viewModel, state, sizeClass)
+            AppTab.Flow      -> FlowScreen(viewModel, state, sizeClass)
             AppTab.Retention -> RetentionTab(viewModel, state, sizeClass)
             AppTab.Projects  -> ProjectsTab(viewModel, state, sizeClass)
             AppTab.Funnels   -> FunnelsTab(viewModel, state, sizeClass)
@@ -441,233 +423,6 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
                 Text(infoText, style = MaterialTheme.typography.bodyMedium)
             },
         )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Flow tab
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun FlowTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Flow) },
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.tab_info_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            state.sectionErrors[DataSection.Transitions]?.let {
-                InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
-            }
-
-            val transitions = state.transitions?.transitions ?: emptyList()
-            if (transitions.isEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    EmptyState(Res.drawable.ic_flow, Res.string.state_no_transitions, Modifier.padding(16.dp))
-                }
-            } else {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        val transitionNone = stringResource(Res.string.value_none)
-                        DataTable(
-                            columns = listOf(
-                                Column(
-                                    title = stringResource(Res.string.col_from),
-                                    weight = 1f,
-                                    cell = { t: Transition -> Text(screenLabel(t.fromScreen, transitionNone), style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.fromScreen },
-                                ),
-                                Column(
-                                    title = stringResource(Res.string.col_to),
-                                    weight = 1f,
-                                    cell = { t: Transition -> Text(screenLabel(t.toScreen, transitionNone), style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.toScreen },
-                                ),
-                                Column(
-                                    title = stringResource(Res.string.col_count),
-                                    weight = 0.6f,
-                                    cell = { t: Transition ->
-                                        Text(
-                                            formatCount(t.count),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    },
-                                    sortSelector = { it.count },
-                                ),
-                            ),
-                            rows = transitions,
-                            sizeClass = sizeClass,
-                            initialSort = SortColumn(2, ascending = false),
-                            rowKey = { it.fromScreen to it.toScreen },
-                            modifier = Modifier.heightIn(max = 400.dp).fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-
-            val searchScreens = state.search?.screens ?: emptyList()
-            if (searchScreens.isNotEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            stringResource(Res.string.card_search_zero_result),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
-                        )
-                        DataTable(
-                            columns = listOf(
-                                Column(
-                                    title = stringResource(Res.string.col_screen),
-                                    weight = 1f,
-                                    cell = { s: SearchScreenItem -> Text(s.screen, style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.screen },
-                                ),
-                                Column(
-                                    title = stringResource(Res.string.col_count),
-                                    weight = 0.6f,
-                                    cell = { s: SearchScreenItem -> Text(formatCount(s.total), style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.total },
-                                ),
-                                Column<SearchScreenItem>(
-                                    title = stringResource(Res.string.col_zero_result_rate),
-                                    weight = 0.9f,
-                                    cell = { s ->
-                                        val rate = s.rate
-                                        if (rate == null) {
-                                            Text(stringResource(Res.string.value_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        } else {
-                                            val interval = wilsonInterval(s.zeroResult, s.total)
-                                            Column {
-                                                Text(formatPercent(rate), style = MaterialTheme.typography.bodyMedium)
-                                                if (interval != null) {
-                                                    Text(
-                                                        formatWilsonRange(interval),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    },
-                                    sortSelector = { it.rate ?: -1.0 },
-                                ),
-                            ),
-                            rows = searchScreens,
-                            sizeClass = sizeClass,
-                            initialSort = SortColumn(2, ascending = false),
-                            rowKey = { it.screen },
-                            modifier = Modifier.heightIn(max = 400.dp).fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-
-            val frictionScreens = state.friction?.screens ?: emptyList()
-            if (frictionScreens.isNotEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            stringResource(Res.string.card_friction),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
-                        )
-                        DataTable(
-                            columns = listOf(
-                                Column(
-                                    title = stringResource(Res.string.col_screen),
-                                    weight = 1f,
-                                    cell = { f: FrictionScreenItem -> Text(f.screen, style = MaterialTheme.typography.bodyMedium) },
-                                    sortSelector = { it.screen },
-                                ),
-                                Column(
-                                    title = stringResource(Res.string.col_rage_taps),
-                                    weight = 0.6f,
-                                    cell = { f: FrictionScreenItem ->
-                                        Text(
-                                            formatCount(f.rageTaps),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    },
-                                    sortSelector = { it.rageTaps },
-                                ),
-                            ),
-                            rows = frictionScreens,
-                            sizeClass = sizeClass,
-                            initialSort = SortColumn(1, ascending = false),
-                            rowKey = { it.screen },
-                            modifier = Modifier.heightIn(max = 400.dp).fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-
-            val agg2 = state.aggregates
-            ResponsiveRowOrColumn(sizeClass) {
-                Card(modifier = Modifier.fillSlot()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            stringResource(Res.string.card_countries),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        DonutChart(
-                            (agg2?.countries ?: emptyList()).map { DonutData(it.displayName, it.count.toFloat()) },
-                            sizeClass,
-                        )
-                    }
-                }
-                Card(modifier = Modifier.fillSlot()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            stringResource(Res.string.card_platforms),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        DonutChart(
-                            (agg2?.platforms ?: emptyList()).map { DonutData(it.displayName, it.count.toFloat()) },
-                            sizeClass,
-                        )
-                    }
-                }
-            }
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.card_device_classes),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    DonutChart(
-                        (agg2?.deviceClasses ?: emptyList()).map { DonutData(it.displayName, it.count.toFloat()) },
-                        sizeClass,
-                    )
-                }
-            }
-        }
     }
 }
 

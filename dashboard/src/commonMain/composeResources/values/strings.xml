@@ -518,4 +518,22 @@
     <string name="overview_empty_setup_code_init_swift">QuietMetrix.shared.initialize(config: QuietMetrixConfig(\n    trackingEndpoint: "https://your-server.com/api/v1",\n    apiKey: "qm_ak_your_api_key"\n))</string>
     <string name="overview_empty_setup_code_install_js">npm install @sobuumedia/quietmetrix-sdk</string>
     <string name="overview_empty_setup_code_init_js">import { init } from "@sobuumedia/quietmetrix-sdk";\n\ninit({\n    trackingEndpoint: "https://your-server.com/api/v1",\n    apiKey: "qm_ak_your_api_key",\n});</string>
+
+    <!-- Flow screen (Task 22): H1, platform filter row, "Start from" row, breadcrumb -->
+    <string name="flow_h1_lead">Follow people through your app. Pick a screen and see </string>
+    <string name="flow_h1_highlight">where they go next</string>
+    <string name="flow_h1_tail">.</string>
+    <string name="flow_platform_label">Platform</string>
+    <string name="flow_platform_all">🌈 All</string>
+    <string name="flow_platform_android">🤖 Android</string>
+    <string name="flow_platform_ios">🍎 iOS</string>
+    <string name="flow_platform_web">🌐 Web</string>
+    <string name="flow_platform_not_tracked_cd">Per-platform breakdown isn't tracked yet</string>
+    <string name="flow_start_from_label">Start from</string>
+    <string name="flow_path_label">Path:</string>
+    <string name="flow_path_arrow">→</string>
+    <string name="flow_exit_label">👋 Left the app</string>
+    <string name="flow_after_screen">After %1$s · %2$s transitions seen</string>
+    <string name="flow_caption">💡 Click a screen to keep following. 👋 means they left the app.</string>
+    <string name="flow_state_empty_path">Pick a screen above to see where people go next.</string>
 </resources>
