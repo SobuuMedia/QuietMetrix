@@ -355,16 +355,21 @@ private fun funnelStepColumns(entered: Int, firstStepKey: String?): List<TableCo
  * **Wording deviation from the design handoff, found by inspecting its own mockup** (same category
  * of finding as `OverviewHeroLogic.kt`'s "Relabeling" KDoc): `_source/07-funnels-normal.png`'s H1
  * region (fully visible, unobscured by the Ask-drawer overlay) literally renders "Out of 10 people
- * who open Shelves, 4 end up adding a book." — turning the funnel's first/last step event names
- * into an English verb phrase ("open Shelves", "adding a book"). [FunnelStepResultDto]/[FunnelDto]
- * carry no such phrase; a step's `name`/`key` is an arbitrary app-defined string (e.g.
- * `screen_view`, `cta_click`) with no reliable grammatical shape, so generating "who open X"/"end
- * up Y-ing" from it would mean guessing at semantics this dashboard doesn't have — the same
- * category of fabrication risk the Overview hero's "people"/"18% more" wording was corrected for.
- * This headline instead names the funnel by its own human-authored [FunnelDto.name] ("Out of 10
- * people who started “Shelves”, 4 make it all the way through."), which is real,
- * already-labeled data, while keeping the exact same "out of 10, highlighted number" shape and
- * real [funnelHeadlineOutOfTen] math the mockup's example demonstrates.
+ * who open Shelves, 4 end up adding a book." — turning the funnel's first/last step into an English
+ * verb phrase ("open Shelves", "adding a book"). [FunnelStepResultDto]/`FunnelStepDto` do carry an
+ * optional display `name: String?` (wired through server-side by
+ * `FunnelCounterAnalyzer.kt`: `name = step.name`), which — if an app developer happens to name a
+ * step something verb-shaped like "Open Shelves" in their `FunnelManifest` — could support closer-
+ * to-mockup phrasing for that specific funnel. But it's optional, developer-supplied free text with
+ * no guaranteed grammatical shape across funnels in general (a step just as plausibly gets named
+ * "screen_view" or left `null`, falling back to its raw `key`), so building a universal "who
+ * open X"/"end up Y-ing" sentence out of it would mean guessing at semantics this dashboard can't
+ * rely on for every funnel — the same category of fabrication risk the Overview hero's
+ * "people"/"18% more" wording was corrected for. This headline instead names the funnel by its own
+ * always-present, human-authored [FunnelDto.name] ("Out of 10 people who started “Shelves”, 4 make
+ * it all the way through."), which is real, already-labeled data every funnel has, while keeping
+ * the exact same "out of 10, highlighted number" shape and real [funnelHeadlineOutOfTen] math the
+ * mockup's example demonstrates.
  *
  * Falls back to [Res.string.funnel_no_entrants] when [funnelHeadlineOutOfTen] returns null (no
  * entrants yet this range) rather than fabricating a number — the same string the steps card below
