@@ -20,19 +20,11 @@ import kotlin.time.ExperimentalTime
  * is no special-casing of day1 vs. the others anywhere in that pipeline. Task 19 had only verified
  * `day1` (the single field the Overview vitals grid needed); this task extends that verification to
  * `day7`/`day30` for the Retention screen's own 3-card row, and finds no gap in the computation —
- * but it DOES find a genuine ambiguity in how to *read* a null value here, fixed by
- * [effectiveDayValue] below (post-review correction, see that function's KDoc for the full
- * writeup): a null [com.quietmetrix.dashboard.api.RetentionCohort.day1]/`.day7`/`.day30` is
- * produced by the identical code path for two different real-world states — "no cohort is old
- * enough yet" (temporal) and "a cohort IS old enough, but genuinely nobody returned" (a real 0%) —
- * and [RetentionCohort.cohortDate] must be consulted against the current date to tell them apart,
- * since [RetentionCounterAnalyzer.analyze] itself only ever emits a bare ratio or nothing, never an
- * explicit "zero, confirmed."
+ * But a missing ratio is unavailable: age cannot establish zero because the server applies
+ * k-anonymity to return counts.
  */
 internal data class RetentionVitals(
-    /** Day-1 retention fraction (0..1) of the most recent cohort old enough to have observed it
-     *  (including a genuine 0% from an aged-out cohort — see [effectiveDayValue]), or null when no
-     *  cohort has reached that age yet. */
+    /** Day-1 retention fraction (0..1) of the newest cohort with a visible server value, or null. */
     val day1: Double?,
     /** Day-7 retention fraction (0..1), same rules as [day1] at a 7-day threshold. */
     val day7: Double?,
@@ -68,9 +60,7 @@ private const val MILLIS_PER_DAY = 86_400_000L
 
 /**
  * The most recent (by [RetentionCohort.cohortDate]) cohort for which [effectiveDayValue] resolves
- * to a non-null fraction for [dayValue] at [dayNumber] days — see that function's KDoc for what
- * "resolves" means (a real observed ratio, or a confirmed 0% from a cohort old enough to have aged
- * out with nobody returning; never a cohort that's simply too young to tell).
+ * to a non-null fraction for [dayValue] at [dayNumber] days. Missing values remain unavailable.
  */
 private fun mostRecentObserved(
     cohorts: List<RetentionCohort>,
@@ -84,36 +74,22 @@ private fun mostRecentObserved(
         ?.second
 
 /**
- * Resolves what a cohort's raw day-N field ([rawValue]) actually means, disambiguating the one
- * case [RetentionCounterAnalyzer.analyze] leaves ambiguous: **post-review correction** — an
- * earlier version of this file treated `rawValue == null` as always meaning "too early to tell",
- * which is only true for a cohort that hasn't reached day N yet. A cohort that HAS reached day N
- * but where literally nobody returned produces the IDENTICAL `null` (the server only ever counts a
- * returning device; it never writes an explicit "0 returned" cell), so the original code silently
- * mislabeled a genuine 0% as "unknown" — a real risk once this extends from D1 (one churned device
- * rarely IS the whole cohort) to D7/D30, where a small cohort hitting a true 0% is plausible, not
- * theoretical (the design handoff's own "out of 10 people" framing invites exactly this).
+ * Resolves a cohort's raw day-N field without inferring a measurement from age. The server applies
+ * k-anonymity to return counts, so null can mean either a future observation or a suppressed count.
  *
- * The fix: a zero-size cohort has nothing to measure and always resolves to null (mirroring
- * [com.quietmetrix.dashboard.api.RetentionCohort.day1]'s own "null, not zero" convention). For a
- * cohort with people in it, a non-null [rawValue] is returned as-is (a real observed ratio).
- * Otherwise [RetentionCohort.cohortDate] is parsed and compared against [todayEpochDay]: if the
- * cohort is at least [dayNumber] days old, it has genuinely had its chance and `0.0` is returned (a
- * real, confirmed zero); if it's younger than that — or its date fails to parse — null is returned,
- * honestly meaning "can't tell yet."
+ * A zero-size cohort has nothing to measure. For non-empty cohorts, preserve the server's raw
+ * value: an explicit zero is a real measurement, while null stays unavailable because it may
+ * represent either a future observation or a count suppressed by the privacy threshold.
  *
  * `internal` (not `private`) since Task 25's `CohortHeatmapLogic.kt` (`ui/components/`) reuses this
- * SAME disambiguation per-cell across the cohort heatmap's (cohort × day) grid, rather than
+ * SAME raw-value handling per-cell across the cohort heatmap's (cohort × day) grid, rather than
  * reimplementing a similar-but-subtly-different version of it — the grid multiplies this exact
  * ambiguity across every cell, so one shared resolver is the only way both screens can agree on
  * what a given cell/card honestly means.
  */
 internal fun effectiveDayValue(cohort: RetentionCohort, dayNumber: Int, rawValue: Double?, todayEpochDay: Long): Double? {
     if (cohort.size <= 0) return null
-    if (rawValue != null) return rawValue
-    val cohortEpochDay = epochDayFromIsoOrNull(cohort.cohortDate) ?: return null
-    val ageInDays = todayEpochDay - cohortEpochDay
-    return if (ageInDays >= dayNumber) 0.0 else null
+    return rawValue
 }
 
 /**

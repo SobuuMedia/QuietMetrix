@@ -73,15 +73,20 @@ class RetentionLogicTest {
     // early" meaning, which silently mislabeled a genuine 0% retention result as "unknown."
 
     @Test
-    fun aCohortOldEnoughToHaveReachedDayNWithNoRawValueIsAConfirmedZero() {
-        // 2026-09-22 is exactly 10 days before "today" (2026-10-02) — old enough for day7 (10 >= 7)
-        // but not for day30 (10 < 30).
-        val cohort = RetentionCohort(cohortDate = "2026-09-22", size = 40, day1 = 0.5, day7 = null, day30 = null)
+    fun anOldCohortWithASuppressedDayNCountRemainsUnavailable() {
+        // A cohort can be old enough while its small return count stays hidden by k-anonymity.
+        val cohort = RetentionCohort(cohortDate = "2026-09-22", size = 20, day1 = 0.5, day7 = null, day30 = null)
         val response = RetentionResponse(cohorts = listOf(cohort))
         val vitals = computeRetentionVitals(response, today)
         assertEquals(0.5, vitals.day1) // real observed ratio, untouched
-        assertEquals(0.0, vitals.day7) // aged out, nobody returned -> a real, confirmed 0%
-        assertNull(vitals.day30) // not old enough yet for day30 -> honestly unknown, not 0%
+        assertNull(vitals.day7) // age cannot distinguish a hidden count from no reported count
+        assertNull(vitals.day30)
+    }
+
+    @Test
+    fun anExplicitlyReportedZeroRemainsARealZero() {
+        val cohort = RetentionCohort(cohortDate = "2026-09-22", size = 40, day1 = 0.5, day7 = 0.0)
+        assertEquals(0.0, effectiveDayValue(cohort, 7, cohort.day7, today))
     }
 
     @Test
@@ -103,11 +108,7 @@ class RetentionLogicTest {
     }
 
     @Test
-    fun aMostRecentAgedOutConfirmedZeroCohortIsPreferredOverAnOlderRealNonZeroCohort() {
-        // This is the scenario the bug actually broke: without the fix, the 09-22 cohort (the
-        // more recent one) would have been wrongly excluded for day7 (its raw value is null), so
-        // the result would fall back to the OLDER cohort's real-but-stale 18% — misreporting the
-        // most recent cohort's genuine 0% as 18%.
+    fun aMostRecentUnavailableCohortDoesNotTurnIntoZeroOrHideItsAvailability() {
         val response = RetentionResponse(
             cohorts = listOf(
                 RetentionCohort(cohortDate = "2026-08-01", size = 100, day1 = 0.30, day7 = 0.18, day30 = 0.08),
@@ -115,8 +116,8 @@ class RetentionLogicTest {
             ),
         )
         val vitals = computeRetentionVitals(response, today)
-        assertEquals(0.0, vitals.day7) // the more recent cohort's confirmed zero wins, not 0.18
-        assertEquals(0.08, vitals.day30) // the 09-22 cohort is too young for day30 (10 < 30), so this still falls back
+        assertEquals(0.18, vitals.day7) // latest reported value; the newer suppressed value is unavailable, not zero
+        assertEquals(0.08, vitals.day30)
     }
 
     // ---- epochDayFromIsoOrNull ----
@@ -263,16 +264,14 @@ class RetentionLogicTest {
     }
 
     @Test
-    fun comparisonTakeawayNeverTreatsAConfirmedZeroAsUnknown() {
-        // Row B is aged-out (10 days old as of "today") with a genuine, confirmed 0% at day7 — this
-        // must still be treated as a real, comparable value, not silently excluded as "too young".
+    fun comparisonTakeawayPreservesAnExplicitlyReportedZero() {
         val rowA = buildCohortHeatmapRows(
             listOf(RetentionCohort(cohortDate = "2026-08-01", size = 100, day7 = 0.3)),
             CohortGrouping.ByDay,
             today,
         ).single()
         val rowB = buildCohortHeatmapRows(
-            listOf(RetentionCohort(cohortDate = "2026-09-22", size = 50, day7 = null)),
+            listOf(RetentionCohort(cohortDate = "2026-09-22", size = 50, day7 = 0.0)),
             CohortGrouping.ByDay,
             today,
         ).single()

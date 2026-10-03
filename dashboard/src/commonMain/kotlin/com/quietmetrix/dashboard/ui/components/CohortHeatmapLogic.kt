@@ -29,14 +29,14 @@ private const val MILLIS_PER_DAY = 86_400_000L
  */
 internal enum class CohortGrouping { ByDay, ByWeek }
 
-/**
- * One (cohort-row × day-column) cell's resolved value. [fraction] is `null` exactly when the cell is
- * genuinely too young to show anything yet (the row's data honestly doesn't exist for this day-column)
- * — see [effectiveDayValue]'s KDoc for why a null here is NEVER "nobody returned" (that's a real `0.0`,
- * a normal, renderable [fraction]). The composable renders `null` as the dashed "·" placeholder and
- * any non-null [fraction] — including `0.0` — as a real shaded cell.
- */
-internal data class CohortHeatmapCell(val fraction: Double?)
+/** The meaning of a cell whose server value is absent or present. */
+internal enum class CohortHeatmapCellState { Available, Future, Unavailable }
+
+/** A cell's fraction and whether a missing value is future data or unavailable server data. */
+internal data class CohortHeatmapCell(
+    val fraction: Double?,
+    val state: CohortHeatmapCellState = if (fraction == null) CohortHeatmapCellState.Unavailable else CohortHeatmapCellState.Available,
+)
 
 /**
  * One heatmap row: a stable [id] (used for [toggleCohortHeatmapSelection]'s A/B bookkeeping), the
@@ -63,8 +63,8 @@ private fun rawDayValue(cohort: RetentionCohort, dayNumber: Int): Double? = when
 
 /**
  * Builds the heatmap's rows from the raw [cohorts] the server returned, grouped per [grouping], each
- * cell resolved through [effectiveDayValue] (Task 24's disambiguation, reused verbatim here — see that
- * function's KDoc) rather than the raw field, at [todayEpochDay] (days since the Unix epoch, UTC;
+ * cell resolved from the raw server value using [effectiveDayValue], at [todayEpochDay] (days since
+ * the Unix epoch, UTC;
  * defaults to the real current day, overridable for deterministic tests).
  *
  * [CohortGrouping.ByDay] passes each cohort through untouched (one row per server-side cohort,
@@ -94,7 +94,7 @@ internal fun buildCohortHeatmapRows(
                 label = cohort.cohortDate,
                 size = cohort.size,
                 cells = COHORT_HEATMAP_DAY_NUMBERS.map { dayNumber ->
-                    CohortHeatmapCell(effectiveDayValue(cohort, dayNumber, rawDayValue(cohort, dayNumber), todayEpochDay))
+                    resolvedCell(cohort, dayNumber, todayEpochDay)
                 },
             )
         }
@@ -123,23 +123,31 @@ private fun buildByWeekRows(cohorts: List<RetentionCohort>, todayEpochDay: Long)
 }
 
 /**
- * A "By week" cell's value for [dayNumber]: the cohort-size-weighted average of [effectiveDayValue]
- * across [members] (the week's daily cohorts) — EXCLUDING any member for which [effectiveDayValue]
- * itself resolves to null (that member hasn't reached [dayNumber] yet, so it contributes neither a
- * real observed ratio nor a confirmed zero; mixing its absence in as a zero-weight no-op is exactly
- * right, since a weighted average with zero weight is the same as not including the term at all).
- * If EVERY member is still too young (no member contributes), the whole week cell is honestly null
- * too — never a fabricated average of nothing. This mirrors [effectiveDayValue]'s own per-cohort rule
- * one level up: a week is only as "observed" as its most-advanced contributing member.
+ * A "By week" cell is size-weighted across known mature members. If a mature member is unavailable,
+ * the aggregate remains unavailable rather than presenting a biased partial average. Future members
+ * are excluded until they mature; if none contribute yet, the cell is marked Future.
  */
 private fun weightedWeekCell(members: List<RetentionCohort>, dayNumber: Int, todayEpochDay: Long): CohortHeatmapCell {
+    val unavailableMatureMember = members.any { cohort -> rawDayValue(cohort, dayNumber) == null && cohort.size > 0 && !isFuture(cohort, dayNumber, todayEpochDay) }
+    if (unavailableMatureMember) return CohortHeatmapCell(null, CohortHeatmapCellState.Unavailable)
     val contributions = members.mapNotNull { cohort ->
         effectiveDayValue(cohort, dayNumber, rawDayValue(cohort, dayNumber), todayEpochDay)?.let { value -> cohort.size to value }
     }
     val totalWeight = contributions.sumOf { it.first }
-    if (totalWeight <= 0) return CohortHeatmapCell(null)
+    if (totalWeight <= 0) return CohortHeatmapCell(null, CohortHeatmapCellState.Future)
     val weightedSum = contributions.sumOf { it.first * it.second }
     return CohortHeatmapCell(weightedSum / totalWeight)
+}
+
+private fun resolvedCell(cohort: RetentionCohort, dayNumber: Int, todayEpochDay: Long): CohortHeatmapCell {
+    val value = effectiveDayValue(cohort, dayNumber, rawDayValue(cohort, dayNumber), todayEpochDay)
+    if (value != null) return CohortHeatmapCell(value, CohortHeatmapCellState.Available)
+    return CohortHeatmapCell(null, if (cohort.size > 0 && isFuture(cohort, dayNumber, todayEpochDay)) CohortHeatmapCellState.Future else CohortHeatmapCellState.Unavailable)
+}
+
+private fun isFuture(cohort: RetentionCohort, dayNumber: Int, todayEpochDay: Long): Boolean {
+    val start = epochDayFromIsoOrNull(cohort.cohortDate) ?: return false
+    return todayEpochDay - start < dayNumber
 }
 
 /**

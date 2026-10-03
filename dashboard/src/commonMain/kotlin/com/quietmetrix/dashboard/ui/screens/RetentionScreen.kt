@@ -392,7 +392,7 @@ private fun RetentionVitalCard(
     val extended = LocalExtendedColors.current
     val shape = MaterialTheme.shapes.extraLarge
     val border = BorderStroke(1.dp, extended.hairline)
-    val tooEarly = stringResource(Res.string.retention_card_too_early)
+    val unavailable = stringResource(Res.string.retention_card_too_early)
 
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -426,7 +426,7 @@ private fun RetentionVitalCard(
                 )
             } else {
                 Text(stringResource(Res.string.value_none), style = MaterialTheme.typography.displaySmall)
-                Text(tooEarly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(unavailable, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

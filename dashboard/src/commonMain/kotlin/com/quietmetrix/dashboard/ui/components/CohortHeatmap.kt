@@ -59,6 +59,7 @@ import com.quietmetrix.dashboard.resources.cohort_heatmap_toggle_by_day
 import com.quietmetrix.dashboard.resources.cohort_heatmap_toggle_by_week
 import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_known
 import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_unknown
+import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_unavailable
 import com.quietmetrix.dashboard.resources.col_day1
 import com.quietmetrix.dashboard.resources.col_day14
 import com.quietmetrix.dashboard.resources.col_day3
@@ -277,7 +278,8 @@ private fun CohortHeatmapCellView(cell: CohortHeatmapCell, row: CohortHeatmapRow
     val hovered by interactionSource.collectIsHoveredAsState()
 
     val explanation = if (fraction == null) {
-        stringResource(Res.string.cohort_heatmap_tooltip_unknown, dayLabel)
+        if (cell.state == CohortHeatmapCellState.Future) stringResource(Res.string.cohort_heatmap_tooltip_unknown, dayLabel)
+        else stringResource(Res.string.cohort_heatmap_tooltip_unavailable)
     } else {
         val returning = (row.size * fraction).roundToLong()
         stringResource(

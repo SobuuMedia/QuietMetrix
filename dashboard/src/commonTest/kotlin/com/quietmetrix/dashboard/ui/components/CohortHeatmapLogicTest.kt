@@ -29,17 +29,19 @@ class CohortHeatmapLogicTest {
         val cells = rows[0].cells // [day1, day3, day7, day14, day30]
         assertEquals(0.6, cells[0].fraction) // day1: real observed ratio
         assertNull(cells[2].fraction) // day7: honestly unknown (too young)
+        assertEquals(CohortHeatmapCellState.Future, cells[2].state)
         assertNull(cells[4].fraction) // day30: honestly unknown (too young)
     }
 
     @Test
-    fun byDayAgedOutCohortWithNoRawValueIsAConfirmedZeroNotAPlaceholder() {
+    fun byDayAgedOutCohortWithNoRawValueIsUnavailableNotAZero() {
         // 2026-09-22 is 10 days before "today" — old enough for day7 (10>=7) but not day30 (10<30).
         val cohorts = listOf(RetentionCohort(cohortDate = "2026-09-22", size = 40, day1 = 0.5, day7 = null, day30 = null))
         val rows = buildCohortHeatmapRows(cohorts, CohortGrouping.ByDay, today)
         val cells = rows[0].cells
         assertEquals(0.5, cells[0].fraction)
-        assertEquals(0.0, cells[2].fraction) // day7: aged out, nobody returned -> real confirmed zero
+        assertNull(cells[2].fraction) // day7: may be privacy-suppressed; age cannot prove zero
+        assertEquals(CohortHeatmapCellState.Unavailable, cells[2].state)
         assertNull(cells[4].fraction) // day30: still too young
     }
 
@@ -81,20 +83,20 @@ class CohortHeatmapLogicTest {
     }
 
     @Test
-    fun byWeekCellIsASizeWeightedAverageOfContributingMembers() {
+    fun byWeekCellIsUnavailableWhenAMatureMemberHasNoReportedCount() {
         val d1 = epochDayFromIsoOrNull("2026-09-21")!!
         val d2 = epochDayFromIsoOrNull("2026-09-22")!!
         assertTrue(d1.floorDiv(7) == d2.floorDiv(7))
-        // size 30 @ 40% and size 10 @ 0% (confirmed zero, both old enough): weighted avg = (30*0.4+10*0)/40 = 0.3
+        // One mature member's count is hidden; averaging only the visible cohort would misstate the week.
         val cohorts = listOf(
             RetentionCohort(cohortDate = "2026-09-21", size = 30, day1 = null, day7 = 0.40),
             RetentionCohort(cohortDate = "2026-09-22", size = 10, day1 = null, day7 = null),
         )
-        // Both cohorts are >= 7 days old as of "today" (2026-10-02), so the null day7 above is a
-        // confirmed zero (via effectiveDayValue), not "too young" — contributing weight, not excluded.
+        // Both dates are old enough; the absent count must stay unavailable rather than be inferred as zero.
         val rows = buildCohortHeatmapRows(cohorts, CohortGrouping.ByWeek, today)
         val day7Cell = rows[0].cells[2]
-        assertEquals(0.3, day7Cell.fraction!!, 1e-9)
+        assertNull(day7Cell.fraction)
+        assertEquals(CohortHeatmapCellState.Unavailable, day7Cell.state)
     }
 
     @Test

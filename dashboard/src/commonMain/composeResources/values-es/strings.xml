@@ -520,7 +520,7 @@
     <string name="retention_card_caption_day1">%1$d de cada 10 la abrieron de nuevo al día siguiente de instalarla.</string>
     <string name="retention_card_caption_day7">%1$d de cada 10 siguen ahí 7 días después.</string>
     <string name="retention_card_caption_day30">%1$d de cada 10 siguen ahí 30 días después.</string>
-    <string name="retention_card_too_early">⏳ Aún es pronto — ninguna cohorte ha llegado a esta edad todavía.</string>
+    <string name="retention_card_too_early">Este porcentaje no está disponible para los datos seleccionados.</string>
     <string name="retention_dot_filled_emoji">🙂</string>
     <string name="retention_dot_filled_content_description">Volvió</string>
     <string name="retention_dot_empty_content_description">No volvió (todavía)</string>
@@ -541,6 +541,7 @@
     <string name="cohort_heatmap_checkbox_content_description_selected">%1$s está seleccionada como %2$s para comparar</string>
     <string name="cohort_heatmap_tooltip_known">De las %1$s personas que instalaron %2$s, %3$s (%4$s) abrieron la app de nuevo el %5$s.</string>
     <string name="cohort_heatmap_tooltip_unknown">Aún es pronto. Vuelve después de %1$s para ver esto ⏳</string>
+    <string name="cohort_heatmap_tooltip_unavailable">Este porcentaje no está disponible para los datos seleccionados.</string>
 
     <!-- Retención: panel "⚖️ Comparando A y B" + tarjeta de conclusión (Tarea 26) -->
     <string name="retention_comparison_eyebrow_emoji">⚖️</string>
