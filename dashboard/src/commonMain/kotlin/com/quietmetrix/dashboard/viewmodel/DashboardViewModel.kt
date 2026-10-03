@@ -110,6 +110,12 @@ data class DashboardState(
     /** The single bottom-center toast currently showing, or null. Set by [DashboardViewModel.showToast],
      *  cleared by [DashboardViewModel.dismissToast] or its own ~5s auto-dismiss timer. */
     val toast: Toast? = null,
+    /** Question, messages and in-flight state for the global Ask drawer. */
+    val askDrawer: AskDrawerState = AskDrawerState(),
+    /** Whether the global previous-period comparison is enabled. */
+    val compare: Boolean = false,
+    /** The selected analytics drill-down, or null while its drawer is closed. */
+    val drillDown: DrillDownContent? = null,
     /** Ids of "Worth a look" observations ([com.quietmetrix.dashboard.ui.screens.WorthALookObservation.id])
      *  the user has dismissed or snoozed this session — set by [DashboardViewModel.hideWorthALook],
      *  cleared by that same call's undo toast action. Session-only (matches the design handoff's
@@ -128,6 +134,9 @@ data class DashboardState(
     /** Reviewers see everything read-only. */
     val isReadOnly: Boolean get() = role == UserRole.REVIEWER
 }
+
+/** Resolved, privacy-safe content displayed by the shared analytics drill-down drawer. */
+data class DrillDownContent(val kind: String, val key: String, val value: String, val detail: String)
 
 /** One background data panel that can fail independently without blanking the dashboard. */
 enum class DataSection { Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults, Experiments, ExperimentResults }
@@ -436,8 +445,22 @@ class DashboardViewModel(
 
     fun selectRange(range: TimeRange) {
         _state.update { it.copy(range = range, experimentResults = null, experimentResultsRange = null) }
-        scope.launch { loadAggregates(); loadSessions(); loadFunnelResultsOnce(); loadExperimentResultsOnce() }
+        scope.launch {
+            loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadRetentionOnce()
+            loadFunnelResultsOnce(); loadExperimentResultsOnce()
+        }
     }
+
+    /** Toggles the dashboard-wide previous-period comparison preference. */
+    fun toggleCompare() { _state.update { it.copy(compare = !it.compare) } }
+
+    /** Opens a drill-down using values already present in dashboard state. */
+    fun openDrillDown(kind: String, key: String) {
+        _state.update { state -> state.copy(drillDown = selectDrillDown(state, kind, key)) }
+    }
+
+    /** Closes the shared analytics drill-down drawer. */
+    fun closeDrillDown() { _state.update { it.copy(drillDown = null) } }
 
     fun setDemoMode(enabled: Boolean) {
         if (!_state.value.serverDebug) return
@@ -856,7 +879,7 @@ class DashboardViewModel(
         val s = _state.value
         if (!s.demoMode && s.currentProjectId == null) return
         try {
-            val res = api.search(s.currentProjectId.orEmpty(), (s.range.seconds / 86_400).toInt().coerceAtLeast(1))
+            val res = api.search(s.currentProjectId.orEmpty(), s.range)
             _state.update { it.copy(search = res).clearingSectionError(DataSection.Search) }
         } catch (e: Throwable) {
             _state.update { it.withSectionError(DataSection.Search, e.toUiError("GET /projects/{id}/search")) }
@@ -867,7 +890,7 @@ class DashboardViewModel(
         val s = _state.value
         if (!s.demoMode && s.currentProjectId == null) return
         try {
-            val res = api.friction(s.currentProjectId.orEmpty(), (s.range.seconds / 86_400).toInt().coerceAtLeast(1))
+            val res = api.friction(s.currentProjectId.orEmpty(), s.range)
             _state.update { it.copy(friction = res).clearingSectionError(DataSection.Friction) }
         } catch (e: Throwable) {
             _state.update { it.withSectionError(DataSection.Friction, e.toUiError("GET /projects/{id}/friction")) }
@@ -889,10 +912,72 @@ class DashboardViewModel(
         val s = _state.value
         if (s.currentProjectId == null) return
         try {
-            val res = api.retention(s.currentProjectId, (s.range.seconds / 86_400).toInt().coerceAtLeast(1))
+            val res = api.retention(s.currentProjectId, s.range)
             _state.update { it.copy(retention = res).clearingSectionError(DataSection.Retention) }
         } catch (e: Throwable) {
             _state.update { it.withSectionError(DataSection.Retention, e.toUiError("GET /projects/{id}/retention")) }
+        }
+    }
+
+    // ---- Ask drawer ----
+
+    /** Opens the Ask drawer, optionally pre-filling a drill-down or result-specific question. */
+    fun openAskDrawer(prefill: String? = null) {
+        _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Open(prefill))) }
+    }
+
+    /** Closes the Ask drawer without discarding its conversation. */
+    fun closeAskDrawer() {
+        _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Close)) }
+    }
+
+    /** Updates the Ask input draft. */
+    fun editAskDraft(text: String) {
+        _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Edit(text))) }
+    }
+
+    /** Sends a question to the authenticated, privacy-gated computed analytics endpoint. */
+    fun askQuestion(question: String? = null) {
+        val current = _state.value
+        if (current.askDrawer.loading) return
+        val q = question ?: current.askDrawer.draft
+        val pending = reduceAskDrawer(current.askDrawer, AskDrawerEvent.Submit(q))
+        if (pending === current.askDrawer || pending.messages == current.askDrawer.messages) return
+        _state.update { it.copy(askDrawer = pending) }
+        scope.launch {
+            val snapshot = _state.value
+            val projectId = snapshot.currentProjectId
+            if (projectId == null) {
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("Select a project before asking."))) }
+                return@launch
+            }
+            try {
+                val answer = api.ask(projectId, pending.retryQuestion.orEmpty(), snapshot.range)
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) }
+            } catch (_: Throwable) {
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("The answer couldn't be loaded. Try again."))) }
+            }
+        }
+    }
+
+    /** Retries the latest failed question with the current project and range. */
+    fun retryAskQuestion() {
+        val state = _state.value.askDrawer
+        val question = state.retryQuestion ?: return
+        if (state.loading) return
+        _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Retry)) }
+        scope.launch {
+            val snapshot = _state.value
+            val projectId = snapshot.currentProjectId ?: run {
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("Select a project before asking."))) }
+                return@launch
+            }
+            try {
+                val answer = api.ask(projectId, question, snapshot.range)
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) }
+            } catch (_: Throwable) {
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("The answer couldn't be loaded. Try again."))) }
+            }
         }
     }
 

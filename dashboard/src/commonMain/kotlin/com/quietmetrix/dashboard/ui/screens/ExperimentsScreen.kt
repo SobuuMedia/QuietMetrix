@@ -144,6 +144,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
     var pendingAction by remember { mutableStateOf<PendingExperimentAction?>(null) }
 
     val experiment = currentExperiment(state.experiments, state.selectedExperimentKey)
+    val explainQuestion = experiment?.let { stringResource(Res.string.experiment_explain_question, it.name) }
     val activeCount = state.experiments.count { it.status in setOf("draft", "active", "paused") }
 
     MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
@@ -232,6 +233,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                         state = state,
                         experiment = experiment,
                         onSelect = { viewModel.selectExperiment(it) },
+                        onExplain = { viewModel.openAskDrawer(explainQuestion) },
                         onAction = { action ->
                             if (experiment != null) {
                                 if (action in setOf(ExperimentAction.Start, ExperimentAction.Resume)) {
@@ -314,6 +316,7 @@ private fun ExperimentDetail(
     experiment: ExperimentDto,
     sizeClass: WindowSizeClass,
     onAction: (ExperimentAction) -> Unit,
+    onExplain: () -> Unit = {},
 ) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -356,7 +359,7 @@ private fun ExperimentDetail(
     }
 
     ExperimentResultsPanel(state, experiment, sizeClass)
-    CodeSnippetPanel(experiment = experiment, onExplain = {})
+    CodeSnippetPanel(experiment = experiment, onExplain = onExplain)
 }
 
 /** Width of the card-list sidebar when actual body width supports two usable panes. */
@@ -379,6 +382,7 @@ internal fun ExperimentsBody(
     experiment: ExperimentDto?,
     onSelect: (String) -> Unit,
     onAction: (ExperimentAction) -> Unit,
+    onExplain: () -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val split = maxWidth >= CARD_LIST_WIDTH + 16.dp + 600.dp
@@ -390,7 +394,7 @@ internal fun ExperimentsBody(
                 }
             } else {
                 Column(modifier = modifier) {
-                    ExperimentDetail(state = state, experiment = experiment, sizeClass = detailSizeClass, onAction = onAction)
+                    ExperimentDetail(state = state, experiment = experiment, sizeClass = detailSizeClass, onAction = onAction, onExplain = onExplain)
                 }
             }
         }
@@ -598,8 +602,8 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
                 }
                 else -> {
                     Text(experimentWizardSummary(name.trim(), key.trim(), variantA.trim(), variantB.trim(), split, traffic), style = MaterialTheme.typography.bodyLarge)
-                    if (screen.isNotBlank()) Text("Screen: ${screen.trim()}", style = MaterialTheme.typography.bodyMedium)
-                    if (countryParse.normalized.isNotEmpty()) Text("Countries: ${countryParse.normalized.joinToString()}", style = MaterialTheme.typography.bodyMedium)
+                    if (screen.isNotBlank()) Text(stringResource(Res.string.experiment_wizard_screen_summary, screen.trim()), style = MaterialTheme.typography.bodyMedium)
+                    if (countryParse.normalized.isNotEmpty()) Text(stringResource(Res.string.experiment_wizard_countries_summary, countryParse.normalized.joinToString()), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

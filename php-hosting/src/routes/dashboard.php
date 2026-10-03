@@ -87,9 +87,9 @@ function handleProjectAggregates(string $projectId): void {
 function handleProjectTransitions(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
-    $days = min(90, max(1, (int)($_GET['days'] ?? 30)));
+    $seconds = windowSeconds(90);
     $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $days * 86400);
+    $fromDay = gmdate('Y-m-d', time() - $seconds);
 
     $cells = counterReadCells($projectId, 'screen_transition', $fromDay, $toDay);
     $result = [];
@@ -192,9 +192,9 @@ function handleProjectSessions(string $projectId): void {
 function handleProjectRetention(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
-    $days = max(1, min(90, (int)($_GET['days'] ?? 30)));
+    $seconds = windowSeconds(90);
     $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $days * 86400);
+    $fromDay = gmdate('Y-m-d', time() - $seconds);
 
     $counterCells = counterReadCells($projectId, 'retention', $fromDay, $toDay);
     $cells = [];
@@ -241,4 +241,34 @@ function handleProjectRetention(string $projectId): void {
     }, $cohorts);
 
     jsonResponse(200, ['cohorts' => $result]);
+}
+
+/** POST /api/v1/projects/{id}/ask -> bounded, server-computed answer from privacy-safe counters. */
+function handleProjectAsk(string $projectId): void {
+    requireAnalyticsAccess($projectId);
+    $body = getJsonBody();
+    $question = trim((string)($body['question'] ?? ''));
+    $range = (string)($body['range'] ?? '7d');
+    $ranges = ['1h' => 3600, '1d' => 86400, '7d' => 604800, '30d' => 2592000, '90d' => 7776000];
+    if ($question === '' || strlen($question) > 500 || !isset($ranges[$range])) {
+        errorResponse(400, 'bad_request', 'Question must contain 1–500 characters and range must be supported');
+        return;
+    }
+    $toDay = gmdate('Y-m-d');
+    $fromDay = gmdate('Y-m-d', time() - $ranges[$range]);
+    $retentionCells = [];
+    foreach (counterReadCells($projectId, 'retention', $fromDay, $toDay) as $cell) {
+        $cohort = $cell['dims']['cohort'] ?? null;
+        $day = isset($cell['dims']['day']) ? (int)$cell['dims']['day'] : null;
+        if ($cohort !== null && $day !== null) $retentionCells[] = ['cohort' => $cohort, 'day' => $day, 'n' => $cell['n']];
+    }
+    jsonResponse(200, askAnalyticsAnalyze(
+        $question,
+        counterReadCells($projectId, 'session', $fromDay, $toDay),
+        counterReadCells($projectId, 'screen_transition', $fromDay, $toDay),
+        counterReadCells($projectId, 'search', $fromDay, $toDay),
+        counterReadCells($projectId, 'search_zero_result', $fromDay, $toDay),
+        $retentionCells,
+        $range,
+    ));
 }

@@ -182,9 +182,9 @@ fun Routing.configureDashboardRoutes() {
                 return@get
             }
 
-            val days = call.parameters["days"]?.toIntOrNull()?.coerceIn(1, 90) ?: 30
+            val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
             val now = Instant.now()
-            val fromDay = now.minusSeconds(days.toLong() * 86400).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
             val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
 
             val transitions = counterRepo.readCells(id, "screen_transition", fromDay, toDay)
@@ -229,9 +229,9 @@ fun Routing.configureDashboardRoutes() {
                 return@get
             }
 
-            val days = call.parameters["days"]?.toIntOrNull()?.coerceIn(1, 90) ?: 30
+            val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
             val now = Instant.now()
-            val fromDay = now.minusSeconds(days.toLong() * 86400).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
             val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
 
             val searchCells = counterRepo.readCells(id, "search", fromDay, toDay)
@@ -272,9 +272,9 @@ fun Routing.configureDashboardRoutes() {
                 return@get
             }
 
-            val days = call.parameters["days"]?.toIntOrNull()?.coerceIn(1, 90) ?: 30
+            val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
             val now = Instant.now()
-            val fromDay = now.minusSeconds(days.toLong() * 86400).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
             val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
 
             val frictionCells = counterRepo.readCells(id, "friction", fromDay, toDay)
@@ -314,9 +314,9 @@ fun Routing.configureDashboardRoutes() {
                 return@get
             }
 
-            val days = call.parameters["days"]?.toIntOrNull()?.coerceIn(1, 90) ?: 30
+            val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
             val now = Instant.now()
-            val fromDay = now.minusSeconds(days.toLong() * 86400).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
             val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
 
             // `session{bucket}` cells (see the SDK's SessionTracker) carry no per-session
@@ -366,9 +366,9 @@ fun Routing.configureDashboardRoutes() {
                 return@get
             }
 
-            val days = call.parameters["days"]?.toIntOrNull()?.coerceIn(1, 90) ?: 30
+            val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
             val now = Instant.now()
-            val fromDay = now.minusSeconds(days.toLong() * 86400).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
             val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
 
             val cells = counterRepo.readCells(id, "retention", fromDay, toDay)

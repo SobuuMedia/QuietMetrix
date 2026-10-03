@@ -74,7 +74,6 @@ import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_plus
 import com.quietmetrix.dashboard.resources.ic_projects
 import com.quietmetrix.dashboard.resources.ic_refresh
-import com.quietmetrix.dashboard.resources.ic_search
 import com.quietmetrix.dashboard.resources.invite_link_body
 import com.quietmetrix.dashboard.resources.invite_link_title
 import com.quietmetrix.dashboard.resources.label_language
@@ -453,4 +452,3 @@ private fun CreateTokenDialog(onDismiss: () -> Unit, onCreate: (String, List<Str
         },
     )
 }
-

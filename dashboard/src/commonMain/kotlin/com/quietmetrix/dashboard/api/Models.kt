@@ -117,6 +117,14 @@ data class CreateTokenResponse(
 @Serializable
 data class ProjectsResponse(val projects: List<ApiProject> = emptyList())
 
+/** Natural-language question sent to the server's supported aggregate analyzer. */
+@Serializable
+data class AskDataRequest(val question: String, val range: String)
+
+/** Server-computed answer and its aggregate source label. */
+@Serializable
+data class AskDataResponse(val answer: String, val source: String)
+
 @Serializable
 data class ApiProject(
     val id: String,

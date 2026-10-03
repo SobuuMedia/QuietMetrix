@@ -160,6 +160,14 @@ data class ProjectListResponse(
     val total: Int,
 )
 
+/** One bounded natural-language analytics question; supported metrics remain server-computed. */
+@Serializable
+data class AskDataRequest(val question: String, val range: String = "7d")
+
+/** Computed aggregate answer and the data family/range it uses. */
+@Serializable
+data class AskDataResponse(val answer: String, val source: String)
+
 @Serializable
 data class TransitionsResponse(
     val transitions: List<TransitionItem>,

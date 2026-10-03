@@ -255,25 +255,36 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun retention(projectId: String, days: Int): RetentionResponse {
-        val res = client.get(url("/projects/$projectId/retention?days=$days")) {
+    suspend fun retention(projectId: String, range: TimeRange): RetentionResponse {
+        val res = client.get(url("/projects/$projectId/retention?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun search(projectId: String, days: Int): SearchResponse {
-        val res = client.get(url("/projects/$projectId/search?days=$days")) {
+    suspend fun search(projectId: String, range: TimeRange): SearchResponse {
+        val res = client.get(url("/projects/$projectId/search?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun friction(projectId: String, days: Int): FrictionResponse {
-        val res = client.get(url("/projects/$projectId/friction?days=$days")) {
+    suspend fun friction(projectId: String, range: TimeRange): FrictionResponse {
+        val res = client.get(url("/projects/$projectId/friction?range=${range.token}")) {
             token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    /** Requests a server-computed answer for a supported aggregate question. */
+    suspend fun ask(projectId: String, question: String, range: TimeRange): AskDataResponse {
+        val res = client.post(url("/projects/$projectId/ask")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(AskDataRequest(question, range.token))
         }
         ensureSuccess(res)
         return res.body()

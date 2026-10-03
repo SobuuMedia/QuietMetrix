@@ -230,6 +230,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         sess = sess,
                         loading = state.loading,
                         serverUnreachable = state.serverUnreachableError != null,
+                        onTellMeMore = { viewModel.openAskDrawer("Explain the overview for this project.") },
                         modifier = Modifier.weight(1f),
                     )
                     PrivacyCard(modifier = Modifier.width(320.dp))
@@ -243,6 +244,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         sess = sess,
                         loading = state.loading,
                         serverUnreachable = state.serverUnreachableError != null,
+                        onTellMeMore = { viewModel.openAskDrawer("Explain the overview for this project.") },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     PrivacyCard(modifier = Modifier.fillMaxWidth())
@@ -264,6 +266,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 sizeClass = sizeClass,
                 activeFilter = activeVitalsFilter,
                 onClearFilter = { activeVitalsFilter = null },
+                onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -431,6 +434,7 @@ internal fun OverviewHero(
     sess: SessionsResponse?,
     loading: Boolean,
     serverUnreachable: Boolean,
+    onTellMeMore: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val hero = computeHeroNumbers(agg, sess)
@@ -442,7 +446,7 @@ internal fun OverviewHero(
             else -> when (contentStateFor(loading, isEmpty)) {
                 ContentState.Loading -> OverviewHeroLoading()
                 ContentState.Empty -> OverviewHeroEmpty(projectName)
-                ContentState.Data -> OverviewHeroNormal(hero!!, projectName, range)
+                ContentState.Data -> OverviewHeroNormal(hero!!, projectName, range, onTellMeMore)
             }
         }
     }
@@ -450,7 +454,7 @@ internal fun OverviewHero(
 
 /** Normal-state hero content: greeting line + the AI-written headline + its attribution chip. */
 @Composable
-private fun OverviewHeroNormal(hero: HeroNumbers, projectName: String, range: TimeRange) {
+private fun OverviewHeroNormal(hero: HeroNumbers, projectName: String, range: TimeRange, onTellMeMore: () -> Unit) {
     val extended = LocalExtendedColors.current
     val lime = SpanStyle(background = extended.lime, color = extended.onLime)
 
@@ -498,14 +502,11 @@ private fun OverviewHeroNormal(hero: HeroNumbers, projectName: String, range: Ti
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
-        // Stubs for now — the Ask-drawer ("Tell me more") and headline clipboard copy
-        // ("Copy") land when the Ask drawer itself is built (Task 40 per the plan's
-        // standing "stub now, wire for real later" convention, see progress.md).
         Text(
             tellMeMore,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.handCursor(),
+            modifier = Modifier.handCursor().clickable(onClick = onTellMeMore),
         )
         Text(
             copyLabel,
@@ -695,6 +696,7 @@ internal fun VitalsSection(
     modifier: Modifier = Modifier,
     activeFilter: String? = null,
     onClearFilter: () -> Unit = {},
+    onDrillDown: (String, String) -> Unit = { _, _ -> },
 ) {
     val vitals = computeVitalsNumbers(agg, sess, retention)
 
@@ -735,12 +737,14 @@ internal fun VitalsSection(
                         sub = stringResource(Res.string.overview_vital_sessions_caption),
                         delta = sessionDelta,
                         deltaPositive = v.sessionTrendIsIncrease,
+                        onClick = { onDrillDown("sessions", "Sessions") },
                         modifier = Modifier.fillSlot(),
                     )
                     KpiCard(
                         label = stringResource(Res.string.overview_vital_duration_label),
                         value = formatDuration(v.avgDurationSec),
                         sub = stringResource(Res.string.overview_vital_duration_caption),
+                        onClick = { onDrillDown("duration", "Average duration") },
                         modifier = Modifier.fillSlot(),
                     )
                     val retentionValue = v.retentionDay1?.let { formatPercent(it) } ?: stringResource(Res.string.value_none)
@@ -753,12 +757,14 @@ internal fun VitalsSection(
                         label = stringResource(Res.string.overview_vital_retention_label),
                         value = retentionValue,
                         sub = retentionCaption,
+                        onClick = { onDrillDown("retention", (v.retentionDay1 ?: 0.0).toString()) },
                         modifier = Modifier.fillSlot(),
                     )
                     KpiCard(
                         label = stringResource(Res.string.kpi_errors),
                         value = formatCount(v.errorsCount),
                         sub = stringResource(Res.string.overview_vital_errors_caption),
+                        onClick = { onDrillDown("errors", "Errors") },
                         modifier = Modifier.fillSlot(),
                     )
                 }

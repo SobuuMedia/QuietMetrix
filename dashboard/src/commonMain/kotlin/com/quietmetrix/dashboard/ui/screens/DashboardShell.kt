@@ -77,6 +77,8 @@ import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import com.quietmetrix.dashboard.theme.ThemeMode
 import com.quietmetrix.dashboard.ui.components.CopyErrorButton
+import com.quietmetrix.dashboard.ui.components.AskDrawer
+import com.quietmetrix.dashboard.ui.components.DrillDownDrawer
 import com.quietmetrix.dashboard.ui.components.ErrorBanner
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
@@ -177,6 +179,13 @@ fun DashboardShell(
                         content(sizeClass)
                     }
                 }
+            }
+        }
+        AskDrawer(viewModel, state)
+        state.drillDown?.let { selected ->
+            DrillDownDrawer(selected, onDismiss = { viewModel.closeDrillDown() }) {
+                viewModel.closeDrillDown()
+                viewModel.openAskDrawer("Explain ${selected.key} for the selected date range.")
             }
         }
     }
@@ -309,7 +318,7 @@ private fun DashboardTopBar(
 ) {
     val themeMode = LocalThemeMode.current
     val setThemeMode = LocalThemeModeSetter.current
-    var compareOn by remember { mutableStateOf(false) }
+    val compareOn = state.compare
 
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(
@@ -333,14 +342,14 @@ private fun DashboardTopBar(
 
             HeaderToggleRow(
                 compareOn = compareOn,
-                onCompareToggle = { compareOn = !compareOn },
+                onCompareToggle = { viewModel.toggleCompare() },
                 expertOn = state.expertMode,
                 onExpertToggle = { viewModel.toggleExpertMode() },
                 refreshing = state.refreshing,
                 onRefresh = { viewModel.refresh() },
                 themeMode = themeMode,
                 onToggleTheme = { setThemeMode(if (themeMode == ThemeMode.Light) ThemeMode.Dark else ThemeMode.Light) },
-                onAsk = { /* Ask-your-data drawer is a separate, not-yet-built feature (README's own "AI Ask your data drawer" section); stub per this task's scope. */ },
+                onAsk = { viewModel.openAskDrawer() },
                 userEmail = state.user?.email,
                 onSignOut = { viewModel.logout() },
             )

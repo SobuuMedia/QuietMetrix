@@ -180,10 +180,12 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 val vitals = computeRetentionVitals(state.retention)
                 var comparisonRows by remember { mutableStateOf(emptyList<CohortHeatmapRow>()) }
                 RetentionHero(vitals)
-                RetentionVitalCardsRow(vitals, sizeClass)
+                RetentionVitalCardsRow(vitals, sizeClass, onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) })
                 CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it })
                 if (comparisonRows.size == 2) {
-                    RetentionComparisonPanel(comparisonRows[0], comparisonRows[1])
+                RetentionComparisonPanel(comparisonRows[0], comparisonRows[1], onAskWhy = {
+                    viewModel.openAskDrawer("Why does retention differ between ${comparisonRows[0].label} and ${comparisonRows[1].label}?")
+                })
                 }
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -216,7 +218,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                         )
                     }
                 }
-                RetentionClosingInsightCard(cohorts)
+                RetentionClosingInsightCard(cohorts, onAskWhy = { viewModel.openAskDrawer("Why did retention change between the two most recent cohorts?") })
             }
         }
     }
@@ -331,24 +333,27 @@ internal fun RetentionHero(vitals: RetentionVitals, modifier: Modifier = Modifie
  * one card per [RetentionVitals] field.
  */
 @Composable
-internal fun RetentionVitalCardsRow(vitals: RetentionVitals, sizeClass: WindowSizeClass, modifier: Modifier = Modifier) {
+internal fun RetentionVitalCardsRow(vitals: RetentionVitals, sizeClass: WindowSizeClass, onDrillDown: (String, String) -> Unit = { _, _ -> }, modifier: Modifier = Modifier) {
     ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
         RetentionVitalCard(
             label = stringResource(Res.string.retention_card_day1_label),
             fraction = vitals.day1,
             captionRes = Res.string.retention_card_caption_day1,
+            onClick = { onDrillDown("retention", (vitals.day1 ?: 0.0).toString()) },
             modifier = Modifier.fillSlot(),
         )
         RetentionVitalCard(
             label = stringResource(Res.string.retention_card_day7_label),
             fraction = vitals.day7,
             captionRes = Res.string.retention_card_caption_day7,
+            onClick = { onDrillDown("retention", (vitals.day7 ?: 0.0).toString()) },
             modifier = Modifier.fillSlot(),
         )
         RetentionVitalCard(
             label = stringResource(Res.string.retention_card_day30_label),
             fraction = vitals.day30,
             captionRes = Res.string.retention_card_caption_day30,
+            onClick = { onDrillDown("retention", (vitals.day30 ?: 0.0).toString()) },
             modifier = Modifier.fillSlot(),
         )
     }
@@ -387,6 +392,7 @@ private fun RetentionVitalCard(
     label: String,
     fraction: Double?,
     captionRes: StringResource,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val extended = LocalExtendedColors.current
@@ -405,7 +411,7 @@ private fun RetentionVitalCard(
     )
 
     Card(
-        onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+        onClick = onClick,
         modifier = modifier.graphicsLayer(scaleX = scale, scaleY = scale).handCursor(),
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = containerColor),
@@ -477,7 +483,7 @@ private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Mo
  * KDoc.
  */
 @Composable
-internal fun RetentionComparisonPanel(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, modifier: Modifier = Modifier) {
+internal fun RetentionComparisonPanel(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, onAskWhy: () -> Unit = {}, modifier: Modifier = Modifier) {
     val takeaway = computeRetentionComparisonTakeaway(rowA, rowB)
 
     Card(modifier = modifier.fillMaxWidth()) {
@@ -621,7 +627,7 @@ private fun RetentionComparisonColumnsRow(rowA: CohortHeatmapRow, rowB: CohortHe
  * same screen.
  */
 @Composable
-internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, modifier: Modifier = Modifier) {
+internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, onAskWhy: () -> Unit = {}, modifier: Modifier = Modifier) {
     val extended = LocalExtendedColors.current
     val takeaway = computeRetentionClosingInsightTakeaway(cohorts)
     val sentence = retentionComparisonSentence(takeaway, stringResource(Res.string.retention_insight_not_enough_data))
@@ -647,7 +653,7 @@ internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, modifie
             Pill(
                 text = stringResource(Res.string.retention_insight_ask_why),
                 variant = PillVariant.Neutral,
-                onClick = { /* "Ask why" -> the real AI Ask drawer is Task 40's scope, not this one's. */ },
+                onClick = onAskWhy,
             )
         }
     }

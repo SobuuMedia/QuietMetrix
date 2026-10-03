@@ -211,6 +211,8 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                             onNewFunnel = { newFunnelGuideOpen = true },
                             expertOn = expertOn,
                             onExpertToggle = { expertOn = !expertOn },
+                            onAskWhy = { step -> viewModel.openAskDrawer("Why did people leave at ${step.name ?: step.key}?") },
+                            onDrillDown = { key -> viewModel.openDrillDown("funnel", key) },
                         )
                     }
                 }
@@ -304,6 +306,8 @@ private fun FunnelDetail(
     onNewFunnel: () -> Unit,
     expertOn: Boolean,
     onExpertToggle: () -> Unit,
+    onAskWhy: (FunnelStepResultDto) -> Unit,
+    onDrillDown: (String) -> Unit,
 ) {
     FunnelHero(funnel, state.funnelResults, modifier = Modifier.fillMaxWidth())
 
@@ -325,7 +329,7 @@ private fun FunnelDetail(
     }
 
     val results = state.funnelResults
-    FunnelStatCardsRow(results, sizeClass, state.loading)
+    FunnelStatCardsRow(results, sizeClass, state.loading, onDrillDown)
 
     if (results != null) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -344,7 +348,7 @@ private fun FunnelDetail(
                     // visualizations rather than one replacing the other.
                     FunnelChartCanvas(results.steps.map { FunnelStepData(it.name ?: it.key, it.count) })
                     Spacer(Modifier.height(16.dp))
-                    FunnelStepList(results.steps)
+                    FunnelStepList(results.steps, onAskWhy = onAskWhy)
                 }
             }
         }
@@ -417,11 +421,11 @@ internal fun CsvCopyButton(csv: String) {
  * duplicates.
  */
 @Composable
-internal fun FunnelStepList(steps: List<FunnelStepResultDto>, modifier: Modifier = Modifier) {
+internal fun FunnelStepList(steps: List<FunnelStepResultDto>, onAskWhy: (FunnelStepResultDto) -> Unit = {}, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         steps.forEachIndexed { index, step ->
             if (shouldShowDropoffBefore(step, isFirstStep = index == 0)) {
-                FunnelDropoffCallout(step)
+                FunnelDropoffCallout(step, onAskWhy = { onAskWhy(step) })
             }
             FunnelStepRow(index = index, step = step)
         }
@@ -519,7 +523,7 @@ private fun FunnelStepBar(fraction: Float, label: String, modifier: Modifier = M
  * convention [FunnelStatCardsRow]'s own KPI-card click handlers already establish.
  */
 @Composable
-private fun FunnelDropoffCallout(step: FunnelStepResultDto, modifier: Modifier = Modifier) {
+private fun FunnelDropoffCallout(step: FunnelStepResultDto, modifier: Modifier = Modifier, onAskWhy: () -> Unit = {}) {
     Row(
         modifier = modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp, start = 28.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -533,7 +537,7 @@ private fun FunnelDropoffCallout(step: FunnelStepResultDto, modifier: Modifier =
         Pill(
             text = stringResource(Res.string.funnel_dropoff_why),
             variant = PillVariant.Lavender,
-            onClick = { /* Ask-your-data drawer is Task 40's scope — stub per this task's brief. */ },
+            onClick = onAskWhy,
         )
     }
 }
@@ -783,7 +787,7 @@ internal fun NewFunnelGuideModal(onDismiss: () -> Unit) {
  * drawer is Task 41's scope, not this one's.
  */
 @Composable
-internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: WindowSizeClass, loading: Boolean) {
+internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: WindowSizeClass, loading: Boolean, onDrillDown: (String) -> Unit = {}) {
     ResponsiveRowOrColumn(sizeClass) {
         when (contentStateFor(loading, results == null)) {
             ContentState.Loading -> {
@@ -796,13 +800,13 @@ internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: Wind
                     stringResource(Res.string.funnel_kpi_started),
                     formatCount((results?.entered ?: 0).toLong()),
                     Modifier.fillSlot(),
-                    onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+                    onClick = { onDrillDown("Started") },
                 )
                 KpiCard(
                     stringResource(Res.string.funnel_kpi_completed),
                     formatCount((results?.converted ?: 0).toLong()),
                     Modifier.fillSlot(),
-                    onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+                    onClick = { onDrillDown("Completed") },
                 )
                 val overallInterval = results?.let { wilsonInterval(it.converted.toLong(), it.entered.toLong()) }
                 KpiCard(
@@ -811,10 +815,9 @@ internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: Wind
                     Modifier.fillSlot(),
                     sub = overallInterval?.let { formatWilsonRange(it) },
                     highlighted = true,
-                    onClick = { /* Drill-down drawer wiring is Task 41's scope, not this one's. */ },
+                    onClick = { onDrillDown("Success rate") },
                 )
             }
         }
     }
 }
-

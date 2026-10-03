@@ -17,13 +17,11 @@ class IconInventoryTest {
         val dir = findDrawableDir()
         val expected = listOf(
             // navigation
-            "ic_overview", "ic_events", "ic_flow", "ic_live", "ic_retention",
-            "ic_projects", "ic_funnel", "ic_experiment", "ic_settings",
+            "ic_overview", "ic_events", "ic_flow", "ic_retention",
+            "ic_projects", "ic_funnel", "ic_experiment",
             // actions
             "ic_signout", "ic_close", "ic_refresh", "ic_delete",
-            "ic_search", "ic_menu", "ic_chevron_down", "ic_plus",
-            // theme
-            "ic_sun", "ic_moon",
+            "ic_chevron_down", "ic_plus",
             // pre-existing
             "ic_info", "ic_copy",
         )

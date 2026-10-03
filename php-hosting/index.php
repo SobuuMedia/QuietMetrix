@@ -38,6 +38,7 @@ require_once __DIR__ . '/src/valueCounterAnalyze.php';
 require_once __DIR__ . '/src/activationCounterAnalyze.php';
 require_once __DIR__ . '/src/searchCounterAnalyze.php';
 require_once __DIR__ . '/src/frictionCounterAnalyze.php';
+require_once __DIR__ . '/src/askAnalyticsAnalyze.php';
 require_once __DIR__ . '/src/bootstrap.php';
 
 // ---------------------------------------------------------------------------
@@ -394,6 +395,11 @@ if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/sessions$#', $ur
 if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/retention$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/dashboard.php';
     handleProjectRetention($m[1]);
+    exit;
+}
+if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/ask$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/dashboard.php';
+    handleProjectAsk($m[1]);
     exit;
 }
 

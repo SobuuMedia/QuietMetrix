@@ -257,6 +257,16 @@
     <string name="access_empty">No users assigned to this project.</string>
     <string name="access_hint">Assign developers and reviewers to the projects they should see.</string>
     <string name="team_role_explainer">Admins manage the team and projects. Developers can change project setup. Reviewers have read-only access.</string>
+    <string name="ask_drawer_title">Ask your data</string>
+    <string name="ask_drawer_scope">About %1$s · %2$s. Answers use privacy-safe aggregates.</string>
+    <string name="ask_drawer_input">Ask about your analytics</string>
+    <string name="ask_drawer_send">Send</string>
+    <string name="ask_drawer_loading">Checking the selected data…</string>
+    <string name="ask_drawer_suggestion_sessions">How many sessions?</string>
+    <string name="ask_drawer_suggestion_search">Where do searches return no results?</string>
+    <string name="ask_drawer_suggestion_retention">What is Day 1 retention?</string>
+    <string name="ask_drawer_suggestion_screen">Which screen is reached most?</string>
+    <string name="ask_drawer_retry">Ask again</string>
 
     <!-- Funnels -->
     <string name="funnels_title">Funnels</string>
@@ -348,6 +358,7 @@
     <string name="experiment_wizard_screen_summary">Screen: %1$s</string>
     <string name="experiment_wizard_countries_summary">Countries: %1$s</string>
     <string name="experiment_explain_action">Explain the result</string>
+    <string name="experiment_explain_question">How is %1$s performing?</string>
     <string name="experiment_screen_label">Screen: %1$s</string>
     <string name="experiment_variants_split">%1$s / %2$s</string>
     <!-- %1$s takes an already-formatted "N%" string built in Kotlin, not a literal "%1$d%%" —

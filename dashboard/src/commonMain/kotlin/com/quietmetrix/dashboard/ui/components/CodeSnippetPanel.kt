@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ExperimentDto
+import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.experiment_explain_action
+import org.jetbrains.compose.resources.stringResource
 
 /** SDK language shown by [CodeSnippetPanel]. */
 internal enum class SnippetLanguage { Kotlin, Swift, JavaScript }
@@ -52,7 +55,7 @@ internal fun CodeSnippetPanel(experiment: ExperimentDto, onExplain: () -> Unit, 
             }
             Text(experimentSnippet(language, experiment), Modifier.horizontalScroll(rememberScrollState()),
                 style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-            TextButton(onClick = onExplain) { Text("Explain the result") }
+            TextButton(onClick = onExplain) { Text(stringResource(Res.string.experiment_explain_action)) }
         }
     }
 }
