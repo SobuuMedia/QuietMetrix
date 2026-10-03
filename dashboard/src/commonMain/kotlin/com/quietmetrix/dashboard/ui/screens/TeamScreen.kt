@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +44,7 @@ import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.access_add_user
 import com.quietmetrix.dashboard.resources.access_empty
 import com.quietmetrix.dashboard.resources.access_hint
+import com.quietmetrix.dashboard.resources.team_role_explainer
 import com.quietmetrix.dashboard.resources.access_pick_project
 import com.quietmetrix.dashboard.resources.access_remove
 import com.quietmetrix.dashboard.resources.access_title
@@ -69,6 +73,10 @@ import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.AccessState
+import com.quietmetrix.dashboard.viewmodel.buildAccessMatrix
+import com.quietmetrix.dashboard.viewmodel.canToggleProjectAccess
+import com.quietmetrix.dashboard.viewmodel.canRemoveAdminRole
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import com.quietmetrix.dashboard.nav.NavDestination as AppTab
@@ -88,6 +96,7 @@ fun UsersTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: Wi
     var pendingRemove by remember { mutableStateOf<ApiManagedUser?>(null) }
 
     LaunchedEffect(Unit) { viewModel.loadUsers() }
+    LaunchedEffect(state.projects) { state.projects.forEach { viewModel.loadMembers(it.id) } }
 
     MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -121,13 +130,15 @@ fun UsersTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: Wi
                     UserRow(
                         user = user,
                         onRoleChange = { viewModel.updateUserRole(user.id, it) },
+                        roleEnabled = canRemoveAdminRole(user, state.users),
+                        removeEnabled = canRemoveAdminRole(user, state.users),
                         onRemove = { pendingRemove = user },
                     )
                 }
             }
 
             HorizontalDivider()
-            ProjectAccessSection(viewModel, state)
+            if (state.isAdmin) AccessMatrixSection(viewModel, state)
         }
     }
 
@@ -165,7 +176,7 @@ fun UsersTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: Wi
 }
 
 @Composable
-private fun UserRow(user: ApiManagedUser, onRoleChange: (String) -> Unit, onRemove: () -> Unit) {
+private fun UserRow(user: ApiManagedUser, onRoleChange: (String) -> Unit, roleEnabled: Boolean, removeEnabled: Boolean, onRemove: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -181,8 +192,8 @@ private fun UserRow(user: ApiManagedUser, onRoleChange: (String) -> Unit, onRemo
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            RoleDropdown(current = user.role, onSelect = onRoleChange)
-            IconButton(onClick = onRemove, modifier = Modifier.handCursor()) {
+            RoleDropdown(current = user.role, onSelect = onRoleChange, enabled = roleEnabled)
+            IconButton(onClick = onRemove, enabled = removeEnabled, modifier = Modifier.handCursor()) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_delete),
                     contentDescription = stringResource(Res.string.users_remove),
@@ -195,10 +206,10 @@ private fun UserRow(user: ApiManagedUser, onRoleChange: (String) -> Unit, onRemo
 }
 
 @Composable
-private fun RoleDropdown(current: String, onSelect: (String) -> Unit) {
+private fun RoleDropdown(current: String, onSelect: (String) -> Unit, enabled: Boolean = true) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.handCursor()) {
+        OutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.handCursor()) {
             Text(roleLabel(current))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -253,105 +264,43 @@ private fun InviteUserDialog(onDismiss: () -> Unit, onInvite: (String, String) -
     )
 }
 
-/** Pick a project, then assign/unassign users to it (admin only). */
+/** Renders the admin's person-by-project access matrix; membership writes use the existing server routes. */
 @Composable
-private fun ProjectAccessSection(viewModel: DashboardViewModel, state: DashboardState) {
-    var selectedProjectId by remember(state.projects) {
-        mutableStateOf(state.projects.firstOrNull()?.id)
-    }
-    LaunchedEffect(selectedProjectId) {
-        selectedProjectId?.let { viewModel.loadMembers(it) }
-    }
-
+private fun AccessMatrixSection(viewModel: DashboardViewModel, state: DashboardState) {
+    val rows = buildAccessMatrix(state.users, state.projects, state.members)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(Res.string.access_title), style = MaterialTheme.typography.titleSmall)
-        Text(
-            stringResource(Res.string.access_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        // Project picker
-        var projectExpanded by remember { mutableStateOf(false) }
-        val selectedProject = state.projects.firstOrNull { it.id == selectedProjectId }
-        Box {
-            OutlinedButton(onClick = { projectExpanded = true }, modifier = Modifier.handCursor()) {
-                Text(selectedProject?.name ?: stringResource(Res.string.access_pick_project))
-            }
-            DropdownMenu(expanded = projectExpanded, onDismissRequest = { projectExpanded = false }) {
-                state.projects.forEach { project ->
-                    DropdownMenuItem(
-                        text = { Text(project.name) },
-                        onClick = {
-                            selectedProjectId = project.id
-                            projectExpanded = false
-                        },
-                        modifier = Modifier.handCursor(),
-                    )
-                }
-            }
+        Text(stringResource(Res.string.access_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.team_role_explainer), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.projects.isEmpty()) {
+            Text(stringResource(Res.string.access_empty), style = MaterialTheme.typography.bodySmall)
+            return@Column
         }
-
-        val projectId = selectedProjectId
-        if (projectId != null) {
-            val members = state.members[projectId].orEmpty()
-            val memberIds = members.map { it.userId }.toSet()
-            // Assignable: non-admin users not already members.
-            val assignable = state.users.filter { it.role != UserRole.ADMIN && it.id !in memberIds }
-
-            // Add-user dropdown
-            var addExpanded by remember(projectId) { mutableStateOf(false) }
-            Box {
-                Button(
-                    onClick = { addExpanded = true },
-                    enabled = assignable.isNotEmpty(),
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(painterResource(Res.drawable.ic_plus), contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(Res.string.access_add_user))
-                }
-                DropdownMenu(expanded = addExpanded, onDismissRequest = { addExpanded = false }) {
-                    assignable.forEach { user ->
-                        DropdownMenuItem(
-                            text = {
-                                val label = user.email + "  ·  " + roleLabel(user.role)
-                                Text(label)
+        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(Res.string.users_email_label), Modifier.width(220.dp), style = MaterialTheme.typography.labelMedium)
+            state.projects.forEach { project -> Text(project.name, Modifier.width(150.dp).padding(8.dp), style = MaterialTheme.typography.labelMedium) }
+        }
+        rows.forEach { row ->
+            Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                Text(row.user.email, Modifier.width(220.dp).padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+                state.projects.forEach { project ->
+                    val access = row.accessByProject[project.id] ?: AccessState.Loading
+                    val checked = access == AccessState.Granted
+                    val isOwner = project.ownerUserId == row.user.id
+                    val canToggle = state.isAdmin && access != AccessState.Loading && canToggleProjectAccess(row.user.id, state.user?.id, isOwner)
+                    Row(Modifier.width(150.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = checked,
+                            enabled = canToggle,
+                            onCheckedChange = { granted ->
+                                if (granted) viewModel.assignMember(project.id, row.user.email)
+                                else viewModel.unassignMember(project.id, row.user.id)
                             },
-                            onClick = {
-                                addExpanded = false
-                                viewModel.assignMember(projectId, user.email)
-                            },
-                            modifier = Modifier.handCursor(),
                         )
                     }
                 }
             }
-
-            if (members.isEmpty()) {
-                Text(
-                    stringResource(Res.string.access_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            } else {
-                members.forEach { member ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(member.email, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        member.userRole?.let { AssistChip(onClick = {}, label = { Text(roleLabel(it)) }) }
-                        TextButton(
-                            onClick = { viewModel.unassignMember(projectId, member.userId) },
-                            modifier = Modifier.handCursor(),
-                        ) { Text(stringResource(Res.string.access_remove), color = MaterialTheme.colorScheme.error) }
-                    }
-                }
-            }
+            HorizontalDivider()
         }
-        Spacer(Modifier.height(4.dp))
     }
 }

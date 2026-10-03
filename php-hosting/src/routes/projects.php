@@ -16,15 +16,15 @@ function handleProjectsList(): void {
 
     if (sessionIsAdmin($session)) {
         $stmt = getDb()->prepare(
-            'SELECT id, name, description, plan_id, api_key_last4, created_at
+            'SELECT id, name, description, plan_id, api_key_last4, created_at, CAST(owner_user_id AS CHAR) AS owner_user_id
                FROM projects ORDER BY created_at DESC'
         );
         $stmt->execute();
     } else {
         $stmt = getDb()->prepare(
-            'SELECT id, name, description, plan_id, api_key_last4, created_at FROM projects WHERE owner_user_id = ?
+            'SELECT id, name, description, plan_id, api_key_last4, created_at, CAST(owner_user_id AS CHAR) AS owner_user_id FROM projects WHERE owner_user_id = ?
              UNION
-             SELECT p.id, p.name, p.description, p.plan_id, p.api_key_last4, p.created_at FROM projects p
+             SELECT p.id, p.name, p.description, p.plan_id, p.api_key_last4, p.created_at, CAST(p.owner_user_id AS CHAR) AS owner_user_id FROM projects p
                INNER JOIN project_members m ON m.project_id = p.id
                WHERE m.user_id = ?
              ORDER BY created_at DESC'

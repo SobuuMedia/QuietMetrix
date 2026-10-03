@@ -125,6 +125,7 @@ data class ApiProject(
     @SerialName("plan_id") val planId: String? = null,
     @SerialName("api_key_last4") val apiKeyLast4: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("owner_user_id") val ownerUserId: String? = null,
 )
 
 @Serializable

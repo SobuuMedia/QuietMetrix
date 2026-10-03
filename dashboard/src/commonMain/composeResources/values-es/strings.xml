@@ -256,6 +256,7 @@
     <string name="access_remove">Quitar</string>
     <string name="access_empty">Ningún usuario asignado a este proyecto.</string>
     <string name="access_hint">Asigna desarrolladores y revisores a los proyectos que deben ver.</string>
+    <string name="team_role_explainer">Los administradores gestionan el equipo y los proyectos. Los desarrolladores pueden cambiar la configuración. Los revisores tienen acceso de solo lectura.</string>
 
     <!-- Embudos -->
     <string name="funnels_title">Embudos</string>
@@ -337,6 +338,9 @@
     <string name="experiment_wizard_next">Siguiente →</string>
     <string name="experiment_wizard_back">← Atrás</string>
     <string name="experiment_wizard_step">Paso %1$d de 3</string>
+    <string name="experiment_wizard_screen_summary">Pantalla: %1$s</string>
+    <string name="experiment_wizard_countries_summary">Países: %1$s</string>
+    <string name="experiment_explain_action">Explicar el resultado</string>
     <string name="experiment_screen_label">Pantalla: %1$s</string>
     <string name="experiment_variants_split">%1$s / %2$s</string>
     <string name="experiment_traffic_label">Tráfico: %1$s</string>

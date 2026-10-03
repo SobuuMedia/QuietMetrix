@@ -160,6 +160,7 @@ fun Routing.configureProjectRoutes() {
                         apiKeyLast4 = it["apiKeyLast4"] as? String,
                         planId = it["planId"] as? String,
                         createdAt = it["createdAt"].toString(),
+                        ownerUserId = it["ownerUserId"]?.toString(),
                     )
                 },
                 total = total.toInt(),

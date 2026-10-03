@@ -145,6 +145,7 @@ data class ProjectResponse(
     @SerialName("api_key_last4") val apiKeyLast4: String? = null,
     val planId: String? = null,
     val createdAt: String,
+    @SerialName("owner_user_id") val ownerUserId: String? = null,
 )
 
 @Serializable
