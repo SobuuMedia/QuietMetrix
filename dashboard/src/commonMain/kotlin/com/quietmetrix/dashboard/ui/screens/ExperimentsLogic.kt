@@ -176,3 +176,30 @@ internal fun verdictSentence(verdict: ExperimentVerdict): String = when (verdict
     is ExperimentVerdict.Winner ->
         "${verdict.variantName} is winning with ${confidenceScoreFor(verdict.pValue)}% confidence."
 }
+
+// ---- Card-list status badge (Task 30) ----
+
+/**
+ * The status badge shown on an experiment's card in the new two-pane card list. The
+ * README's Experiments spec names six badge words (`Running/Finished/Draft/Paused/
+ * Shipped/Closed`), but `ExperimentDto.status` (api/Models.kt) only ever holds one of
+ * four real values (`draft/active/paused/ended`) — there is no backing field that
+ * distinguishes *why* an ended experiment ended (shipped a winner vs. closed with no
+ * clear result vs. a generic "finished"), only `endedAt: String?`, a timestamp. Per the
+ * project's established honesty precedent (relabel to what the data actually supports,
+ * don't fabricate a split the backend can't back), this maps the real 4 values 1:1 onto
+ * the 4 of the spec's 6 words that a status alone can honestly support, folding
+ * Shipped/Closed into the single `Finished` badge rather than guessing an outcome.
+ */
+internal enum class ExperimentCardStatus { Running, Draft, Paused, Finished }
+
+/** Maps a real [ExperimentDto.status] string onto [ExperimentCardStatus] — see its KDoc
+ *  for why this is a 4-way (not 6-way) mapping. An unrecognized status defaults to
+ *  [ExperimentCardStatus.Draft], mirroring [statusLabel]'s and [availableActions]'s
+ *  existing "unknown -> draft" fallback. */
+internal fun cardStatusFor(status: String): ExperimentCardStatus = when (status) {
+    "active" -> ExperimentCardStatus.Running
+    "paused" -> ExperimentCardStatus.Paused
+    "ended" -> ExperimentCardStatus.Finished
+    else -> ExperimentCardStatus.Draft
+}

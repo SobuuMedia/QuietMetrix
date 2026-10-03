@@ -272,4 +272,40 @@ class ExperimentsLogicTest {
             verdictSentence(ExperimentVerdict.Winner(variantName = "b", pValue = 0.035)),
         )
     }
+
+    // ---- Card-list status badge (Task 30) ----
+    // ExperimentDto.status is only ever "draft"/"active"/"paused"/"ended" (api/Models.kt) — there
+    // is no backing field distinguishing a Finished/Shipped/Closed outcome for an ended
+    // experiment, so the badge maps the real 4 values 1:1 rather than fabricating a 3-way split.
+
+    /** Verifies the card badge mapping for ActiveIsRunning. */
+    @Test
+    fun cardStatusForActiveIsRunning() {
+        assertEquals(ExperimentCardStatus.Running, cardStatusFor("active"))
+    }
+
+    /** Verifies the card badge mapping for DraftIsDraft. */
+    @Test
+    fun cardStatusForDraftIsDraft() {
+        assertEquals(ExperimentCardStatus.Draft, cardStatusFor("draft"))
+    }
+
+    /** Verifies the card badge mapping for PausedIsPaused. */
+    @Test
+    fun cardStatusForPausedIsPaused() {
+        assertEquals(ExperimentCardStatus.Paused, cardStatusFor("paused"))
+    }
+
+    /** Verifies the card badge mapping for EndedIsFinished. */
+    @Test
+    fun cardStatusForEndedIsFinished() {
+        assertEquals(ExperimentCardStatus.Finished, cardStatusFor("ended"))
+    }
+
+    /** Verifies the card badge mapping for UnrecognizedStatusDefaultsToDraft. */
+    @Test
+    fun cardStatusForUnrecognizedStatusDefaultsToDraft() {
+        // Mirrors statusLabel()/availableActions()'s existing "unknown -> draft" fallback.
+        assertEquals(ExperimentCardStatus.Draft, cardStatusFor("something-new"))
+    }
 }

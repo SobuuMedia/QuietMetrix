@@ -310,6 +310,9 @@
     <string name="experiment_status_active">Activo</string>
     <string name="experiment_status_paused">Pausado</string>
     <string name="experiment_status_ended">Finalizado</string>
+    <string name="experiment_card_emoji">🧪</string>
+    <string name="experiment_status_running">En curso</string>
+    <string name="experiment_status_finished">Finalizado</string>
     <string name="experiment_action_start">Iniciar</string>
     <string name="experiment_action_pause">Pausar</string>
     <string name="experiment_action_resume">Reanudar</string>
@@ -333,7 +336,7 @@
     <string name="experiment_editor_submit">Crear</string>
     <string name="experiment_screen_label">Pantalla: %1$s</string>
     <string name="experiment_variants_split">%1$s / %2$s</string>
-    <string name="experiment_traffic_label">Tráfico: %1$d%%</string>
+    <string name="experiment_traffic_label">Tráfico: %1$s</string>
     <string name="experiment_results_title">Resultados</string>
     <string name="experiment_results_unit_note">Se cuenta por sesión. Solo se almacenan recuentos agregados: QuietMetrix nunca sabe qué usuario vio qué variante.</string>
     <string name="experiment_results_not_enough_data">Aún no hay suficientes datos</string>

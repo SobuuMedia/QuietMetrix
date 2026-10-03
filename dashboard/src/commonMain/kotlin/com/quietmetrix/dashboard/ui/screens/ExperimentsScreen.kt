@@ -1,5 +1,13 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,14 +17,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.CreateExperimentRequest
@@ -40,6 +50,7 @@ import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
+import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_got_it
@@ -69,9 +80,9 @@ import com.quietmetrix.dashboard.resources.experiment_help_content_description
 import com.quietmetrix.dashboard.resources.experiment_impressions_label
 import com.quietmetrix.dashboard.resources.experiment_interactions_label
 import com.quietmetrix.dashboard.resources.experiment_limit_reached_message
+import com.quietmetrix.dashboard.resources.experiment_card_emoji
 import com.quietmetrix.dashboard.resources.experiment_new
 import com.quietmetrix.dashboard.resources.experiment_none_selected
-import com.quietmetrix.dashboard.resources.experiment_pick_experiment
 import com.quietmetrix.dashboard.resources.experiment_rate_label
 import com.quietmetrix.dashboard.resources.experiment_results_baseline_badge
 import com.quietmetrix.dashboard.resources.experiment_results_not_enough_data
@@ -81,7 +92,9 @@ import com.quietmetrix.dashboard.resources.experiment_screen_label
 import com.quietmetrix.dashboard.resources.experiment_status_active
 import com.quietmetrix.dashboard.resources.experiment_status_draft
 import com.quietmetrix.dashboard.resources.experiment_status_ended
+import com.quietmetrix.dashboard.resources.experiment_status_finished
 import com.quietmetrix.dashboard.resources.experiment_status_paused
+import com.quietmetrix.dashboard.resources.experiment_status_running
 import com.quietmetrix.dashboard.resources.experiment_traffic_label
 import com.quietmetrix.dashboard.resources.experiment_usage_line
 import com.quietmetrix.dashboard.resources.experiment_variants_split
@@ -98,9 +111,12 @@ import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
+import com.quietmetrix.dashboard.ui.components.Pill
+import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
+import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
 import com.quietmetrix.dashboard.viewmodel.DataSection
@@ -136,7 +152,6 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                     overflow = TextOverflow.Ellipsis,
                 )
                 ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                ExperimentPicker(state.experiments, state.selectedExperimentKey) { viewModel.selectExperiment(it) }
                 WindowPicker(state.range) { viewModel.selectRange(it) }
                 IconButton(onClick = { viewModel.openExperimentsGuide() }, modifier = Modifier.handCursor()) {
                     Icon(
@@ -205,24 +220,20 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                     }
                 }
                 ContentState.Data -> {
-                    if (experiment == null) {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            EmptyState(Res.drawable.ic_experiment, Res.string.experiment_none_selected, Modifier.padding(16.dp))
-                        }
-                    } else {
-                        ExperimentDetail(
-                            state = state,
-                            experiment = experiment,
-                            sizeClass = sizeClass,
-                            onAction = { action ->
+                    ExperimentsBody(
+                        state = state,
+                        experiment = experiment,
+                        onSelect = { viewModel.selectExperiment(it) },
+                        onAction = { action ->
+                            if (experiment != null) {
                                 if (action == ExperimentAction.Delete) {
                                     pendingDelete = experiment
                                 } else {
                                     viewModel.changeExperimentStatus(experiment.key, action.targetStatus!!)
                                 }
-                            },
-                        )
-                    }
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -282,7 +293,12 @@ private fun ExperimentDetail(
     sizeClass: WindowSizeClass,
     onAction: (ExperimentAction) -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
         AssistChip(onClick = {}, label = { Text(statusLabel(experiment.status)) })
         if (experiment.screen != null) {
             Text(
@@ -299,11 +315,10 @@ private fun ExperimentDetail(
             )
         }
         Text(
-            stringResource(Res.string.experiment_traffic_label, experiment.trafficPercent),
+            stringResource(Res.string.experiment_traffic_label, "${experiment.trafficPercent}%"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.weight(1f))
         for (action in availableActions(experiment.status, state.canWriteExperiments)) {
             TextButton(onClick = { onAction(action) }, modifier = Modifier.handCursor()) {
                 Text(
@@ -317,19 +332,183 @@ private fun ExperimentDetail(
     ExperimentResultsPanel(state, sizeClass)
 }
 
+/** Width of the card-list sidebar when actual body width supports two usable panes. */
+private val CARD_LIST_WIDTH = 320.dp
+
+/**
+ * The Experiments tab's two-pane body (Task 30): a scrollable [ExperimentCardList] on the
+ * left drives [experiment] selection ([onSelect], which the caller wires to
+ * `DashboardViewModel.selectExperiment`) for the existing [ExperimentDetail] panel on the
+ * right — same selection mechanism the old `ExperimentPicker` dropdown drove, just fed by a
+ * different control (README's Experiments spec: "Left: list of experiment cards ... clicking
+ * selects it. Right: detail panel ..."). Measures available body width rather than using
+ * the viewport class: the 320dp sidebar plus 16dp gutter requires at least 600dp for
+ * usable detail content. Otherwise the panes stack. The detail KPI layout receives its
+ * own measured width class, accounting for sidebar space and parent padding.
+ */
 @Composable
-private fun ExperimentPicker(experiments: List<ExperimentDto>, currentKey: String?, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val current = experiments.firstOrNull { it.key == currentKey }
-    OutlinedButton(onClick = { expanded = true }, enabled = experiments.isNotEmpty(), modifier = Modifier.handCursor()) {
-        Text(current?.name ?: stringResource(Res.string.experiment_pick_experiment))
+internal fun ExperimentsBody(
+    state: DashboardState,
+    experiment: ExperimentDto?,
+    onSelect: (String) -> Unit,
+    onAction: (ExperimentAction) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val split = maxWidth >= CARD_LIST_WIDTH + 16.dp + 600.dp
+        val detailSizeClass = classifyWindow(if (split) maxWidth - CARD_LIST_WIDTH - 16.dp else maxWidth)
+        val detail: @Composable (Modifier) -> Unit = { modifier ->
+            if (experiment == null) {
+                Card(modifier = modifier) {
+                    EmptyState(Res.drawable.ic_experiment, Res.string.experiment_none_selected, Modifier.padding(16.dp))
+                }
+            } else {
+                Column(modifier = modifier) {
+                    ExperimentDetail(state = state, experiment = experiment, sizeClass = detailSizeClass, onAction = onAction)
+                }
+            }
+        }
+
+        if (split) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ExperimentCardList(
+                    experiments = state.experiments,
+                    selectedKey = state.selectedExperimentKey,
+                    onSelect = onSelect,
+                    modifier = Modifier.width(CARD_LIST_WIDTH),
+                )
+                detail(Modifier.weight(1f))
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                ExperimentCardList(
+                    experiments = state.experiments,
+                    selectedKey = state.selectedExperimentKey,
+                    onSelect = onSelect,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                detail(Modifier.fillMaxWidth())
+            }
+        }
     }
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        experiments.forEach { e ->
-            DropdownMenuItem(
-                text = { Text(e.name) },
-                onClick = { onSelect(e.key); expanded = false },
-                modifier = Modifier.handCursor(),
+}
+
+/**
+ * The status label shown on a card-list badge, from [ExperimentCardStatus] (see its KDoc
+ * for the honest 4-way status mapping this reads). Deliberately separate from [statusLabel]
+ * (the existing detail-panel chip) rather than reusing it: the detail chip keeps its current
+ * "Active"/"Ended" wording (out of this task's scope — see the task brief's "don't rebuild
+ * the detail panel"), while the new card badge adopts the README spec's own list-badge words
+ * ("Running"/"Finished"). A follow-up task could unify both onto one vocabulary if desired.
+ */
+@Composable
+private fun cardStatusLabel(status: ExperimentCardStatus) = when (status) {
+    ExperimentCardStatus.Running -> stringResource(Res.string.experiment_status_running)
+    ExperimentCardStatus.Draft -> stringResource(Res.string.experiment_status_draft)
+    ExperimentCardStatus.Paused -> stringResource(Res.string.experiment_status_paused)
+    ExperimentCardStatus.Finished -> stringResource(Res.string.experiment_status_finished)
+}
+
+/** [PillVariant] for a card-list status badge: lime (the spec's "winning"/positive accent)
+ *  only for [ExperimentCardStatus.Running], neutral otherwise — mirrors [Pill]'s own
+ *  "lime = positive/success" rule, not a fabricated per-status palette. */
+private fun cardStatusVariant(status: ExperimentCardStatus): PillVariant = when (status) {
+    ExperimentCardStatus.Running -> PillVariant.Lime
+    ExperimentCardStatus.Draft, ExperimentCardStatus.Paused, ExperimentCardStatus.Finished -> PillVariant.Neutral
+}
+
+/**
+ * The card's one-line meta line: `"Screen: {screen} · Traffic: {percent}%"`, or just the
+ * traffic clause when [ExperimentDto.screen] is null — reusing the exact same
+ * `experiment_screen_label`/`experiment_traffic_label` strings [ExperimentDetail] already
+ * renders, so the list and the detail panel never disagree about these two fields' wording.
+ * Writing this composable's test surfaced a real pre-existing bug in `experiment_traffic_label`
+ * (`"Traffic: %1$d%%"` rendered literally as `"Traffic: 100%%"` — the exact Compose-resources
+ * "%%" unescaping bug Task 18 already found and documented for `overview_vital_trend_up`). Fixed
+ * the string to take a pre-formatted `"N%"` Kotlin string (`%1$s`) instead, the same workaround
+ * Task 18 used — this is a one-line string-resource fix at both of its call sites (here and
+ * [ExperimentDetail]), not a rebuild of the detail panel.
+ */
+@Composable
+private fun cardMetaLine(experiment: ExperimentDto): String {
+    val traffic = stringResource(Res.string.experiment_traffic_label, "${experiment.trafficPercent}%")
+    val screen = experiment.screen
+    return if (screen != null) stringResource(Res.string.experiment_screen_label, screen) + " · " + traffic else traffic
+}
+
+/**
+ * A scrollable list of [ExperimentCard]s (README's Experiments spec: "Left: list of
+ * experiment cards (emoji, name, status badge ... meta line); clicking selects it"). Not
+ * independently scrollable (no nested `verticalScroll`) — it relies on `ExperimentsTab`'s
+ * own page-level scroll, the same idiom [FunnelStepList] uses, since Compose doesn't support
+ * nesting two same-axis scrollables without an explicit bounded height neither this list nor
+ * its sibling detail panel actually needs.
+ */
+@Composable
+internal fun ExperimentCardList(
+    experiments: List<ExperimentDto>,
+    selectedKey: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (e in experiments) {
+            ExperimentCard(experiment = e, selected = e.key == selectedKey, onClick = { onSelect(e.key) })
+        }
+    }
+}
+
+/**
+ * One row in [ExperimentCardList]: a fixed 🧪 emoji (no per-experiment emoji field exists on
+ * [ExperimentDto] — same "no fabricated icon" call Task 28 made for `FunnelStepRow`'s
+ * ordinal-instead-of-icon), the experiment's name, a status [Pill] ([cardStatusLabel]/
+ * [cardStatusVariant]), and [cardMetaLine]. Copies the hover/press/selection idiom
+ * [KpiCard]'s KDoc names as the one later clickable components (explicitly "experiment
+ * cards") should reuse: a single [MutableInteractionSource] drives manual press-scale and
+ * hover-brighten, while `Card(onClick = ...)`'s own elevation animation is left to Material3.
+ * [selected] additionally swaps the hairline border for a 2dp lime one, so the chosen card is
+ * identifiable without relying on color/elevation alone.
+ */
+@Composable
+private fun ExperimentCard(experiment: ExperimentDto, selected: Boolean, onClick: () -> Unit) {
+    val extended = LocalExtendedColors.current
+    val cardStatus = cardStatusFor(experiment.status)
+    val restingContainer = MaterialTheme.colorScheme.surface
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "experimentCardScale")
+    val containerColor by animateColorAsState(
+        if (hovered) lerp(restingContainer, Color.White, 0.12f) else restingContainer,
+        label = "experimentCardBrighten",
+    )
+    val border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) extended.lime else extended.hairline)
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().graphicsLayer(scaleX = scale, scaleY = scale).handCursor(),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        border = border,
+        interactionSource = interactionSource,
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.experiment_card_emoji), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    experiment.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Pill(text = cardStatusLabel(cardStatus), variant = cardStatusVariant(cardStatus))
+            }
+            Text(
+                cardMetaLine(experiment),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

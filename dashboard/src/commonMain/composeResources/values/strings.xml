@@ -316,6 +316,9 @@
     <string name="experiment_status_active">Active</string>
     <string name="experiment_status_paused">Paused</string>
     <string name="experiment_status_ended">Ended</string>
+    <string name="experiment_card_emoji">🧪</string>
+    <string name="experiment_status_running">Running</string>
+    <string name="experiment_status_finished">Finished</string>
     <string name="experiment_action_start">Start</string>
     <string name="experiment_action_pause">Pause</string>
     <string name="experiment_action_resume">Resume</string>
@@ -340,7 +343,11 @@
     <string name="experiment_editor_submit">Create</string>
     <string name="experiment_screen_label">Screen: %1$s</string>
     <string name="experiment_variants_split">%1$s / %2$s</string>
-    <string name="experiment_traffic_label">Traffic: %1$d%%</string>
+    <!-- %1$s takes an already-formatted "N%" string built in Kotlin, not a literal "%1$d%%" —
+         deliberately avoiding the Compose-resources "%%" unescaping bug Task 18 found (see
+         overview_vital_trend_up's comment above and ExperimentsScreenshotTest's Task 30 finding,
+         which hit this exact bug live: the old "%1$d%%" form rendered as "Traffic: 100%%"). -->
+    <string name="experiment_traffic_label">Traffic: %1$s</string>
     <string name="experiment_results_title">Results</string>
     <string name="experiment_results_unit_note">Counted per session. Only aggregate counts are stored — QuietMetrix never knows which user saw which variant.</string>
     <string name="experiment_results_not_enough_data">Not enough data yet</string>
