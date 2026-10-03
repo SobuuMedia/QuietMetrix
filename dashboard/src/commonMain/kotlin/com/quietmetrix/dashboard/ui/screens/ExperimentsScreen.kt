@@ -233,7 +233,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                                     viewModel.changeExperimentStatus(experiment.key, action.targetStatus!!)
                                 } else {
                                     pendingAction = PendingExperimentAction(experiment, action,
-                                        selectedVariantFor(action, experiment, state.experimentResults?.comparison))
+                                        selectedVariantFor(action, experiment, currentExperimentResults(state, experiment)?.comparison))
                                 }
                             }
                         },
@@ -336,7 +336,7 @@ private fun ExperimentDetail(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        for ((index, action) in detailActions(experiment, state.experimentResults?.takeIf { it.experiment.key == experiment.key }?.comparison, state.canWriteExperiments).withIndex()) {
+        for ((index, action) in detailActions(experiment, currentExperimentResults(state, experiment)?.comparison, state.canWriteExperiments).withIndex()) {
             if (index == 0) {
                 Button(onClick = { onAction(action) }, modifier = Modifier.handCursor()) { Text(actionLabel(action)) }
                 continue

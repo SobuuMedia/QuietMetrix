@@ -209,7 +209,7 @@ class ExperimentsScreenshotTest {
             QuietMetrixTheme(ThemeMode.Dark) {
                 Box(Modifier.width(360.dp)) {
                     ExperimentsBody(
-                        state = DashboardState(user = ApiUser("admin", "admin@example.com"), experiments = listOf(fixture), selectedExperimentKey = fixture.key, experimentResults = results),
+                        state = DashboardState(user = ApiUser("admin", "admin@example.com"), experiments = listOf(fixture), selectedExperimentKey = fixture.key, experimentResults = results, experimentResultsRange = com.quietmetrix.dashboard.api.TimeRange.Default),
                         experiment = fixture,
                         onSelect = {},
                         onAction = { actions += it },

@@ -161,9 +161,13 @@ function handleExperimentUpdate(string $projectId, string $experimentKey): void 
     $params[] = $existing['status'];
     $update = getDb()->prepare('UPDATE experiments SET ' . implode(', ', $sets) . ' WHERE project_id = ? AND experiment_key = ? AND status = ?');
     $update->execute($params);
-    if ($update->rowCount() === 0 && isset($body['status'])) {
-        errorResponse(409, 'invalid_transition', 'Experiment changed; refresh before retrying');
-        return;
+    if ($update->rowCount() === 0) {
+        // MySQL can report zero changed rows for a legitimate same-value PATCH.
+        $current = findExperimentRow($projectId, $experimentKey);
+        if ($current === null || $current['status'] !== $existing['status']) {
+            errorResponse(409, 'invalid_transition', 'Experiment changed; refresh before retrying');
+            return;
+        }
     }
 
     jsonResponse(200, findExperimentResponse($projectId, $experimentKey));

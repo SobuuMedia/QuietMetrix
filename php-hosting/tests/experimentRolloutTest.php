@@ -36,7 +36,9 @@ function errorResponse(int $status, string $code, string $message): void { $GLOB
 function now(): string {
     if ($GLOBALS['rolloutRace'] ?? false) {
         $GLOBALS['rolloutRace'] = false;
-        getDb()->exec("UPDATE experiments SET status = 'closed' WHERE experiment_key = 'cta'");
+        $target = $GLOBALS['rolloutRaceStatus'] ?? 'closed';
+        getDb()->prepare("UPDATE experiments SET status = ?, selected_variant = ? WHERE experiment_key = 'cta'")
+            ->execute([$target, $target === 'shipped' ? 'b' : null]);
     }
     return '2026-10-03T12:00:00';
 }
@@ -63,3 +65,19 @@ rolloutCheck($GLOBALS['rolloutResponse'][0] === 409, 'stale prior status rejecte
 $stored = findExperimentRow('p', 'cta');
 rolloutCheck($stored['status'] === 'closed' && $stored['selected_variant'] === null, 'race cannot persist partial choice');
 echo "Rollout SQL route checks passed\n";
+getDb()->exec("UPDATE experiments SET status = 'active', selected_variant = NULL WHERE experiment_key = 'cta'");
+$GLOBALS['rolloutBody'] = ['name' => 'Renamed'];
+$GLOBALS['rolloutRaceStatus'] = 'shipped';
+$GLOBALS['rolloutRace'] = true;
+handleExperimentUpdate('p', 'cta');
+rolloutCheck($GLOBALS['rolloutResponse'][0] === 409, 'field-only stale prior status rejected');
+rolloutCheck(findExperimentRow('p', 'cta')['name'] === 'CTA', 'racing rename cannot mutate terminal row');
+rolloutCheck(findExperimentRow('p', 'cta')['status'] === 'shipped', 'concurrent shipment remains intact');
+getDb()->exec("UPDATE experiments SET status = 'active' WHERE experiment_key = 'cta'");
+// SQLite normally counts matched rows; emulate MySQL's unchanged-row zero count.
+getDb()->exec("CREATE TEMP TRIGGER unchanged_update BEFORE UPDATE ON experiments WHEN NEW.name = OLD.name BEGIN SELECT RAISE(IGNORE); END");
+$GLOBALS['rolloutBody'] = ['name' => 'CTA'];
+handleExperimentUpdate('p', 'cta');
+rolloutCheck($GLOBALS['rolloutResponse'][0] === 200, 'same-value zero-row patch succeeds when status unchanged');
+getDb()->exec('DROP TRIGGER unchanged_update');
+echo "Field-only race and zero-change checks passed\n";

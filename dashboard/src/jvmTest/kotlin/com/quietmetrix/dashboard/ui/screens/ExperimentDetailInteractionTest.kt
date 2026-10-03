@@ -30,7 +30,26 @@ class ExperimentDetailInteractionTest {
         comparison = ExperimentComparisonDto("a", "b", 5.0, .001, true, "b"),
     )
 
+    /** A delayed previous-window winner cannot be shipped under the new window heading. */
+    @Suppress("DEPRECATION")
+    @Test
+    fun staleRangeDoesNotOfferShip() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                ExperimentsBody(
+                    DashboardState(user = ApiUser("admin", "admin@example.com"), range = TimeRange.Day7,
+                        experiments = listOf(experiment), selectedExperimentKey = experiment.key,
+                        experimentResultsRange = TimeRange.Day30, experimentResults = results().copy(range = ExperimentRangeDto("2026-09-01", "2026-10-01"))),
+                    experiment, onSelect = {}, onAction = {},
+                )
+            }
+        }
+        onNodeWithText("Ship winner").assertDoesNotExist()
+        onNodeWithText("Keep baseline").assertExists()
+    }
+
     /** Raw statistics appear only when Expert is enabled; metrics and medal remain available normally. */
+    @Suppress("DEPRECATION")
     @Test
     fun expertToggleControlsRawStatistics() = runComposeUiTest {
         setContent {
@@ -38,7 +57,7 @@ class ExperimentDetailInteractionTest {
             QuietMetrixTheme(ThemeMode.Dark) {
                 Column(Modifier.width(700.dp).verticalScroll(rememberScrollState())) {
                     TextButton(onClick = { expert = !expert }) { Text("Toggle expert") }
-                    ExperimentResultsPanel(DashboardState(expertMode = expert, experimentResults = results()), experiment, WindowSizeClass.Medium)
+                    ExperimentResultsPanel(DashboardState(expertMode = expert, experimentResultsRange = TimeRange.Default, experimentResults = results()), experiment, WindowSizeClass.Medium)
                 }
             }
         }
@@ -51,13 +70,14 @@ class ExperimentDetailInteractionTest {
     }
 
     /** Shipped medals use the persisted choice even when the live date-range comparison changes. */
+    @Suppress("DEPRECATION")
     @Test
     fun shippedSelectionOverridesLiveWinner() = runComposeUiTest {
         val shipped = experiment.copy(status = "shipped", selectedVariant = "a")
         setContent {
             QuietMetrixTheme(ThemeMode.Dark) {
                 Column(Modifier.width(700.dp).verticalScroll(rememberScrollState())) {
-                    ExperimentResultsPanel(DashboardState(experimentResults = results(shipped)), shipped, WindowSizeClass.Medium)
+                    ExperimentResultsPanel(DashboardState(experimentResultsRange = TimeRange.Default, experimentResults = results(shipped)), shipped, WindowSizeClass.Medium)
                 }
             }
         }
@@ -68,6 +88,7 @@ class ExperimentDetailInteractionTest {
     }
 
     /** Cancel never mutates; only the shared dialog confirm button delivers the captured choice. */
+    @Suppress("DEPRECATION")
     @Test
     fun endingActionRequiresConfirmation() = runComposeUiTest {
         var confirms = 0

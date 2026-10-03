@@ -88,6 +88,8 @@ data class DashboardState(
     val experimentLimit: Int? = null,
     val selectedExperimentKey: String? = null,
     val experimentResults: ExperimentResultsResponse? = null,
+    /** Request window associated with the accepted experiment result, never inferred from visible controls. */
+    val experimentResultsRange: TimeRange? = null,
     val experimentsGuideOpen: Boolean = false,
     val experimentsGuideStep: Int = 0,
     /** Set when the most recent create-experiment call was rejected with `experiment_limit_reached`. */
@@ -159,6 +161,17 @@ data class Toast(
 /** Records [error] for [section] without touching the global banner or any other section. */
 internal fun DashboardState.withSectionError(section: DataSection, error: UiError): DashboardState =
     copy(sectionErrors = sectionErrors + (section to error))
+
+/** Commits an awaited response only while its project, experiment and requested window remain selected. */
+internal fun DashboardState.acceptExperimentResults(
+    result: ExperimentResultsResponse,
+    projectId: String,
+    experimentKey: String,
+    requestedRange: TimeRange,
+): DashboardState = if (currentProjectId == projectId && selectedExperimentKey == experimentKey &&
+    range == requestedRange && result.experiment.key == experimentKey) {
+    copy(experimentResults = result, experimentResultsRange = requestedRange).clearingSectionError(DataSection.ExperimentResults)
+} else this
 
 /** Clears a previously-recorded section error, e.g. after that section reloads successfully. */
 internal fun DashboardState.clearingSectionError(section: DataSection): DashboardState =
@@ -422,7 +435,7 @@ class DashboardViewModel(
     }
 
     fun selectRange(range: TimeRange) {
-        _state.update { it.copy(range = range) }
+        _state.update { it.copy(range = range, experimentResults = null, experimentResultsRange = null) }
         scope.launch { loadAggregates(); loadSessions(); loadFunnelResultsOnce(); loadExperimentResultsOnce() }
     }
 
@@ -687,16 +700,17 @@ class DashboardViewModel(
         }
         try {
             val res = api.experimentResults(projectId, key, s.range)
-            _state.update { it.copy(experimentResults = res).clearingSectionError(DataSection.ExperimentResults) }
+            _state.update { it.acceptExperimentResults(res, projectId, key, s.range) }
         } catch (e: Throwable) {
             _state.update {
-                it.withSectionError(DataSection.ExperimentResults, e.toUiError("GET /projects/{id}/experiments/{key}/results"))
+                if (it.currentProjectId == projectId && it.selectedExperimentKey == key && it.range == s.range)
+                    it.withSectionError(DataSection.ExperimentResults, e.toUiError("GET /projects/{id}/experiments/{key}/results")) else it
             }
         }
     }
 
     fun selectExperiment(experimentKey: String) {
-        _state.update { it.copy(selectedExperimentKey = experimentKey) }
+        _state.update { it.copy(selectedExperimentKey = experimentKey, experimentResults = null, experimentResultsRange = null) }
         scope.launch { loadExperimentResultsOnce() }
     }
 

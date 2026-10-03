@@ -27,7 +27,7 @@ import org.jetbrains.compose.resources.stringResource
 /** Declared variants, honest unavailable previews, a confidence meter and opt-in raw statistics. */
 @Composable
 internal fun ExperimentResultsPanel(state: DashboardState, experiment: ExperimentDto, sizeClass: WindowSizeClass) {
-    val results = state.experimentResults?.takeIf { it.experiment.key == experiment.key }
+    val results = currentExperimentResults(state, experiment)
     val winner = experimentWinner(experiment, results?.comparison)
     val verdict = verdictFor(results?.comparison).let { candidate ->
         if (candidate is ExperimentVerdict.Winner && experiment.variants.none { it.name == candidate.variantName })

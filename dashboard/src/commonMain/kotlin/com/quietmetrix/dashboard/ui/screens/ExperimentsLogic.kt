@@ -221,3 +221,7 @@ internal fun selectedVariantFor(action: ExperimentAction, experiment: Experiment
     ExperimentAction.KeepBaseline -> experiment.variants.firstOrNull()?.name
     else -> null
 }
+
+/** Only the selected request window can supply visible statistics or a suggested ship choice. */
+internal fun currentExperimentResults(state: com.quietmetrix.dashboard.viewmodel.DashboardState, experiment: ExperimentDto) =
+    state.experimentResults?.takeIf { it.experiment.key == experiment.key && state.experimentResultsRange == state.range }
