@@ -11,6 +11,15 @@ import kotlin.test.assertTrue
 
 class ExperimentsLogicTest {
 
+    @Test
+    fun wizardSummaryIncludesNameKeyAndTrafficSplit() {
+        assertEquals(
+            "Checkout (checkout_cta): 50% old / 50% new, shown to 30% of traffic",
+            experimentWizardSummary("Checkout", "checkout_cta", "old", "new", 50, 30),
+        )
+    }
+
+
     /** Missing winner identity must never promote the challenger by default. */
     @Test
     fun unknownWinnerRemainsUnavailable() {

@@ -225,3 +225,7 @@ internal fun selectedVariantFor(action: ExperimentAction, experiment: Experiment
 /** Only the selected request window can supply visible statistics or a suggested ship choice. */
 internal fun currentExperimentResults(state: com.quietmetrix.dashboard.viewmodel.DashboardState, experiment: ExperimentDto) =
     state.experimentResults?.takeIf { it.experiment.key == experiment.key && state.experimentResultsRange == state.range }
+
+/** Plain-language live summary for the New experiment wizard's final review step. */
+internal fun experimentWizardSummary(name: String, key: String, firstVariant: String, secondVariant: String, firstShare: Int, traffic: Int): String =
+    "$name ($key): $firstShare% $firstVariant / ${100 - firstShare}% $secondVariant, shown to $traffic% of traffic"

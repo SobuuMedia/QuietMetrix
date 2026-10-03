@@ -55,6 +55,10 @@ import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.ui.components.ConfirmDialog
+import com.quietmetrix.dashboard.ui.components.ModalShell
+import com.quietmetrix.dashboard.ui.components.ModalFooter
+import com.quietmetrix.dashboard.ui.components.ModalFooterAction
+import com.quietmetrix.dashboard.ui.components.ModalFooterEmphasis
 import com.quietmetrix.dashboard.ui.components.CodeSnippetPanel
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_got_it
@@ -534,6 +538,7 @@ private fun ExperimentCard(experiment: ExperimentDto, selected: Boolean, onClick
 
 @Composable
 private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExperimentRequest) -> Unit) {
+    var step by remember { mutableStateOf(0) }
     var key by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var screen by remember { mutableStateOf("") }
@@ -542,98 +547,61 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
     var splitText by remember { mutableStateOf("50") }
     var trafficText by remember { mutableStateOf("100") }
     var countriesText by remember { mutableStateOf("") }
-
     val split = splitText.toIntOrNull() ?: -1
     val traffic = trafficText.toIntOrNull() ?: -1
     val countryParse = parseCountryList(countriesText)
     val valid = isExperimentFormValid(key, name, variantA, variantB, split, traffic, countriesText)
+    val basicsValid = key.isNotBlank() && name.isNotBlank()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.experiment_editor_title)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedTextField(
-                    value = key, onValueChange = { key = it },
-                    label = { Text(stringResource(Res.string.experiment_editor_key_label)) },
-                    placeholder = { Text(stringResource(Res.string.experiment_editor_key_hint)) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text(stringResource(Res.string.experiment_editor_name_label)) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = screen, onValueChange = { screen = it },
-                    label = { Text(stringResource(Res.string.experiment_editor_screen_label)) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = variantA, onValueChange = { variantA = it },
-                        label = { Text(stringResource(Res.string.experiment_editor_variant_a_label)) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = variantB, onValueChange = { variantB = it },
-                        label = { Text(stringResource(Res.string.experiment_editor_variant_b_label)) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = splitText, onValueChange = { splitText = it },
-                        label = { Text(stringResource(Res.string.experiment_editor_split_label)) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = trafficText, onValueChange = { trafficText = it },
-                        label = { Text(stringResource(Res.string.experiment_editor_traffic_label)) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                }
-                OutlinedTextField(
-                    value = countriesText, onValueChange = { countriesText = it },
-                    label = { Text(stringResource(Res.string.experiment_editor_countries_label)) },
-                    placeholder = { Text(stringResource(Res.string.experiment_editor_countries_hint)) },
-                    isError = countryParse.invalidTokens.isNotEmpty(),
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                if (countryParse.invalidTokens.isNotEmpty()) {
-                    Text(
-                        stringResource(Res.string.experiment_editor_countries_invalid),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSubmit(
-                        CreateExperimentRequest(
-                            key = key.trim(),
-                            name = name.trim(),
-                            screen = screen.trim().takeIf { it.isNotEmpty() },
+    ModalShell(
+        title = stringResource(Res.string.experiment_editor_title),
+        onDismiss = onDismiss,
+        footer = {
+            ModalFooter(
+                leading = if (step > 0) ModalFooterAction(stringResource(Res.string.experiment_wizard_back), ModalFooterEmphasis.Secondary) { step-- } else null,
+                secondary = ModalFooterAction(stringResource(Res.string.experiment_editor_cancel), ModalFooterEmphasis.Secondary, onDismiss),
+                primary = ModalFooterAction(
+                    label = stringResource(if (step == 2) Res.string.experiment_editor_submit else Res.string.experiment_wizard_next),
+                    emphasis = ModalFooterEmphasis.Primary,
+                    onClick = {
+                        if ((step == 0 && !basicsValid) || (step > 0 && !valid)) return@ModalFooterAction
+                        if (step < 2) step++ else onSubmit(CreateExperimentRequest(
+                            key = key.trim(), name = name.trim(), screen = screen.trim().takeIf { it.isNotEmpty() },
                             trafficPercent = traffic,
                             variants = listOf(VariantDto(variantA.trim(), split), VariantDto(variantB.trim(), 100 - split)),
                             countries = countryParse.normalized.takeIf { it.isNotEmpty() },
-                        ),
-                    )
-                },
-                enabled = valid,
-                modifier = Modifier.handCursor(),
-            ) { Text(stringResource(Res.string.experiment_editor_submit)) }
+                        ))
+                    },
+                ),
+            )
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.handCursor()) {
-                Text(stringResource(Res.string.experiment_editor_cancel))
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(Res.string.experiment_wizard_step, step + 1), style = MaterialTheme.typography.labelMedium)
+            when (step) {
+                0 -> {
+                    OutlinedTextField(key, { key = it }, label = { Text(stringResource(Res.string.experiment_editor_key_label)) }, placeholder = { Text(stringResource(Res.string.experiment_editor_key_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.experiment_editor_name_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(screen, { screen = it }, label = { Text(stringResource(Res.string.experiment_editor_screen_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                1 -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(variantA, { variantA = it }, label = { Text(stringResource(Res.string.experiment_editor_variant_a_label)) }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(variantB, { variantB = it }, label = { Text(stringResource(Res.string.experiment_editor_variant_b_label)) }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(splitText, { splitText = it }, label = { Text(stringResource(Res.string.experiment_editor_split_label)) }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(trafficText, { trafficText = it }, label = { Text(stringResource(Res.string.experiment_editor_traffic_label)) }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    OutlinedTextField(countriesText, { countriesText = it }, label = { Text(stringResource(Res.string.experiment_editor_countries_label)) }, placeholder = { Text(stringResource(Res.string.experiment_editor_countries_hint)) }, isError = countryParse.invalidTokens.isNotEmpty(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (countryParse.invalidTokens.isNotEmpty()) Text(stringResource(Res.string.experiment_editor_countries_invalid), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                }
+                else -> {
+                    Text(experimentWizardSummary(name.trim(), key.trim(), variantA.trim(), variantB.trim(), split, traffic), style = MaterialTheme.typography.bodyLarge)
+                    if (screen.isNotBlank()) Text("Screen: ${screen.trim()}", style = MaterialTheme.typography.bodyMedium)
+                    if (countryParse.normalized.isNotEmpty()) Text("Countries: ${countryParse.normalized.joinToString()}", style = MaterialTheme.typography.bodyMedium)
+                }
             }
-        },
-    )
+        }
+    }
 }

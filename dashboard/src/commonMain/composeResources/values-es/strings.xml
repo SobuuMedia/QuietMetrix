@@ -334,6 +334,9 @@
     <string name="experiment_editor_countries_hint">Déjalo vacío para todos los países. Ejemplo: ES, FR, MX</string>
     <string name="experiment_editor_countries_invalid">Algunos códigos no son códigos de país válidos de 2 letras</string>
     <string name="experiment_editor_submit">Crear</string>
+    <string name="experiment_wizard_next">Siguiente →</string>
+    <string name="experiment_wizard_back">← Atrás</string>
+    <string name="experiment_wizard_step">Paso %1$d de 3</string>
     <string name="experiment_screen_label">Pantalla: %1$s</string>
     <string name="experiment_variants_split">%1$s / %2$s</string>
     <string name="experiment_traffic_label">Tráfico: %1$s</string>

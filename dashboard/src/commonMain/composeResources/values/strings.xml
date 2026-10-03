@@ -341,6 +341,9 @@
     <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="experiment_editor_countries_invalid">Some codes aren\'t valid 2-letter country codes</string>
     <string name="experiment_editor_submit">Create</string>
+    <string name="experiment_wizard_next">Next →</string>
+    <string name="experiment_wizard_back">← Back</string>
+    <string name="experiment_wizard_step">Step %1$d of 3</string>
     <string name="experiment_screen_label">Screen: %1$s</string>
     <string name="experiment_variants_split">%1$s / %2$s</string>
     <!-- %1$s takes an already-formatted "N%" string built in Kotlin, not a literal "%1$d%%" —
