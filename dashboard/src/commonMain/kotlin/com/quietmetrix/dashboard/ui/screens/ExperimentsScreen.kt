@@ -55,6 +55,7 @@ import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.ui.components.ConfirmDialog
+import com.quietmetrix.dashboard.ui.components.CodeSnippetPanel
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_got_it
 import com.quietmetrix.dashboard.resources.experiment_action_delete
@@ -351,6 +352,7 @@ private fun ExperimentDetail(
     }
 
     ExperimentResultsPanel(state, experiment, sizeClass)
+    CodeSnippetPanel(experiment = experiment, onExplain = {})
 }
 
 /** Width of the card-list sidebar when actual body width supports two usable panes. */
