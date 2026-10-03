@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     name             VARCHAR(255) NOT NULL,
     screen           VARCHAR(128) NULL,
     status           VARCHAR(16)  NOT NULL DEFAULT 'draft',
+    selected_variant VARCHAR(32)  NULL,
     traffic_percent  INT          NOT NULL DEFAULT 100,
     variants         JSON         NOT NULL,   -- [{name, weight}, {name, weight}]
     countries        JSON         NULL,       -- ["ES","FR"] or NULL = all countries

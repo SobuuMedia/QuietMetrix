@@ -38,7 +38,7 @@ class ExperimentService(
         return ExperimentListResult(repo.listForProject(projectId), limit)
     }
 
-    /** Only `active` experiments, for the SDK-facing config endpoint. */
+    /** Active tests and shipped rollouts, projected by toConfigDto for the SDK endpoint. */
     fun activeConfig(projectId: Long): List<ExperimentRecord> = repo.listActive(projectId)
 
     fun create(projectId: Long, request: CreateExperimentRequest): ExperimentOutcome<ExperimentRecord> {
@@ -76,8 +76,17 @@ class ExperimentService(
         val existing = repo.findByKey(projectId, experimentKey)
             ?: return ExperimentOutcome.Error(404, "not_found", "Experiment not found")
 
+        if (existing.status in setOf("shipped", "closed")) {
+            return ExperimentOutcome.Error(409, "not_editable", "Resolved experiments are immutable")
+        }
+
         if (request.status != null && !ExperimentStatus.canTransition(existing.status, request.status)) {
             return ExperimentOutcome.Error(409, "invalid_transition", "Cannot move from ${existing.status} to ${request.status}")
+        }
+
+        if ((request.status == "shipped" && request.selectedVariant !in existing.variants.map { it.name }) ||
+            (request.selectedVariant != null && request.status != "shipped")) {
+            return ExperimentOutcome.Error(400, "schema_violation", "Shipping requires a declared selected_variant; other transitions cannot select one")
         }
 
         val editable = ExperimentStatus.editableFields(existing.status)
@@ -116,8 +125,10 @@ class ExperimentService(
                 variants = request.variants,
                 countries = if (request.countries != null) ExperimentValidation.normalizeCountries(request.countries) ?: emptyList() else null,
                 status = request.status,
+                selectedVariant = request.selectedVariant,
+                expectedStatus = existing.status,
             ),
-        ) ?: return ExperimentOutcome.Error(404, "not_found", "Experiment not found")
+        ) ?: return ExperimentOutcome.Error(409, "invalid_transition", "Experiment changed; refresh before retrying")
 
         return ExperimentOutcome.Ok(updated)
     }

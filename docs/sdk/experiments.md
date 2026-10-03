@@ -76,8 +76,9 @@ while the app is open. Concretely:
 - **Every launch after that**: the SDK uses whatever was cached from the previous session,
   while quietly fetching fresh config in the background for the *next* one.
 
-So pausing an experiment, reweighting it, or ending it takes effect from each device's next
-app launch — not instantly, and not mid-session.
+Pausing, ending, closing or shipping takes effect in a subsequent app session after a
+successful config refresh. Offline devices or failed refreshes continue using cached config;
+existing sessions never change assignment. The endpoint may be cached for up to five minutes.
 
 ## Country targeting
 
@@ -98,9 +99,29 @@ plus a significance indicator once each variant has enough sessions — before t
 "not enough data yet" rather than a misleading 0%. As with every other QuietMetrix number, a
 variant's results stay hidden until enough distinct devices have contributed to it.
 
+## Finish, ship or close
+
+The dashboard displays Running (`active`), Draft, Paused, Finished (`ended`), Shipped and Closed.
+Finished records preserve compatibility with existing experiments and can subsequently ship or close.
+From Running or Paused, **Ship winner** chooses the declared variant supported by an available
+significant comparison; **Keep baseline** explicitly chooses the first declared variant when
+there is no supported winner. Both persist `status: "shipped"` and `selected_variant` atomically.
+The API rejects missing or undeclared rollout choices. **Close without rollout** persists
+`closed` and removes the experiment from future refreshed SDK configs. Shipped and closed
+records cannot be edited or transitioned again.
+
+Shipping is a full rollout across all countries and 100% of traffic. The SDK config retains
+the two original variant names but assigns weights 100/0 to the selected/unselected variant.
+The stored original split, traffic and country targeting remain unchanged for reference.
+Results continue to reflect the selected date range and may include post-rollout traffic;
+the shipped medal identifies the persisted choice, while confidence reflects live results.
+The confidence score is `(1 − p-value) × 100`, not a posterior probability that a variant is best.
+Counts, Wilson intervals and z/p statistics are available in Expert mode.
+
 ## Plan limits
 
-A free-plan project may have up to 2 non-ended experiments at a time; ending one frees a slot.
+A free-plan project may have up to 2 experiments in draft, active or paused state at a time;
+ended, shipped and closed experiments do not consume slots.
 **Self-hosted QuietMetrix has no limit at all**, regardless of plan — this only applies to the
 hosted/cloud offering.
 

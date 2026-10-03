@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -52,6 +53,8 @@ import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.*
+import com.quietmetrix.dashboard.ui.components.ConfirmDialog
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_got_it
 import com.quietmetrix.dashboard.resources.experiment_action_delete
@@ -133,10 +136,10 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
     var showCreateDialog by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<ExperimentDto?>(null) }
+    var pendingAction by remember { mutableStateOf<PendingExperimentAction?>(null) }
 
     val experiment = currentExperiment(state.experiments, state.selectedExperimentKey)
-    val activeCount = state.experiments.count { it.status != "ended" }
+    val activeCount = state.experiments.count { it.status in setOf("draft", "active", "paused") }
 
     MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -226,10 +229,11 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                         onSelect = { viewModel.selectExperiment(it) },
                         onAction = { action ->
                             if (experiment != null) {
-                                if (action == ExperimentAction.Delete) {
-                                    pendingDelete = experiment
-                                } else {
+                                if (action in setOf(ExperimentAction.Start, ExperimentAction.Resume)) {
                                     viewModel.changeExperimentStatus(experiment.key, action.targetStatus!!)
+                                } else {
+                                    pendingAction = PendingExperimentAction(experiment, action,
+                                        selectedVariantFor(action, experiment, state.experimentResults?.comparison))
                                 }
                             }
                         },
@@ -249,34 +253,43 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
         )
     }
 
-    pendingDelete?.let { e ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(Res.string.experiment_delete_confirm_title)) },
-            text = { Text(stringResource(Res.string.experiment_delete_confirm_body, e.name)) },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.deleteExperiment(e.key); pendingDelete = null },
-                    modifier = Modifier.handCursor(),
-                ) { Text(stringResource(Res.string.experiment_action_delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }, modifier = Modifier.handCursor()) {
-                    Text(stringResource(Res.string.experiment_editor_cancel))
-                }
-            },
-        )
+    pendingAction?.let { pending ->
+        ExperimentActionConfirmation(pending, onDismiss = { pendingAction = null }) {
+            if (pending.action == ExperimentAction.Delete) viewModel.deleteExperiment(pending.experiment.key)
+            else viewModel.changeExperimentStatus(pending.experiment.key, pending.action.targetStatus!!, pending.selectedVariant)
+            pendingAction = null
+        }
     }
 }
 
+/** Immutable action snapshot prevents a live result refresh from changing the confirmed choice. */
+internal data class PendingExperimentAction(val experiment: ExperimentDto, val action: ExperimentAction, val selectedVariant: String?)
+
+/** Shared consequence dialog for pause, finish, close, rollout and deletion. */
 @Composable
-private fun statusLabel(status: String) = when (status) {
-    "active" -> stringResource(Res.string.experiment_status_active)
-    "paused" -> stringResource(Res.string.experiment_status_paused)
-    "ended" -> stringResource(Res.string.experiment_status_ended)
-    else -> stringResource(Res.string.experiment_status_draft)
+internal fun ExperimentActionConfirmation(pending: PendingExperimentAction, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val action = pending.action
+    val label = actionLabel(action)
+    ConfirmDialog(
+        emoji = if (action == ExperimentAction.Ship) "🏆" else "🧪",
+        title = stringResource(Res.string.experiment_confirm_title, label, pending.experiment.name),
+        body = when {
+            action == ExperimentAction.Delete -> stringResource(Res.string.experiment_delete_confirm_body, pending.experiment.name)
+            pending.selectedVariant != null -> stringResource(Res.string.experiment_confirm_rollout, pending.selectedVariant)
+            else -> stringResource(Res.string.experiment_confirm_stop)
+        },
+        confirmLabel = label,
+        danger = action in setOf(ExperimentAction.Delete, ExperimentAction.End, ExperimentAction.Close),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
 }
 
+/** Localized persisted lifecycle state. */
+@Composable
+private fun statusLabel(status: String) = cardStatusLabel(cardStatusFor(status))
+
+/** Localized operator action. */
 @Composable
 private fun actionLabel(action: ExperimentAction) = when (action) {
     ExperimentAction.Start -> stringResource(Res.string.experiment_action_start)
@@ -284,8 +297,12 @@ private fun actionLabel(action: ExperimentAction) = when (action) {
     ExperimentAction.Resume -> stringResource(Res.string.experiment_action_resume)
     ExperimentAction.End -> stringResource(Res.string.experiment_action_end)
     ExperimentAction.Delete -> stringResource(Res.string.experiment_action_delete)
+    ExperimentAction.Ship -> stringResource(Res.string.experiment_action_ship)
+    ExperimentAction.KeepBaseline -> stringResource(Res.string.experiment_action_keep)
+    ExperimentAction.Close -> stringResource(Res.string.experiment_action_close)
 }
 
+/** Responsive metadata, status-aware primary action and result detail. */
 @Composable
 private fun ExperimentDetail(
     state: DashboardState,
@@ -319,7 +336,11 @@ private fun ExperimentDetail(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        for (action in availableActions(experiment.status, state.canWriteExperiments)) {
+        for ((index, action) in detailActions(experiment, state.experimentResults?.takeIf { it.experiment.key == experiment.key }?.comparison, state.canWriteExperiments).withIndex()) {
+            if (index == 0) {
+                Button(onClick = { onAction(action) }, modifier = Modifier.handCursor()) { Text(actionLabel(action)) }
+                continue
+            }
             TextButton(onClick = { onAction(action) }, modifier = Modifier.handCursor()) {
                 Text(
                     actionLabel(action),
@@ -329,7 +350,7 @@ private fun ExperimentDetail(
         }
     }
 
-    ExperimentResultsPanel(state, sizeClass)
+    ExperimentResultsPanel(state, experiment, sizeClass)
 }
 
 /** Width of the card-list sidebar when actual body width supports two usable panes. */
@@ -392,20 +413,15 @@ internal fun ExperimentsBody(
     }
 }
 
-/**
- * The status label shown on a card-list badge, from [ExperimentCardStatus] (see its KDoc
- * for the honest 4-way status mapping this reads). Deliberately separate from [statusLabel]
- * (the existing detail-panel chip) rather than reusing it: the detail chip keeps its current
- * "Active"/"Ended" wording (out of this task's scope — see the task brief's "don't rebuild
- * the detail panel"), while the new card badge adopts the README spec's own list-badge words
- * ("Running"/"Finished"). A follow-up task could unify both onto one vocabulary if desired.
- */
+/** Shared localized status vocabulary for list and detail panels. */
 @Composable
 private fun cardStatusLabel(status: ExperimentCardStatus) = when (status) {
     ExperimentCardStatus.Running -> stringResource(Res.string.experiment_status_running)
     ExperimentCardStatus.Draft -> stringResource(Res.string.experiment_status_draft)
     ExperimentCardStatus.Paused -> stringResource(Res.string.experiment_status_paused)
     ExperimentCardStatus.Finished -> stringResource(Res.string.experiment_status_finished)
+    ExperimentCardStatus.Shipped -> stringResource(Res.string.experiment_status_shipped)
+    ExperimentCardStatus.Closed -> stringResource(Res.string.experiment_status_closed)
 }
 
 /** [PillVariant] for a card-list status badge: lime (the spec's "winning"/positive accent)
@@ -413,7 +429,7 @@ private fun cardStatusLabel(status: ExperimentCardStatus) = when (status) {
  *  "lime = positive/success" rule, not a fabricated per-status palette. */
 private fun cardStatusVariant(status: ExperimentCardStatus): PillVariant = when (status) {
     ExperimentCardStatus.Running -> PillVariant.Lime
-    ExperimentCardStatus.Draft, ExperimentCardStatus.Paused, ExperimentCardStatus.Finished -> PillVariant.Neutral
+    ExperimentCardStatus.Draft, ExperimentCardStatus.Paused, ExperimentCardStatus.Finished, ExperimentCardStatus.Shipped, ExperimentCardStatus.Closed -> PillVariant.Neutral
 }
 
 /**
@@ -430,7 +446,7 @@ private fun cardStatusVariant(status: ExperimentCardStatus): PillVariant = when 
  */
 @Composable
 private fun cardMetaLine(experiment: ExperimentDto): String {
-    val traffic = stringResource(Res.string.experiment_traffic_label, "${experiment.trafficPercent}%")
+    val traffic = stringResource(Res.string.experiment_traffic_label, "${if (experiment.status == "shipped") 100 else experiment.trafficPercent}%")
     val screen = experiment.screen
     return if (screen != null) stringResource(Res.string.experiment_screen_label, screen) + " · " + traffic else traffic
 }
@@ -618,97 +634,4 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
             }
         },
     )
-}
-
-@Composable
-private fun ExperimentResultsPanel(state: DashboardState, sizeClass: WindowSizeClass) {
-    val results = state.experimentResults
-
-    ResponsiveRowOrColumn(sizeClass) {
-        when (contentStateFor(state.loading, results == null)) {
-            ContentState.Loading -> {
-                KpiSkeleton(Modifier.fillSlot())
-                KpiSkeleton(Modifier.fillSlot())
-            }
-            else -> {
-                results?.variants?.forEach { v ->
-                    val interval = if (v.impressions != null && v.interactions != null) {
-                        wilsonInterval(v.interactions, v.impressions)
-                    } else {
-                        null
-                    }
-                    KpiCard(
-                        label = v.name,
-                        value = v.rate?.let { formatPercent(it) } ?: stringResource(Res.string.experiment_results_not_enough_data),
-                        modifier = Modifier.fillSlot(),
-                        sub = interval?.let { formatWilsonRange(it) },
-                    )
-                }
-            }
-        }
-    }
-
-    if (results != null) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    stringResource(Res.string.experiment_results_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                VerdictBanner(verdictFor(results.comparison))
-
-                results.variants.forEachIndexed { index, v ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(v.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.4f))
-                        if (index == 0) {
-                            AssistChip(onClick = {}, label = { Text(stringResource(Res.string.experiment_results_baseline_badge)) })
-                        }
-                        Column(modifier = Modifier.weight(0.6f)) {
-                            Text(
-                                stringResource(Res.string.experiment_impressions_label) + ": " + (v.impressions?.let { formatCount(it) } ?: stringResource(Res.string.experiment_results_not_enough_data)),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            Text(
-                                stringResource(Res.string.experiment_interactions_label) + ": " + (v.interactions?.let { formatCount(it) } ?: stringResource(Res.string.experiment_results_not_enough_data)),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    stringResource(Res.string.experiment_results_unit_note),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VerdictBanner(verdict: ExperimentVerdict) {
-    val text = when (verdict) {
-        is ExperimentVerdict.NotEnoughData -> stringResource(Res.string.experiment_verdict_not_enough_data)
-        is ExperimentVerdict.NoDifference -> stringResource(Res.string.experiment_verdict_no_difference, formatPValue(verdict.pValue))
-        is ExperimentVerdict.Winner -> stringResource(Res.string.experiment_verdict_winner, verdict.variantName, formatPValue(verdict.pValue))
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (verdict is ExperimentVerdict.Winner) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            },
-        ),
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(12.dp),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
 }

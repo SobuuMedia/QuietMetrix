@@ -44,6 +44,54 @@ class ExperimentServiceTest {
     private fun createRequest(key: String = "checkout_cta") =
         CreateExperimentRequest(key = key, name = "Checkout button colour")
 
+    /** Rollout selects a declared variant while preserving historical allocation and freeing quota. */
+    @Test
+    fun `shipping validates choice preserves split and publishes full rollout`() {
+        val db = freshDb()
+        val (pid, repo) = seed(db)
+        val svc = service(db, repo, isCloud = true)
+        svc.create(pid, createRequest().copy(trafficPercent = 30, countries = listOf("ES")))
+        svc.update(pid, "checkout_cta", UpdateExperimentRequest(status = "active"))
+        for (choice in listOf(null, "unknown")) {
+            assertIs<ExperimentOutcome.Error>(svc.update(pid, "checkout_cta", UpdateExperimentRequest(status = "shipped", selectedVariant = choice)))
+        }
+        val shipped = assertIs<ExperimentOutcome.Ok<com.quietmetrix.server.persistence.ExperimentRecord>>(
+            svc.update(pid, "checkout_cta", UpdateExperimentRequest(status = "shipped", selectedVariant = "a")),
+        ).value
+        assertEquals("a", shipped.selectedVariant)
+        assertEquals(DEFAULT_VARIANTS, shipped.variants)
+        assertEquals(30, shipped.trafficPercent)
+        assertEquals(listOf("ES"), shipped.countries)
+        val config = svc.activeConfig(pid).single().toConfigDto()
+        assertEquals(100, config.trafficPercent)
+        assertEquals(listOf(VariantSpec("a", 100), VariantSpec("b", 0)), config.variants)
+        assertNull(config.countries)
+        assertEquals(0L, repo.countNonEnded(pid))
+        assertIs<ExperimentOutcome.Error>(svc.update(pid, "checkout_cta", UpdateExperimentRequest(status = "closed")))
+        assertIs<ExperimentOutcome.Error>(svc.update(pid, "checkout_cta", UpdateExperimentRequest()))
+    }
+
+    /** Legacy finished records can close without inventing a selection. */
+    @Test
+    fun `legacy ended closes without choice and stale transition cannot overwrite it`() {
+        val db = freshDb()
+        val (pid, repo) = seed(db)
+        val svc = service(db, repo, isCloud = false)
+        svc.create(pid, createRequest())
+        svc.update(pid, "checkout_cta", UpdateExperimentRequest(status = "ended"))
+        assertNull(repo.findByKey(pid, "checkout_cta")!!.selectedVariant)
+        val closed = assertIs<ExperimentOutcome.Ok<com.quietmetrix.server.persistence.ExperimentRecord>>(
+            svc.update(pid, "checkout_cta", UpdateExperimentRequest(status = "closed")),
+        ).value
+        assertNull(closed.selectedVariant)
+        assertNull(repo.update(pid, "checkout_cta", com.quietmetrix.server.persistence.ExperimentUpdate(
+            status = "shipped", selectedVariant = "b", expectedStatus = "ended",
+        )))
+        assertEquals("closed", repo.findByKey(pid, "checkout_cta")!!.status)
+        assertTrue(svc.activeConfig(pid).isEmpty())
+        assertEquals(0L, repo.countNonEnded(pid))
+    }
+
     @Test
     fun `create succeeds and returns a draft`() {
         val db = freshDb()

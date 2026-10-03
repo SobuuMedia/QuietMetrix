@@ -1022,7 +1022,7 @@ paths:
       summary: List experiments
       description: |
         Returns all of the project's experiments (any status), newest first. `limit` is the
-        max non-ended experiments the project's plan allows, or `null` if unlimited (any
+        max draft/active/paused experiments the project's plan allows, or `null` if unlimited (any
         non-free plan, or a self-hosted server — self-hosted is always unlimited).
       security:
         - BearerAuth: []
@@ -1113,8 +1113,10 @@ paths:
       summary: Update an experiment
       description: |
         Partial update; also used for status transitions (`status` field). Requires the admin
-        or developer role. `variants`/`countries` may only change while `draft`; `ended`
-        accepts no edits at all. An invalid status transition returns 409 `invalid_transition`;
+        or developer role. `variants`/`countries` may only change while `draft`.
+        `active`/`paused`/`ended` may transition to `shipped` (requires a declared
+        `selected_variant`) or `closed` (no rollout). `ended` accepts no field edits;
+        `shipped` and `closed` are immutable. The original allocation is preserved. An invalid status transition returns 409 `invalid_transition`;
         editing a frozen field returns 409 `not_editable`.
       security:
         - BearerAuth: []
@@ -1244,17 +1246,19 @@ paths:
     get:
       tags: [Experiments]
       operationId: getExperimentsConfig
-      summary: Fetch active-experiment config (SDK-facing)
+      summary: Fetch experiment and rollout config (SDK-facing)
       description: |
-        Called by the SDK once per app launch. Returns only `active` experiments, with only
+        Called by the SDK once per app launch. Returns `active` and `shipped` experiments, with only
         the fields needed to assign a variant on-device — never a name, screen label, or
         timestamp. Stateless and cacheable (`Cache-Control: public, max-age=300`); no
-        per-device data is returned or accepted.
+        per-device data is returned or accepted. Shipped experiments retain both original variant names,
+        with weights 100/0 for selected/unselected, traffic_percent 100, and countries null.
+        The SDK caches a successful refresh for a subsequent app session; existing sessions do not change.
       security:
         - ApiKey: []
       responses:
         "200":
-          description: Active experiment config
+          description: Active experiment and shipped rollout config
           content:
             application/json:
               schema:
@@ -2223,7 +2227,11 @@ components:
           description: Display-only metadata; has no effect on targeting
         status:
           type: string
-          enum: [draft, active, paused, ended]
+          enum: [draft, active, paused, ended, shipped, closed]
+        selected_variant:
+          type: string
+          nullable: true
+          description: Declared variant chosen for shipped rollout. Required when shipping; omitted for other transitions. Legacy ended records remain null.
         traffic_percent:
           type: integer
           minimum: 1
@@ -2265,7 +2273,7 @@ components:
         limit:
           type: integer
           nullable: true
-          description: Max non-ended experiments this project's plan allows, or null if unlimited
+          description: Max draft/active/paused experiments this project's plan allows, or null if unlimited
 
     CreateExperimentRequest:
       type: object
@@ -2322,7 +2330,11 @@ components:
         status:
           type: string
           nullable: true
-          enum: [draft, active, paused, ended]
+          enum: [draft, active, paused, ended, shipped, closed]
+        selected_variant:
+          type: string
+          nullable: true
+          description: Declared variant chosen for shipped rollout. Required when shipping; omitted for other transitions. Legacy ended records remain null.
         variants:
           type: array
           nullable: true
@@ -2434,7 +2446,15 @@ components:
           minItems: 2
           maxItems: 2
           items:
-            $ref: "#/components/schemas/VariantWeight"
+            type: object
+            required: [name, weight]
+            properties:
+              name:
+                type: string
+              weight:
+                type: integer
+                minimum: 0
+                maximum: 100
         countries:
           type: array
           nullable: true

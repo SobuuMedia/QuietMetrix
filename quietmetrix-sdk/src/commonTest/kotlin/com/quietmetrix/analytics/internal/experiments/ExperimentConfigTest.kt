@@ -7,6 +7,19 @@ import kotlin.test.assertTrue
 
 class ExperimentConfigTest {
 
+    /** Both rollout choices parse as the original pair and assign all devices to the selected variant. */
+    @Test
+    fun fullRolloutKeepsTwoVariantsAndAssignsEveryDevice() {
+        for (selected in listOf("a", "b")) {
+            val a = if (selected == "a") 100 else 0
+            val b = 100 - a
+            val spec = parseExperimentConfig("""{"experiments":[{"key":"cta","traffic_percent":100,"variants":[{"name":"a","weight":$a},{"name":"b","weight":$b}],"countries":null}]}""").getValue("cta")
+            for (id in 0..1000) for (country in listOf(null, "ES", "US")) {
+                assertEquals(selected, VariantAssigner.assign(spec, "device-$id", country))
+            }
+        }
+    }
+
     private val wellFormed = """
         {"experiments":[
           {"key":"checkout_cta","traffic_percent":100,

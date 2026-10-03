@@ -310,7 +310,6 @@ private fun DashboardTopBar(
     val themeMode = LocalThemeMode.current
     val setThemeMode = LocalThemeModeSetter.current
     var compareOn by remember { mutableStateOf(false) }
-    var expertOn by remember { mutableStateOf(false) }
 
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(
@@ -335,8 +334,8 @@ private fun DashboardTopBar(
             HeaderToggleRow(
                 compareOn = compareOn,
                 onCompareToggle = { compareOn = !compareOn },
-                expertOn = expertOn,
-                onExpertToggle = { expertOn = !expertOn },
+                expertOn = state.expertMode,
+                onExpertToggle = { viewModel.toggleExpertMode() },
                 refreshing = state.refreshing,
                 onRefresh = { viewModel.refresh() },
                 themeMode = themeMode,
@@ -478,13 +477,9 @@ internal fun DateRangeDropdown(
  * The header's second row (design_handoff_dashboard_redesign/README.md >
  * Header: "⇄ Compare toggle ... 🤓 Expert toggle ... 🔄 Refresh button ...
  * ☀️/🌙 theme toggle ... ✨ Ask button (lavender, opens right-hand drawer)
- * ... user avatar circle"). Only [onRefresh] (pre-existing
- * `DashboardViewModel.refresh`) and the theme toggle (pre-existing
- * `LocalThemeMode`/`LocalThemeModeSetter`) are wired to real behavior;
- * [onCompareToggle]/[onExpertToggle]/[onAsk] are local, no-backend stub
- * toggles per this task's scope (no Compare/Expert-mode state exists on
- * [DashboardState] yet, and the "Ask your data" drawer is a separate,
- * not-yet-built feature) — see the Task 16 report for this call-out.
+ * ... user avatar circle"). [onRefresh] and the theme toggle retain their existing
+ * behavior; [onExpertToggle] updates the shared dashboard preference.
+ * [onCompareToggle]/[onAsk] remain stub callbacks pending their later tasks.
  * [onSignOut] is the pre-existing `DashboardViewModel.logout`, now reached
  * through the avatar's dropdown menu rather than a standalone button.
  */

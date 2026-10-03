@@ -558,4 +558,26 @@
     <string name="retention_insight_not_enough_data">Todavía no hay suficiente historial de cohortes para ver una tendencia — vuelve cuando tengas dos cohortes con la edad suficiente para comparar.</string>
     <string name="retention_insight_ask_why">Preguntar por qué</string>
     <string name="retention_insight_scope_note">Comparando tus 2 cohortes más recientes — no la agrupación que tenga el mapa de calor arriba.</string>
+    <string name="experiment_status_shipped">Publicado</string>
+    <string name="experiment_status_closed">Cerrado</string>
+    <string name="experiment_action_ship">Publicar ganador</string>
+    <string name="experiment_action_keep">Mantener versión base</string>
+    <string name="experiment_action_close">Cerrar sin publicar</string>
+    <string name="experiment_preview_unavailable">Vista previa no disponible: el SDK no proporciona capturas.</string>
+    <string name="experiment_variant_letter">Variante %1$s · %2$s</string>
+    <string name="experiment_confidence_title">🎲 ¿Cuánta certeza tenemos?</string>
+    <string name="experiment_confidence_value">%1$s de confianza</string>
+    <string name="experiment_plain_winner">%1$s va ganando en el período seleccionado.</string>
+    <string name="experiment_plain_tie">Todavía no hay una diferencia clara; sigue recopilando datos.</string>
+    <string name="experiment_confidence_note">Puntuación = (1 − valor p) × 100; el umbral de significación es 95.</string>
+    <string name="experiment_rollout_note">Publicación completa: %1$s. Los resultados siguen actualizándose para el período seleccionado y pueden incluir tráfico posterior a la publicación.</string>
+    <string name="experiment_original_split">Distribución original de la prueba</string>
+    <string name="experiment_confirm_title">¿%1$s: %2$s?</string>
+    <string name="experiment_confirm_rollout">Publicar %1$s para el 100% del tráfico en todos los países. Tras una actualización correcta de la configuración del SDK, la configuración guardada se aplica en una sesión posterior de la aplicación. Esta decisión no se puede deshacer aquí.</string>
+    <string name="experiment_confirm_stop">Detener la asignación tras una actualización correcta de la configuración del SDK y una sesión posterior de la aplicación. Las sesiones existentes conservan su asignación guardada.</string>
+    <string name="experiment_raw_stats">Estadísticas avanzadas</string>
+    <string name="experiment_raw_comparison">z = %1$s · p = %2$s</string>
+    <string name="experiment_winner_medal">🏆</string>
+    <string name="experiment_meter_min">0</string>
+    <string name="experiment_meter_max">95 │ 100</string>
 </resources>

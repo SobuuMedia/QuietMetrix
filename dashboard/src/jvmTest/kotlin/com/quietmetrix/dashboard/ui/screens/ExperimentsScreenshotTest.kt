@@ -183,8 +183,8 @@ class ExperimentsScreenshotTest {
             }
         }
         waitForIdle()
-        val card = onNodeWithText(fixture.name).fetchSemanticsNode().boundsInRoot
-        val detail = onNodeWithText("Active").fetchSemanticsNode().boundsInRoot
+        val card = onAllNodesWithText(fixture.name)[0].fetchSemanticsNode().boundsInRoot
+        val detail = onAllNodesWithText("Running")[1].fetchSemanticsNode().boundsInRoot
         assertTrue(detail.top >= card.bottom, "Detail must stack below the list at a constrained tablet width")
         for (label in listOf("Pause", "End")) {
             val node = onNodeWithText(label)
@@ -225,8 +225,8 @@ class ExperimentsScreenshotTest {
             node.performClick()
         }
         assertEquals(listOf(ExperimentAction.Start, ExperimentAction.Delete), actions)
-        val first = onAllNodesWithText("Result A")[0].fetchSemanticsNode().boundsInRoot
-        val second = onAllNodesWithText("Result B")[0].fetchSemanticsNode().boundsInRoot
+        val first = onNodeWithText("Variant A · a").fetchSemanticsNode().boundsInRoot
+        val second = onNodeWithText("Variant B · b").fetchSemanticsNode().boundsInRoot
         assertTrue(second.top >= first.bottom, "Result cards must stack inside a compact detail pane")
     }
 

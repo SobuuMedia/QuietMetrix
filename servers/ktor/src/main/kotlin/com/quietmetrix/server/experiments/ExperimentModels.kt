@@ -31,6 +31,7 @@ data class ExperimentDto(
     @SerialName("created_at") val createdAt: String,
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("ended_at") val endedAt: String? = null,
+    @SerialName("selected_variant") val selectedVariant: String? = null,
 )
 
 fun ExperimentRecord.toDto() = ExperimentDto(
@@ -44,6 +45,7 @@ fun ExperimentRecord.toDto() = ExperimentDto(
     createdAt = createdAt,
     startedAt = startedAt,
     endedAt = endedAt,
+    selectedVariant = selectedVariant,
 )
 
 /** `GET /api/v1/projects/{id}/experiments` response. `limit` is null when unlimited. */
@@ -71,6 +73,7 @@ data class UpdateExperimentRequest(
     val screen: String? = null,
     @SerialName("traffic_percent") val trafficPercent: Int? = null,
     val status: String? = null,
+    @SerialName("selected_variant") val selectedVariant: String? = null,
     val variants: List<VariantSpec>? = null,
     val countries: List<String>? = null,
 )
@@ -87,9 +90,10 @@ data class ExperimentConfigDto(
     val countries: List<String>? = null,
 )
 
+/** Projects a shipped choice to full rollout without mutating the original allocation. */
 fun ExperimentRecord.toConfigDto() = ExperimentConfigDto(
     key = experimentKey,
-    trafficPercent = trafficPercent,
-    variants = variants,
-    countries = countries,
+    trafficPercent = if (status == "shipped") 100 else trafficPercent,
+    variants = if (status == "shipped") variants.map { it.copy(weight = if (it.name == selectedVariant) 100 else 0) } else variants,
+    countries = if (status == "shipped") null else countries,
 )

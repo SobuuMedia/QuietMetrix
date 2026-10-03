@@ -618,4 +618,26 @@
     <string name="retention_insight_not_enough_data">Not enough cohort history yet to spot a trend — check back once you have two cohorts old enough to compare.</string>
     <string name="retention_insight_ask_why">Ask why</string>
     <string name="retention_insight_scope_note">Comparing your 2 most recent cohorts — not whatever grouping the heatmap above is set to.</string>
+    <string name="experiment_status_shipped">Shipped</string>
+    <string name="experiment_status_closed">Closed</string>
+    <string name="experiment_action_ship">Ship winner</string>
+    <string name="experiment_action_keep">Keep baseline</string>
+    <string name="experiment_action_close">Close without rollout</string>
+    <string name="experiment_preview_unavailable">Preview unavailable — the SDK does not provide screenshots.</string>
+    <string name="experiment_variant_letter">Variant %1$s · %2$s</string>
+    <string name="experiment_confidence_title">🎲 How sure are we?</string>
+    <string name="experiment_confidence_value">%1$s confidence</string>
+    <string name="experiment_plain_winner">%1$s is winning in the selected range.</string>
+    <string name="experiment_plain_tie">No clear difference yet — keep collecting data.</string>
+    <string name="experiment_confidence_note">Score = (1 − p-value) × 100; the significance threshold is 95.</string>
+    <string name="experiment_rollout_note">Full rollout: %1$s. Results remain live for the selected date range and may include rollout traffic.</string>
+    <string name="experiment_original_split">Original test allocation</string>
+    <string name="experiment_confirm_title">%1$s: %2$s?</string>
+    <string name="experiment_confirm_rollout">Roll out %1$s to 100% of traffic in all countries. After a successful SDK config refresh, the cached configuration applies to a subsequent app session. This decision cannot be undone here.</string>
+    <string name="experiment_confirm_stop">Stop assignment after a successful SDK config refresh and a subsequent app session. Existing sessions keep their cached assignment.</string>
+    <string name="experiment_raw_stats">Expert statistics</string>
+    <string name="experiment_raw_comparison">z = %1$s · p = %2$s</string>
+    <string name="experiment_winner_medal">🏆</string>
+    <string name="experiment_meter_min">0</string>
+    <string name="experiment_meter_max">95 │ 100</string>
 </resources>

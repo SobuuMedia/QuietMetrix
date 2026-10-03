@@ -97,6 +97,7 @@ function ensureInstalled(): void {
             CONSTRAINT fk_experiments_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    addColumnIfMissing($db, 'experiments', 'selected_variant', 'VARCHAR(32) NULL');
     // Personal access tokens (agents/CLIs) — see docs/agents/setup.md.
     createTableIfMissing($db, 'access_tokens', "
         CREATE TABLE access_tokens (

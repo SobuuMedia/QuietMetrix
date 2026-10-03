@@ -387,6 +387,7 @@ data class ExperimentDto(
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("ended_at") val endedAt: String? = null,
+    @SerialName("selected_variant") val selectedVariant: String? = null,
 )
 
 /** `limit` is null when the project's plan has no cap on experiments (paid plan, or self-host). */
@@ -409,6 +410,7 @@ data class UpdateExperimentRequest(
     val screen: String? = null,
     @SerialName("traffic_percent") val trafficPercent: Int? = null,
     val status: String? = null,
+    @SerialName("selected_variant") val selectedVariant: String? = null,
     val variants: List<VariantDto>? = null,
     val countries: List<String>? = null,
 )

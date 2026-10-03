@@ -54,6 +54,8 @@ import org.jetbrains.compose.resources.StringResource
 import kotlin.concurrent.Volatile
 
 data class DashboardState(
+    /** Shared header preference controlling detailed statistics. */
+    val expertMode: Boolean = false,
     val token: String? = null,
     val user: ApiUser? = null,
     val projects: List<ApiProject> = emptyList(),
@@ -736,10 +738,15 @@ class DashboardViewModel(
         }
     }
 
+    /** Toggles the shared expert preference across dashboard destinations. */
+    fun toggleExpertMode() {
+        _state.update { it.copy(expertMode = !it.expertMode) }
+    }
+
     /** Convenience for the status-only transitions the list screen's action buttons trigger
      *  (Start/Pause/Resume/End) — see ExperimentsLogic.availableActions(). */
-    fun changeExperimentStatus(experimentKey: String, status: String) {
-        updateExperiment(experimentKey, UpdateExperimentRequest(status = status))
+    fun changeExperimentStatus(experimentKey: String, status: String, selectedVariant: String? = null) {
+        updateExperiment(experimentKey, UpdateExperimentRequest(status = status, selectedVariant = selectedVariant))
     }
 
     fun deleteExperiment(experimentKey: String) {

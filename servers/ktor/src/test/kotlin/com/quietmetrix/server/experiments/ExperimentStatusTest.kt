@@ -7,6 +7,16 @@ import kotlin.test.assertTrue
 
 class ExperimentStatusTest {
 
+    /** Six persisted statuses include resolution of finished experiments. */
+    @Test
+    fun `six statuses support explicit resolution`() {
+        assertEquals(setOf("draft", "active", "paused", "ended", "shipped", "closed"), ExperimentStatus.ALL)
+        for (from in listOf("active", "paused", "ended")) {
+            assertTrue(ExperimentStatus.canTransition(from, "shipped"))
+            assertTrue(ExperimentStatus.canTransition(from, "closed"))
+        }
+    }
+
     @Test
     fun `draft can move to active or ended, not to paused or to itself`() {
         assertTrue(ExperimentStatus.canTransition("draft", "active"))
@@ -32,9 +42,11 @@ class ExperimentStatusTest {
     }
 
     @Test
-    fun `ended cannot move anywhere`() {
+    fun `ended can be resolved and rollout terminals cannot move`() {
         for (to in ExperimentStatus.ALL) {
-            assertFalse(ExperimentStatus.canTransition("ended", to), "ended -> $to must be false")
+            assertEquals(to in setOf("shipped", "closed"), ExperimentStatus.canTransition("ended", to))
+            assertFalse(ExperimentStatus.canTransition("shipped", to))
+            assertFalse(ExperimentStatus.canTransition("closed", to))
         }
     }
 

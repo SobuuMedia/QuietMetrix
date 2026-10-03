@@ -73,6 +73,9 @@ internal enum class ExperimentAction(val targetStatus: String?) {
     Resume("active"),
     End("ended"),
     Delete(null),
+    Ship("shipped"),
+    KeepBaseline("shipped"),
+    Close("closed"),
 }
 
 /**
@@ -122,9 +125,10 @@ internal sealed class ExperimentVerdict {
 }
 
 internal fun verdictFor(comparison: ExperimentComparisonDto?): ExperimentVerdict {
-    if (comparison == null) return ExperimentVerdict.NotEnoughData
+    if (comparison == null || !comparison.pValue.isFinite() || comparison.pValue !in 0.0..1.0) return ExperimentVerdict.NotEnoughData
+    if (comparison.significant && comparison.winner !in listOf(comparison.baseline, comparison.challenger)) return ExperimentVerdict.NotEnoughData
     return if (comparison.significant) {
-        ExperimentVerdict.Winner(comparison.winner ?: comparison.challenger, comparison.pValue)
+        ExperimentVerdict.Winner(comparison.winner!!, comparison.pValue)
     } else {
         ExperimentVerdict.NoDifference(comparison.pValue)
     }
@@ -179,27 +183,41 @@ internal fun verdictSentence(verdict: ExperimentVerdict): String = when (verdict
 
 // ---- Card-list status badge (Task 30) ----
 
-/**
- * The status badge shown on an experiment's card in the new two-pane card list. The
- * README's Experiments spec names six badge words (`Running/Finished/Draft/Paused/
- * Shipped/Closed`), but `ExperimentDto.status` (api/Models.kt) only ever holds one of
- * four real values (`draft/active/paused/ended`) — there is no backing field that
- * distinguishes *why* an ended experiment ended (shipped a winner vs. closed with no
- * clear result vs. a generic "finished"), only `endedAt: String?`, a timestamp. Per the
- * project's established honesty precedent (relabel to what the data actually supports,
- * don't fabricate a split the backend can't back), this maps the real 4 values 1:1 onto
- * the 4 of the spec's 6 words that a status alone can honestly support, folding
- * Shipped/Closed into the single `Finished` badge rather than guessing an outcome.
- */
-internal enum class ExperimentCardStatus { Running, Draft, Paused, Finished }
+/** Six persisted experiment states, with legacy ended rendered as Finished. */
+internal enum class ExperimentCardStatus { Running, Draft, Paused, Finished, Shipped, Closed }
 
-/** Maps a real [ExperimentDto.status] string onto [ExperimentCardStatus] — see its KDoc
- *  for why this is a 4-way (not 6-way) mapping. An unrecognized status defaults to
- *  [ExperimentCardStatus.Draft], mirroring [statusLabel]'s and [availableActions]'s
- *  existing "unknown -> draft" fallback. */
+/** Maps all six persisted lifecycle states; legacy unknown values retain the draft fallback. */
 internal fun cardStatusFor(status: String): ExperimentCardStatus = when (status) {
     "active" -> ExperimentCardStatus.Running
     "paused" -> ExperimentCardStatus.Paused
     "ended" -> ExperimentCardStatus.Finished
+    "shipped" -> ExperimentCardStatus.Shipped
+    "closed" -> ExperimentCardStatus.Closed
     else -> ExperimentCardStatus.Draft
+}
+
+/** Winner identity is trusted only when declared and backed by an available comparison. */
+internal fun experimentWinner(experiment: ExperimentDto, comparison: ExperimentComparisonDto?): String? {
+    if (experiment.status == "shipped") return experiment.selectedVariant?.takeIf { name -> experiment.variants.any { it.name == name } }
+    val verdict = verdictFor(comparison)
+    return (verdict as? ExperimentVerdict.Winner)?.variantName?.takeIf { name -> experiment.variants.any { it.name == name } }
+}
+
+/** Prioritizes a real winner or explicit baseline choice, preserving the existing finish action. */
+internal fun detailActions(experiment: ExperimentDto, comparison: ExperimentComparisonDto?, canWrite: Boolean): List<ExperimentAction> {
+    if (!canWrite) return emptyList()
+    if (experiment.status !in setOf("active", "paused", "ended")) return availableActions(experiment.status, canWrite)
+    val choice = if (experimentWinner(experiment, comparison) != null) ExperimentAction.Ship else ExperimentAction.KeepBaseline
+    return buildList {
+        if (experiment.variants.size == 2) add(choice)
+        addAll(availableActions(experiment.status, canWrite))
+        add(ExperimentAction.Close)
+    }
+}
+
+/** Captures the operator's choice before opening confirmation, independent of later live result refreshes. */
+internal fun selectedVariantFor(action: ExperimentAction, experiment: ExperimentDto, comparison: ExperimentComparisonDto?): String? = when (action) {
+    ExperimentAction.Ship -> experimentWinner(experiment, comparison)
+    ExperimentAction.KeepBaseline -> experiment.variants.firstOrNull()?.name
+    else -> null
 }

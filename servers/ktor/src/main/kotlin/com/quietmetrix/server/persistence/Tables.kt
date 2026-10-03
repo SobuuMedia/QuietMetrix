@@ -168,7 +168,9 @@ object Experiments : Table("experiments") {
     val experimentKey = varchar("experiment_key", 32)
     val name = varchar("name", 255)
     val screen = varchar("screen", 128).nullable()
-    // draft | active | paused | ended.
+    // draft | active | paused | ended | shipped | closed.
+    /** Explicit rollout choice; legacy and non-shipped records remain null. */
+    val selectedVariant = varchar("selected_variant", 32).nullable()
     val status = varchar("status", 16).default("draft")
     // Share of eligible devices (1-100) that enter the experiment at all; the rest get "none".
     val trafficPercent = integer("traffic_percent").default(100)

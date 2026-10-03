@@ -20,7 +20,7 @@ function handleExperimentsList(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $stmt = getDb()->prepare(
-        'SELECT experiment_key, name, screen, status, traffic_percent, variants, countries, created_at, started_at, ended_at
+        'SELECT experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, created_at, started_at, ended_at
            FROM experiments WHERE project_id = ? ORDER BY created_at DESC'
     );
     $stmt->execute([$projectId]);
@@ -96,11 +96,20 @@ function handleExperimentUpdate(string $projectId, string $experimentKey): void 
 
     $body = getJsonBody();
 
+    if (in_array($existing['status'], ['shipped', 'closed'], true)) {
+        errorResponse(409, 'not_editable', 'Resolved experiments are immutable');
+        return;
+    }
+
     if (array_key_exists('status', $body) && !experimentCanTransition($existing['status'], (string)$body['status'])) {
         errorResponse(409, 'invalid_transition', "Cannot move from {$existing['status']} to {$body['status']}");
         return;
     }
 
+    if (!experimentSelectionValid($existing, $body)) {
+        errorResponse(400, 'schema_violation', 'Shipping requires a declared selected_variant; other transitions cannot select one');
+        return;
+    }
     $editable = experimentEditableFields($existing['status']);
     $requestedEdits = array_values(array_intersect(
         ['name', 'screen', 'traffic_percent', 'variants', 'countries'],
@@ -139,17 +148,23 @@ function handleExperimentUpdate(string $projectId, string $experimentKey): void 
         $sets[] = 'countries = ?';
         $params[] = $merged['countries'] === null ? null : json_encode($merged['countries'], JSON_UNESCAPED_UNICODE);
     }
+    if (isset($body['selected_variant'])) { $sets[] = 'selected_variant = ?'; $params[] = $body['selected_variant']; }
     if (array_key_exists('status', $body)) {
         $sets[] = 'status = ?';
         $params[] = $body['status'];
         if ($body['status'] === 'active' && $existing['started_at'] === null) { $sets[] = 'started_at = ?'; $params[] = now(); }
-        if ($body['status'] === 'ended') { $sets[] = 'ended_at = ?'; $params[] = now(); }
+        if (in_array($body['status'], ['ended', 'shipped', 'closed'], true) && $existing['ended_at'] === null) { $sets[] = 'ended_at = ?'; $params[] = now(); }
     }
     $params[] = $projectId;
     $params[] = $experimentKey;
 
-    getDb()->prepare('UPDATE experiments SET ' . implode(', ', $sets) . ' WHERE project_id = ? AND experiment_key = ?')
-        ->execute($params);
+    $params[] = $existing['status'];
+    $update = getDb()->prepare('UPDATE experiments SET ' . implode(', ', $sets) . ' WHERE project_id = ? AND experiment_key = ? AND status = ?');
+    $update->execute($params);
+    if ($update->rowCount() === 0 && isset($body['status'])) {
+        errorResponse(409, 'invalid_transition', 'Experiment changed; refresh before retrying');
+        return;
+    }
 
     jsonResponse(200, findExperimentResponse($projectId, $experimentKey));
 }
@@ -214,7 +229,7 @@ function handleExperimentResults(string $projectId, string $experimentKey): void
 
 /**
  * GET /api/v1/experiments/config → SDK-facing, X-QM-Api-Key authenticated (project derived
- * from the key, like /api/v1/counters). Returns only `active` experiments, minimal fields --
+ * from the key, like /api/v1/counters). Returns `active` tests and `shipped` rollouts, minimal fields --
  * no name, screen or timestamp ever leaves the server.
  */
 function handleExperimentsConfig(): void {
@@ -229,28 +244,22 @@ function handleExperimentsConfig(): void {
     }
 
     $stmt = getDb()->prepare(
-        'SELECT experiment_key, traffic_percent, variants, countries
-           FROM experiments WHERE project_id = ? AND status = ?'
+        "SELECT experiment_key, status, selected_variant, traffic_percent, variants, countries
+           FROM experiments WHERE project_id = ? AND status IN ('active', 'shipped')"
     );
-    $stmt->execute([$projectId, 'active']);
+    $stmt->execute([$projectId]);
 
     header('Cache-Control: public, max-age=300');
-    jsonResponse(200, ['experiments' => array_map(static function (array $row): array {
-        return [
-            'key' => $row['experiment_key'],
-            'traffic_percent' => (int)$row['traffic_percent'],
-            'variants' => json_decode($row['variants'], true),
-            'countries' => $row['countries'] !== null ? json_decode($row['countries'], true) : null,
-        ];
-    }, $stmt->fetchAll())]);
+    jsonResponse(200, ['experiments' => array_map('experimentConfigResponse', $stmt->fetchAll())]);
 }
 
 /** Whether $from -> $to is an allowed status transition. Mirrors ExperimentStatus.kt exactly. */
 function experimentCanTransition(string $from, string $to): bool {
     switch ($from) {
         case 'draft': return $to === 'active' || $to === 'ended';
-        case 'active': return $to === 'paused' || $to === 'ended';
-        case 'paused': return $to === 'active' || $to === 'ended';
+        case 'active': return in_array($to, ['paused', 'ended', 'shipped', 'closed'], true);
+        case 'paused': return in_array($to, ['active', 'ended', 'shipped', 'closed'], true);
+        case 'ended': return in_array($to, ['shipped', 'closed'], true);
         default: return false;
     }
 }
@@ -267,7 +276,7 @@ function experimentEditableFields(string $status): array {
 
 function findExperimentRow(string $projectId, string $experimentKey): ?array {
     $stmt = getDb()->prepare(
-        'SELECT experiment_key, name, screen, status, traffic_percent, variants, countries, created_at, started_at, ended_at
+        'SELECT experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, created_at, started_at, ended_at
            FROM experiments WHERE project_id = ? AND experiment_key = ? LIMIT 1'
     );
     $stmt->execute([$projectId, $experimentKey]);
@@ -286,11 +295,34 @@ function rowToExperimentResponse(array $row): array {
         'name' => $row['name'],
         'screen' => $row['screen'],
         'status' => $row['status'],
+        'selected_variant' => $row['selected_variant'] ?? null,
         'traffic_percent' => (int)$row['traffic_percent'],
         'variants' => json_decode($row['variants'], true),
         'countries' => $row['countries'] !== null ? json_decode($row['countries'], true) : null,
         'created_at' => $row['created_at'],
         'started_at' => $row['started_at'],
         'ended_at' => $row['ended_at'],
+    ];
+}
+
+/** Validates a rollout choice against the stored declared variants. */
+function experimentSelectionValid(array $existing, array $body): bool {
+    if (($body['status'] ?? null) !== 'shipped') return !isset($body['selected_variant']);
+    return in_array($body['selected_variant'] ?? null, array_column(json_decode($existing['variants'], true), 'name'), true);
+}
+
+/** Projects rollout config without rewriting historical targeting or variant weights. */
+function experimentConfigResponse(array $row): array {
+    $shipped = $row['status'] === 'shipped';
+    $variants = json_decode($row['variants'], true);
+    if ($shipped) {
+        foreach ($variants as &$variant) $variant['weight'] = $variant['name'] === $row['selected_variant'] ? 100 : 0;
+        unset($variant);
+    }
+    return [
+        'key' => $row['experiment_key'],
+        'traffic_percent' => $shipped ? 100 : (int)$row['traffic_percent'],
+        'variants' => $variants,
+        'countries' => $shipped || $row['countries'] === null ? null : json_decode($row['countries'], true),
     ];
 }

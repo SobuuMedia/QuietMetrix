@@ -11,6 +11,51 @@ import kotlin.test.assertTrue
 
 class ExperimentsLogicTest {
 
+    /** Missing winner identity must never promote the challenger by default. */
+    @Test
+    fun unknownWinnerRemainsUnavailable() {
+        assertIs<ExperimentVerdict.NotEnoughData>(verdictFor(ExperimentComparisonDto(
+            baseline = "a", challenger = "b", z = 3.0, pValue = 0.001, significant = true, winner = null,
+        )))
+    }
+
+    /** Real terminal statuses cannot look like editable drafts. */
+    @Test
+    fun rolloutStatusesHaveTheirOwnBadges() {
+        assertEquals("Shipped", cardStatusFor("shipped").name)
+        assertEquals("Closed", cardStatusFor("closed").name)
+        assertTrue(availableActions("shipped", true).isEmpty())
+        assertTrue(availableActions("closed", true).isEmpty())
+    }
+
+    /** Read-only and terminal states expose no writes; suppressed results permit only an explicit baseline rollout. */
+    @Test
+    fun detailActionsRespectStatusPermissionAndEvidence() {
+        val exp = ExperimentDto("cta", "CTA", status = "active", variants = listOf(
+            com.quietmetrix.dashboard.api.VariantDto("a", 50), com.quietmetrix.dashboard.api.VariantDto("b", 50),
+        ))
+        val comparison = ExperimentComparisonDto("a", "b", 3.0, .001, true, "b")
+        assertEquals(ExperimentAction.Ship, detailActions(exp, comparison, true).first())
+        assertEquals(ExperimentAction.KeepBaseline, detailActions(exp, null, true).first())
+        assertEquals("a", selectedVariantFor(ExperimentAction.KeepBaseline, exp, null))
+        assertNull(selectedVariantFor(ExperimentAction.Ship, exp, null))
+        assertTrue(detailActions(exp, comparison, false).isEmpty())
+        for (status in listOf("shipped", "closed")) assertTrue(detailActions(exp.copy(status = status), comparison, true).isEmpty())
+        assertTrue(ExperimentAction.Close in detailActions(exp.copy(status = "ended"), null, true))
+        assertNull(experimentWinner(exp, comparison.copy(winner = "undeclared")))
+    }
+
+    /** Expert preference is shared by the view model, independent of a particular screen composition. */
+    @Test
+    fun globalExpertPreferenceToggles() {
+        val vm = com.quietmetrix.dashboard.viewmodel.DashboardViewModel()
+        assertFalse(vm.state.value.expertMode)
+        vm.toggleExpertMode()
+        assertTrue(vm.state.value.expertMode)
+        vm.toggleExpertMode()
+        assertFalse(vm.state.value.expertMode)
+    }
+
     private fun experiment(key: String, status: String = "draft") = ExperimentDto(key = key, name = key, status = status)
 
     @Test

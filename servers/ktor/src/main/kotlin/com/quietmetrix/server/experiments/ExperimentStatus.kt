@@ -2,17 +2,14 @@ package com.quietmetrix.server.experiments
 
 /** The valid status values for an experiment, and the rules for moving between them. */
 object ExperimentStatus {
-    val ALL = setOf("draft", "active", "paused", "ended")
+    val ALL = setOf("draft", "active", "paused", "ended", "shipped", "closed")
 
-    /**
-     * Whether [from] -> [to] is an allowed transition. `draft -> active|ended`,
-     * `active -> paused|ended`, `paused -> active|ended`; everything else (including a status
-     * "changing" to its own current value, and anything from `ended`) is false.
-     */
+    /** Allows legacy transitions and resolution of active, paused or finished tests; shipped/closed are terminal. */
     fun canTransition(from: String, to: String): Boolean = when (from) {
         "draft" -> to == "active" || to == "ended"
-        "active" -> to == "paused" || to == "ended"
-        "paused" -> to == "active" || to == "ended"
+        "active" -> to in setOf("paused", "ended", "shipped", "closed")
+        "paused" -> to in setOf("active", "ended", "shipped", "closed")
+        "ended" -> to in setOf("shipped", "closed")
         else -> false
     }
 

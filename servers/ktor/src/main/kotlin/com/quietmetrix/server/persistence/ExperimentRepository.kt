@@ -22,6 +22,7 @@ data class ExperimentRecord(
     val updatedAt: String,
     val startedAt: String?,
     val endedAt: String?,
+    val selectedVariant: String? = null,
 )
 
 /** Fields a [ExperimentRepository.update] call may change; a null field leaves it unchanged. */
@@ -32,6 +33,8 @@ data class ExperimentUpdate(
     val variants: List<VariantSpec>? = null,
     val countries: List<String>? = null,
     val status: String? = null,
+    val selectedVariant: String? = null,
+    val expectedStatus: String? = null,
 )
 
 /**
@@ -78,9 +81,10 @@ class ExperimentRepository(private val database: Database) {
             .map(::rowToRecord)
     }
 
+    /** Config readers include live tests and persisted rollouts. */
     fun listActive(projectId: Long): List<ExperimentRecord> = transaction(database) {
         Experiments.selectAll()
-            .where { (Experiments.projectId eq projectId) and (Experiments.status eq "active") }
+            .where { (Experiments.projectId eq projectId) and (Experiments.status inList listOf("active", "shipped")) }
             .orderBy(Experiments.createdAt, SortOrder.DESC)
             .map(::rowToRecord)
     }
@@ -88,20 +92,21 @@ class ExperimentRepository(private val database: Database) {
     /** Non-ended experiments (draft+active+paused) — what counts against the free-plan limit. */
     fun countNonEnded(projectId: Long): Long = transaction(database) {
         Experiments.selectAll()
-            .where { (Experiments.projectId eq projectId) and (Experiments.status neq "ended") }
+            .where { (Experiments.projectId eq projectId) and (Experiments.status inList listOf("draft", "active", "paused")) }
             .count()
     }
 
     /**
      * Partial update. Sets `started_at` the first time [ExperimentUpdate.status] becomes
      * "active" (never overwrites an existing value), and `ended_at` when it becomes "ended".
-     * Returns null if no experiment with this key exists.
+     * Returns null if missing or the guarded prior status changed; terminal resolution preserves an existing ended_at.
      */
     fun update(projectId: Long, experimentKey: String, changes: ExperimentUpdate): ExperimentRecord? {
         val existing = findByKey(projectId, experimentKey) ?: return null
-        transaction(database) {
+        val changed = transaction(database) {
             Experiments.update({
-                (Experiments.projectId eq projectId) and (Experiments.experimentKey eq experimentKey)
+                (Experiments.projectId eq projectId) and (Experiments.experimentKey eq experimentKey) and
+                    (Experiments.status eq (changes.expectedStatus ?: existing.status))
             }) {
                 if (changes.name != null) it[name] = changes.name
                 if (changes.screen != null) it[screen] = changes.screen.ifBlank { null }
@@ -110,15 +115,16 @@ class ExperimentRepository(private val database: Database) {
                 if (changes.countries != null) {
                     it[countries] = changes.countries.takeIf { c -> c.isNotEmpty() }?.let { c -> json.encodeToString(c) }
                 }
+                if (changes.selectedVariant != null) it[selectedVariant] = changes.selectedVariant
                 if (changes.status != null) {
                     it[status] = changes.status
                     if (changes.status == "active" && existing.startedAt == null) it[startedAt] = LocalDateTime.now()
-                    if (changes.status == "ended") it[endedAt] = LocalDateTime.now()
+                    if (changes.status in setOf("ended", "shipped", "closed") && existing.endedAt == null) it[endedAt] = LocalDateTime.now()
                 }
                 it[updatedAt] = LocalDateTime.now()
             }
         }
-        return findByKey(projectId, experimentKey)
+        return if (changed > 0) findByKey(projectId, experimentKey) else null
     }
 
     /** Hard-deletes a `draft` experiment. Returns false if it doesn't exist or isn't a draft. */
@@ -140,5 +146,6 @@ class ExperimentRepository(private val database: Database) {
         updatedAt = row[Experiments.updatedAt].toString(),
         startedAt = row[Experiments.startedAt]?.toString(),
         endedAt = row[Experiments.endedAt]?.toString(),
+        selectedVariant = row[Experiments.selectedVariant],
     )
 }
