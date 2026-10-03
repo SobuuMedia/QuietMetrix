@@ -24,11 +24,11 @@ function handleFunnelResults(string $projectId, string $funnelKey): void {
     $windowSecondsVal = (int)$funnel['window_seconds'];
 
     $rangeSeconds = windowSeconds(365);
-    $now = time();
-    $fromIso = gmdate('Y-m-d\TH:i:s\Z', $now - $rangeSeconds);
-    $toIso = gmdate('Y-m-d\TH:i:s\Z', $now);
-    $fromDay = gmdate('Y-m-d', $now - $rangeSeconds);
-    $toDay = gmdate('Y-m-d', $now);
+    $window = requestAnalyticsWindow($rangeSeconds);
+    $fromIso = $window['from'];
+    $toIso = $window['to'];
+    $fromDay = $window['from_day'];
+    $toDay = $window['to_day'];
 
     $allCells = counterReadCells($projectId, 'funnel_step', $fromDay, $toDay);
     $cells = [];

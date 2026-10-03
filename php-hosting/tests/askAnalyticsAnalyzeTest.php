@@ -18,4 +18,9 @@ $unknown = askAnalyticsAnalyze('Why did revenue fall?', [], [], [], [], [], '30d
 assertAsk(str_contains($unknown['answer'], "can't establish causes"), 'does not invent causal answers');
 assertAsk(str_contains($unknown['answer'], 'Day 1 retention'), 'describes supported question scope');
 
+$causal = askAnalyticsAnalyze('Why did retention fall?', [], [], [], [], [], '7d');
+assertAsk(str_contains($causal['answer'], "can't establish causes"), 'causal questions about supported metrics disclose limits');
+$spanish = askAnalyticsAnalyze('¿Cuántas sesiones hubo?', [['dims' => ['bucket' => '0_10s'], 'n' => 12]], [], [], [], [], '7d');
+assertAsk(str_contains($spanish['answer'], '12 sessions'), 'Spanish suggestions map to the requested metric');
+
 echo "all ask-analytics assertions passed\n";

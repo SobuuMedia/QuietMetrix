@@ -1,5 +1,12 @@
+@file:Suppress("DEPRECATION") // Clipboard API shared with the WASM target.
+
 package com.quietmetrix.dashboard.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.resources.retention_insight_eyebrow_emoji
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +20,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.quietmetrix.dashboard.resources.drill_copy
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,12 +47,19 @@ import org.jetbrains.compose.resources.stringResource
 /** Global right-side chat drawer for privacy-safe computed analytics answers. */
 @Composable
 internal fun AskDrawer(viewModel: DashboardViewModel, state: DashboardState) {
+    val colors = LocalExtendedColors.current
+    val clipboard = LocalClipboardManager.current
     val chat = state.askDrawer
     if (!chat.open) return
     val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }?.name ?: stringResource(Res.string.value_none)
     DrawerShell(
         title = stringResource(Res.string.ask_drawer_title),
         onDismiss = { viewModel.closeAskDrawer() },
+        leading = {
+            Box(Modifier.padding(end = 10.dp).size(36.dp).background(colors.lavender, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.retention_insight_eyebrow_emoji), color = colors.onLime)
+            }
+        },
         footer = {
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -75,7 +92,7 @@ internal fun AskDrawer(viewModel: DashboardViewModel, state: DashboardState) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
                     Surface(
                         color = when (message.role) {
-                            AskMessageRole.User -> MaterialTheme.colorScheme.secondaryContainer
+                            AskMessageRole.User -> colors.lavender
                             AskMessageRole.Error -> MaterialTheme.colorScheme.errorContainer
                             AskMessageRole.Answer -> MaterialTheme.colorScheme.surfaceVariant
                         },
@@ -83,7 +100,8 @@ internal fun AskDrawer(viewModel: DashboardViewModel, state: DashboardState) {
                         modifier = Modifier.fillMaxWidth(0.88f),
                     ) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                            Text(message.errorRes?.let { stringResource(it) } ?: message.text, style = MaterialTheme.typography.bodyMedium, color = if (isUser) colors.onLime else MaterialTheme.colorScheme.onSurface)
+                            if (message.role == AskMessageRole.Answer) TextButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }) { Text(stringResource(Res.string.drill_copy)) }
                             message.source?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             if (message.role == AskMessageRole.Error) {
                                 TextButton(onClick = { viewModel.retryAskQuestion() }) { Text(stringResource(Res.string.ask_drawer_retry)) }
@@ -100,5 +118,5 @@ internal fun AskDrawer(viewModel: DashboardViewModel, state: DashboardState) {
 @Composable
 private fun Suggestion(label: org.jetbrains.compose.resources.StringResource, viewModel: DashboardViewModel) {
     val text = stringResource(label)
-    AssistChip(onClick = { viewModel.askQuestion(text) }, label = { Text(text) })
+    AssistChip(onClick = { viewModel.openAskDrawer(text) }, label = { Text(text) })
 }

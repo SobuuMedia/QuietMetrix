@@ -356,4 +356,51 @@ class AnalyticsTokenAuthIntegrationTest {
         val response = client.get("/api/v1/projects/proj_$projectId/funnels") { header("Authorization", "Bearer ${pat.token}") }
         assertEquals(HttpStatusCode.NotFound, response.status)
     }
+    /** Scope grants analytics capability, never access to another user's project. */
+    @Test
+    fun unrelatedReviewerCannotReadAnyDashboardDataset() = testApplication {
+        val config = testConfig()
+        val db = freshDb("analytics_project_isolation")
+        val repo = UserRepository(db)
+        val owner = repo.create("owner@isolation.test", "password")
+        val stranger = repo.create("stranger@isolation.test", "password")
+        val projectId = seedProject(db, owner)
+        application { testModule(config, db) }
+        for (metric in listOf("aggregates", "sessions", "transitions", "search", "friction", "retention")) {
+            val response = client.get("/api/v1/projects/proj_$projectId/$metric?range=7d&period=previous") {
+                header("Authorization", "Bearer ${jwtFor(stranger, "reviewer")}")
+            }
+            assertEquals(HttpStatusCode.Forbidden, response.status, metric)
+        }
+    }
+
+    /** Inclusive SQL date filters must use seven dates per period and retain privacy gates. */
+    @Test
+    fun sessionsReadSeparateEqualPeriodsAndPreservePrivacy() = testApplication {
+        val config = testConfig()
+        val db = freshDb("analytics_adjacent_periods")
+        val owner = UserRepository(db).create("owner@periods.test", "password")
+        val projectId = seedProject(db, owner)
+        val counters = CounterRepository(db)
+        val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+        fun seed(day: java.time.LocalDate, n: Long, devices: Int, bucket: String = "0_10s") {
+            repeat(devices) { counters.upsert(projectId, day, CounterRepository.CounterDelta("session", mapOf("bucket" to bucket), n = n, isNewDevice = true)) }
+        }
+        seed(today, 2, 5)
+        seed(today.minusDays(6), 3, 5)
+        seed(today.minusDays(7), 4, 5)
+        seed(today.minusDays(13), 1, 5)
+        seed(today.minusDays(14), 100, 5)
+        seed(today.minusDays(2), 1000, 1, "10_30s")
+        application { testModule(config, db) }
+        for (period in listOf("current", "previous")) {
+            val response = client.get("/api/v1/projects/proj_$projectId/sessions?range=7d&period=$period&anchor=$today") {
+                header("Authorization", "Bearer ${jwtFor(owner, "developer")}")
+            }
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = Json.parseToJsonElement(response.bodyAsText()).toString()
+            assertTrue(body.contains("\"total_sessions\":25"), "$period: $body")
+            assertTrue(!body.contains(today.minusDays(14).toString()), body)
+        }
+    }
 }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +30,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,10 +48,6 @@ import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.CreateExperimentRequest
 import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.api.VariantDto
-import com.quietmetrix.dashboard.format.formatCount
-import com.quietmetrix.dashboard.format.formatPercent
-import com.quietmetrix.dashboard.format.formatWilsonRange
-import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.resources.*
@@ -68,7 +65,6 @@ import com.quietmetrix.dashboard.resources.experiment_action_pause
 import com.quietmetrix.dashboard.resources.experiment_action_resume
 import com.quietmetrix.dashboard.resources.experiment_action_start
 import com.quietmetrix.dashboard.resources.experiment_delete_confirm_body
-import com.quietmetrix.dashboard.resources.experiment_delete_confirm_title
 import com.quietmetrix.dashboard.resources.experiment_editor_cancel
 import com.quietmetrix.dashboard.resources.experiment_editor_countries_hint
 import com.quietmetrix.dashboard.resources.experiment_editor_countries_invalid
@@ -85,37 +81,23 @@ import com.quietmetrix.dashboard.resources.experiment_editor_variant_a_label
 import com.quietmetrix.dashboard.resources.experiment_editor_variant_b_label
 import com.quietmetrix.dashboard.resources.experiment_empty
 import com.quietmetrix.dashboard.resources.experiment_help_content_description
-import com.quietmetrix.dashboard.resources.experiment_impressions_label
-import com.quietmetrix.dashboard.resources.experiment_interactions_label
 import com.quietmetrix.dashboard.resources.experiment_limit_reached_message
 import com.quietmetrix.dashboard.resources.experiment_card_emoji
 import com.quietmetrix.dashboard.resources.experiment_new
 import com.quietmetrix.dashboard.resources.experiment_none_selected
-import com.quietmetrix.dashboard.resources.experiment_rate_label
-import com.quietmetrix.dashboard.resources.experiment_results_baseline_badge
-import com.quietmetrix.dashboard.resources.experiment_results_not_enough_data
-import com.quietmetrix.dashboard.resources.experiment_results_title
-import com.quietmetrix.dashboard.resources.experiment_results_unit_note
 import com.quietmetrix.dashboard.resources.experiment_screen_label
-import com.quietmetrix.dashboard.resources.experiment_status_active
 import com.quietmetrix.dashboard.resources.experiment_status_draft
-import com.quietmetrix.dashboard.resources.experiment_status_ended
 import com.quietmetrix.dashboard.resources.experiment_status_finished
 import com.quietmetrix.dashboard.resources.experiment_status_paused
 import com.quietmetrix.dashboard.resources.experiment_status_running
 import com.quietmetrix.dashboard.resources.experiment_traffic_label
 import com.quietmetrix.dashboard.resources.experiment_usage_line
 import com.quietmetrix.dashboard.resources.experiment_variants_split
-import com.quietmetrix.dashboard.resources.experiment_verdict_no_difference
-import com.quietmetrix.dashboard.resources.experiment_verdict_not_enough_data
-import com.quietmetrix.dashboard.resources.experiment_verdict_winner
 import com.quietmetrix.dashboard.resources.experiments_title
 import com.quietmetrix.dashboard.resources.ic_experiment
 import com.quietmetrix.dashboard.resources.ic_info
-import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.ui.components.ContentState
 import com.quietmetrix.dashboard.ui.components.EmptyState
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
@@ -127,7 +109,6 @@ import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import com.quietmetrix.dashboard.viewmodel.DataSection
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -215,7 +196,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                 }
             }
 
-            when (contentStateFor(state.loading, state.experiments.isEmpty())) {
+            when (contentStateFor(state.isLoading(DataSection.Experiments), state.experiments.isEmpty())) {
                 ContentState.Loading -> {
                     ResponsiveRowOrColumn(sizeClass) {
                         KpiSkeleton(Modifier.fillSlot())
@@ -227,6 +208,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                     Card(modifier = Modifier.fillMaxWidth()) {
                         EmptyState(Res.drawable.ic_experiment, Res.string.experiment_empty, Modifier.padding(16.dp))
                     }
+                    if (state.sectionErrors[DataSection.Experiments] == null) SetupInstructionsSection()
                 }
                 ContentState.Data -> {
                     ExperimentsBody(

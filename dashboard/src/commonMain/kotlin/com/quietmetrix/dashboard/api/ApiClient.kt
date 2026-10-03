@@ -230,49 +230,49 @@ class ApiClient(private val baseUrl: String) {
         ensureSuccess(res)
     }
 
-    suspend fun aggregates(projectId: String, range: TimeRange, demo: Boolean): AggregatesResponse {
+    suspend fun aggregates(projectId: String, range: TimeRange, demo: Boolean, previous: Boolean = false, anchor: String? = null): AggregatesResponse {
         val path = if (demo) "/_demo/aggregates" else "/projects/$projectId/aggregates"
-        val res = client.get(url("$path?range=${range.token}")) {
+        val res = client.get(url("$path?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun transitions(projectId: String, range: TimeRange): TransitionsResponse {
-        val res = client.get(url("/projects/$projectId/transitions?range=${range.token}")) {
+    suspend fun transitions(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): TransitionsResponse {
+        val res = client.get(url("/projects/$projectId/transitions?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun sessions(projectId: String, range: TimeRange): SessionsResponse {
-        val res = client.get(url("/projects/$projectId/sessions?range=${range.token}")) {
+    suspend fun sessions(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): SessionsResponse {
+        val res = client.get(url("/projects/$projectId/sessions?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun retention(projectId: String, range: TimeRange): RetentionResponse {
-        val res = client.get(url("/projects/$projectId/retention?range=${range.token}")) {
+    suspend fun retention(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): RetentionResponse {
+        val res = client.get(url("/projects/$projectId/retention?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun search(projectId: String, range: TimeRange): SearchResponse {
-        val res = client.get(url("/projects/$projectId/search?range=${range.token}")) {
+    suspend fun search(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): SearchResponse {
+        val res = client.get(url("/projects/$projectId/search?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
 
-    suspend fun friction(projectId: String, range: TimeRange): FrictionResponse {
-        val res = client.get(url("/projects/$projectId/friction?range=${range.token}")) {
+    suspend fun friction(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): FrictionResponse {
+        val res = client.get(url("/projects/$projectId/friction?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
@@ -333,9 +333,11 @@ class ApiClient(private val baseUrl: String) {
         range: TimeRange,
         breakdown: String? = null,
         trend: Boolean = false,
+        previous: Boolean = false,
+        anchor: String? = null,
     ): FunnelResultsResponse {
         val query = buildString {
-            append("?range=${range.token}")
+            append("?range=${range.token}${analyticsWindowQuery(previous, anchor)}")
             breakdown?.let { append("&breakdown=$it") }
             if (trend) append("&trend=1")
         }
@@ -383,11 +385,17 @@ class ApiClient(private val baseUrl: String) {
         ensureSuccess(res)
     }
 
-    suspend fun experimentResults(projectId: String, experimentKey: String, range: TimeRange): ExperimentResultsResponse {
-        val res = client.get(url("/projects/$projectId/experiments/$experimentKey/results?range=${range.token}")) {
+    suspend fun experimentResults(projectId: String, experimentKey: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): ExperimentResultsResponse {
+        val res = client.get(url("/projects/$projectId/experiments/$experimentKey/results?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
         return res.body()
     }
+}
+
+/** Appends a stable UTC anchor and optional previous-period selector to an analytics request. */
+internal fun analyticsWindowQuery(previous: Boolean, anchor: String?): String = buildString {
+    if (previous) append("&period=previous")
+    if (anchor != null) append("&anchor=$anchor")
 }

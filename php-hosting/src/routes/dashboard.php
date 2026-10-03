@@ -13,9 +13,9 @@ function handleProjectAggregates(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $seconds = windowSeconds(365);
-    $days = (int)max(1, round($seconds / 86400));
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $seconds);
+    $window = requestAnalyticsWindow($seconds);
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
 
     $eventCells = counterReadCells($projectId, 'event', $fromDay, $toDay);
     usort($eventCells, static fn(array $a, array $b): int => $b['n'] <=> $a['n']);
@@ -60,7 +60,7 @@ function handleProjectAggregates(string $projectId): void {
     ));
 
     jsonResponse(200, [
-        'window_days'    => $days,
+        'window_days'    => $window['days'],
         'totals'         => [
             'events'  => $totalEvents,
             'offline' => 0,
@@ -88,8 +88,9 @@ function handleProjectTransitions(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $seconds = windowSeconds(90);
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $seconds);
+    $window = requestAnalyticsWindow($seconds);
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
 
     $cells = counterReadCells($projectId, 'screen_transition', $fromDay, $toDay);
     $result = [];
@@ -114,9 +115,9 @@ function handleProjectTransitions(string $projectId): void {
 function handleProjectSearch(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
-    $days = min(90, max(1, (int)($_GET['days'] ?? 30)));
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $days * 86400);
+    $window = requestAnalyticsWindow(windowSeconds(90));
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
 
     $searchCells = counterReadCells($projectId, 'search', $fromDay, $toDay);
     $zeroResultCells = counterReadCells($projectId, 'search_zero_result', $fromDay, $toDay);
@@ -137,9 +138,9 @@ function handleProjectSearch(string $projectId): void {
 function handleProjectFriction(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
-    $days = min(90, max(1, (int)($_GET['days'] ?? 30)));
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $days * 86400);
+    $window = requestAnalyticsWindow(windowSeconds(90));
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
 
     $frictionCells = counterReadCells($projectId, 'friction', $fromDay, $toDay);
     $screens = array_map(
@@ -164,8 +165,9 @@ function handleProjectSessions(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $seconds = windowSeconds(90);
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $seconds);
+    $window = requestAnalyticsWindow($seconds);
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
 
     $cells = counterReadCells($projectId, 'session', $fromDay, $toDay);
     $analysis = sessionCounterAnalyze($cells);
@@ -193,8 +195,9 @@ function handleProjectRetention(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $seconds = windowSeconds(90);
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $seconds);
+    $window = requestAnalyticsWindow($seconds);
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
 
     $counterCells = counterReadCells($projectId, 'retention', $fromDay, $toDay);
     $cells = [];
@@ -202,6 +205,8 @@ function handleProjectRetention(string $projectId): void {
         $cohort = $c['dims']['cohort'] ?? null;
         $day = isset($c['dims']['day']) ? (int)$c['dims']['day'] : null;
         if ($cohort === null || $day === null) continue;
+        $started = reportedCohortStart($cohort);
+        if ($started === null || $started < $fromDay || $started > $toDay) continue;
         $cells[] = ['cohort' => $cohort, 'day' => $day, 'n' => $c['n']];
     }
 
@@ -254,13 +259,15 @@ function handleProjectAsk(string $projectId): void {
         errorResponse(400, 'bad_request', 'Question must contain 1–500 characters and range must be supported');
         return;
     }
-    $toDay = gmdate('Y-m-d');
-    $fromDay = gmdate('Y-m-d', time() - $ranges[$range]);
+    $window = analyticsWindow($ranges[$range]);
+    $toDay = $window['to_day'];
+    $fromDay = $window['from_day'];
     $retentionCells = [];
     foreach (counterReadCells($projectId, 'retention', $fromDay, $toDay) as $cell) {
         $cohort = $cell['dims']['cohort'] ?? null;
         $day = isset($cell['dims']['day']) ? (int)$cell['dims']['day'] : null;
-        if ($cohort !== null && $day !== null) $retentionCells[] = ['cohort' => $cohort, 'day' => $day, 'n' => $cell['n']];
+        $started = $cohort === null ? null : reportedCohortStart($cohort);
+        if ($started !== null && $started >= $fromDay && $started <= $toDay && $day !== null) $retentionCells[] = ['cohort' => $cohort, 'day' => $day, 'n' => $cell['n']];
     }
     jsonResponse(200, askAnalyticsAnalyze(
         $question,

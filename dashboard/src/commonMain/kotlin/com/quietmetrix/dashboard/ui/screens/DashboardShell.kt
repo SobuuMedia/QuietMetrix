@@ -1,5 +1,7 @@
 package com.quietmetrix.dashboard.ui.screens
 
+import com.quietmetrix.dashboard.viewmodel.analyticsSections
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -41,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -54,6 +57,7 @@ import com.quietmetrix.dashboard.api.UiError
 import com.quietmetrix.dashboard.nav.NavDestination
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.nav.classifyWindow
+import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_refresh
 import com.quietmetrix.dashboard.resources.action_signout
@@ -83,6 +87,7 @@ import com.quietmetrix.dashboard.ui.components.ErrorBanner
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.handCursor
+import com.quietmetrix.dashboard.viewmodel.selectDrillDown
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
 import com.quietmetrix.dashboard.viewmodel.serverUnreachableError
@@ -162,7 +167,7 @@ fun DashboardShell(
             snackbarHost = { SnackbarHost(hostState = snackbarState) },
         ) { padding ->
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                HeaderProgressBar(visible = state.loading || state.refreshing)
+                HeaderProgressBar(visible = state.loading || state.refreshing || state.loadingSections.isNotEmpty())
                 // Mutually exclusive, not stacked — see this block's KDoc note below for why.
                 val serverUnreachable = state.serverUnreachableError
                 if (serverUnreachable != null) {
@@ -170,22 +175,34 @@ fun DashboardShell(
                 } else {
                     state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
                 }
-                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    if (state.refreshing) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
-                    } else {
-                        content(sizeClass)
+                if (state.activeDestination in analyticsDestinations) {
+                    Text(stringResource(Res.string.analytics_daily_scope), Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+                }
+                if (state.compare && state.activeDestination in analyticsDestinations) {
+                    val dates = analyticsPeriodDates(state.range, state.analyticsAnchor)
+                    Text(stringResource(Res.string.analytics_period_label, dates[0], dates[1], dates[2], dates[3]),
+                        Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(Res.string.comparison_scope), Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelSmall, color = LocalExtendedColors.current.lavender)
+                    state.comparisonErrors.filterKeys { it in analyticsSections(state.activeDestination) }.values.forEach { error ->
+                        InlineErrorNotice(error, onRetry = { viewModel.refresh() })
                     }
+                }
+                Box(modifier = Modifier.fillMaxSize().padding(16.dp).alpha(if (state.refreshing) .45f else 1f)) {
+                    content(sizeClass)
                 }
             }
         }
         AskDrawer(viewModel, state)
-        state.drillDown?.let { selected ->
-            DrillDownDrawer(selected, onDismiss = { viewModel.closeDrillDown() }) {
+        state.drillDown?.let { selection ->
+            val selected = selectDrillDown(state, selection.kind, selection.key)
+            val title = selected.titleRes?.let { stringResource(it) } ?: selected.title ?: selected.key
+            val project = state.projects.firstOrNull { it.id == state.currentProjectId }?.name.orEmpty()
+            val scope = stringResource(Res.string.drill_scope, project, stringResource(state.range.labelRes))
+            val question = stringResource(Res.string.drill_question, title)
+            DrillDownDrawer(selected, scope, state.compare, state.expertMode, onDismiss = { viewModel.closeDrillDown() }) {
                 viewModel.closeDrillDown()
-                viewModel.openAskDrawer("Explain ${selected.key} for the selected date range.")
+                viewModel.openAskDrawer(question)
             }
         }
     }
@@ -342,6 +359,7 @@ private fun DashboardTopBar(
 
             HeaderToggleRow(
                 compareOn = compareOn,
+                compareVisible = state.activeDestination in analyticsDestinations,
                 onCompareToggle = { viewModel.toggleCompare() },
                 expertOn = state.expertMode,
                 onExpertToggle = { viewModel.toggleExpertMode() },
@@ -495,6 +513,7 @@ internal fun DateRangeDropdown(
 @Composable
 internal fun HeaderToggleRow(
     compareOn: Boolean,
+    compareVisible: Boolean = true,
     onCompareToggle: () -> Unit,
     expertOn: Boolean,
     onExpertToggle: () -> Unit,
@@ -515,7 +534,7 @@ internal fun HeaderToggleRow(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ToggleChip(emoji = COMPARE_EMOJI, label = stringResource(Res.string.header_toggle_compare), on = compareOn, onClick = onCompareToggle)
+        if (compareVisible) ToggleChip(emoji = COMPARE_EMOJI, label = stringResource(Res.string.header_toggle_compare), on = compareOn, onClick = onCompareToggle)
         ToggleChip(emoji = EXPERT_EMOJI, label = stringResource(Res.string.header_toggle_expert), on = expertOn, onClick = onExpertToggle)
 
         IconButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.handCursor()) {
@@ -664,3 +683,7 @@ private fun NewBadge(modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** Screens whose metrics have a selected analytics period; management cards are not time series. */
+private val analyticsDestinations = setOf(NavDestination.Overview, NavDestination.Flow, NavDestination.Retention,
+    NavDestination.Funnels, NavDestination.Experiments)

@@ -28,6 +28,8 @@ import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.api.decodeUserFromJwt
 import com.quietmetrix.dashboard.api.toUiError
 import com.quietmetrix.dashboard.nav.NavDestination
+import com.quietmetrix.dashboard.resources.ask_error_project
+import com.quietmetrix.dashboard.resources.ask_error_fetch
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.login_error_invalid_credentials
 import com.quietmetrix.dashboard.resources.login_error_misconfigured
@@ -114,8 +116,18 @@ data class DashboardState(
     val askDrawer: AskDrawerState = AskDrawerState(),
     /** Whether the global previous-period comparison is enabled. */
     val compare: Boolean = false,
+    /** UTC counter date shared by all requests in the current selection. */
+    val analyticsAnchor: String = analyticsAnchorToday(),
+    /** Incremented on selection/refresh so a late response cannot overwrite newer data. */
+    val analyticsRevision: Long = 0,
+    /** Independently loaded previous-period values; never substituted into current results. */
+    val comparison: ComparisonData = ComparisonData(),
+    /** Active section requests drive first-load skeletons independently of startup. */
+    val loadingSections: Set<DataSection> = emptySet(),
+    /** Previous-period failures leave current data visible and offer their own retry. */
+    val comparisonErrors: Map<DataSection, UiError> = emptyMap(),
     /** The selected analytics drill-down, or null while its drawer is closed. */
-    val drillDown: DrillDownContent? = null,
+    val drillDown: DrillDownSelection? = null,
     /** Ids of "Worth a look" observations ([com.quietmetrix.dashboard.ui.screens.WorthALookObservation.id])
      *  the user has dismissed or snoozed this session — set by [DashboardViewModel.hideWorthALook],
      *  cleared by that same call's undo toast action. Session-only (matches the design handoff's
@@ -135,11 +147,9 @@ data class DashboardState(
     val isReadOnly: Boolean get() = role == UserRole.REVIEWER
 }
 
-/** Resolved, privacy-safe content displayed by the shared analytics drill-down drawer. */
-data class DrillDownContent(val kind: String, val key: String, val value: String, val detail: String)
 
 /** One background data panel that can fail independently without blanking the dashboard. */
-enum class DataSection { Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults, Experiments, ExperimentResults }
+enum class DataSection { Projects, Users, Tokens, Aggregates, Transitions, Sessions, Retention, Search, Friction, Funnels, FunnelResults, Experiments, ExperimentResults }
 
 /**
  * A single bottom-center toast notification (design_handoff_dashboard_redesign/README.md >
@@ -232,6 +242,8 @@ class DashboardViewModel(
 
     private lateinit var api: ApiClient
     private val json = Json { ignoreUnknownKeys = true }
+    private val askRequest = MutableStateFlow<Any?>(null)
+    private val analyticsRequests = MutableStateFlow<Map<DataSection, Any>>(emptyMap())
 
     /** Persists the signed-in user so role/email survive a page reload. */
     private fun persistUser(user: ApiUser) {
@@ -257,6 +269,7 @@ class DashboardViewModel(
             res.refreshToken?.let { TokenStorage.saveRefresh(it) }
             persistUser(res.user)
             loadProjects()
+            loadActive(_state.value.activeDestination)
         } catch (e: ApiException) {
             _state.update { it.copy(loading = false, loginErrorRes = mapLoginError(e)) }
         } catch (_: Throwable) {
@@ -346,6 +359,7 @@ class DashboardViewModel(
                     loadSearch()
                     loadFriction()
                     loadSessions()
+                    loadRetentionOnce()
                     loadFunnelsOnce()
                 }
             } catch (e: ApiException) {
@@ -367,6 +381,7 @@ class DashboardViewModel(
                                 loadSearch()
                                 loadFriction()
                                 loadSessions()
+                                loadRetentionOnce()
                             }
                         } catch (e: Throwable) {
                             _state.update { it.copy(error = e.toUiError("GET /projects (after token refresh)"), loading = false) }
@@ -394,10 +409,11 @@ class DashboardViewModel(
         scope.launch { loadActive(destination) }
     }
 
-    /** Re-run the active screen's loaders, blanking it to a spinner while in flight. */
+    /** Refreshes live data while preserving and dimming the current screen. */
     fun refresh() {
+        if (_state.value.refreshing) return
         val destination = _state.value.activeDestination
-        _state.update { it.copy(refreshing = true) }
+        _state.update { it.copy(refreshing = true, analyticsAnchor = analyticsAnchorToday(), analyticsRevision = it.analyticsRevision + 1) }
         scope.launch {
             try {
                 // Keep the spinner visible long enough to read even on fast loads.
@@ -417,7 +433,7 @@ class DashboardViewModel(
             // "Came back next day" card has real data without requiring a separate visit to the
             // Retention tab first (see OverviewVitalsLogic.kt's computeVitalsNumbers KDoc).
             NavDestination.Overview  -> { loadAggregates(); loadSessions(); loadRetentionOnce() }
-            NavDestination.Flow      -> { loadTransitions(); loadSearch(); loadFriction() }
+            NavDestination.Flow      -> { loadAggregates(); loadTransitions(); loadSearch(); loadFriction() }
             NavDestination.Retention -> loadRetentionOnce()
             NavDestination.Projects  -> loadProjects()
             NavDestination.Users     -> loadUsersOnce()
@@ -428,23 +444,28 @@ class DashboardViewModel(
                     _state.update { it.copy(experimentsGuideOpen = true, experimentsGuideStep = 0) }
                 }
             }
-            NavDestination.Settings  -> { /* no fetch */ }
+            NavDestination.Settings  -> loadTokensOnce()
         }
     }
 
     fun selectProject(projectId: String) {
         _state.update {
             it.copy(
-                currentProjectId = projectId, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null,
+                currentProjectId = projectId, askDrawer = AskDrawerState(open = it.askDrawer.open), aggregates = null, sessions = null, retention = null, transitions = null,
+                search = null, friction = null, comparison = ComparisonData(), comparisonErrors = emptyMap(),
+                sectionErrors = emptyMap(), analyticsRevision = it.analyticsRevision + 1, drillDown = null, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null,
                 experiments = emptyList(), experimentLimit = null, selectedExperimentKey = null, experimentResults = null,
             )
         }
         TokenStorage.saveLastProjectId(projectId)
-        scope.launch { loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadFunnelsOnce(); loadExperimentsOnce() }
+        scope.launch { loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadRetentionOnce(); loadFunnelsOnce(); loadExperimentsOnce() }
     }
 
     fun selectRange(range: TimeRange) {
-        _state.update { it.copy(range = range, experimentResults = null, experimentResultsRange = null) }
+        _state.update { it.copy(range = range, askDrawer = AskDrawerState(open = it.askDrawer.open), aggregates = null, transitions = null, sessions = null, retention = null,
+            search = null, friction = null, funnelResults = null, experimentResults = null, experimentResultsRange = null,
+            comparison = ComparisonData(), comparisonErrors = emptyMap(), sectionErrors = emptyMap(),
+            analyticsAnchor = analyticsAnchorToday(), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch {
             loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadRetentionOnce()
             loadFunnelResultsOnce(); loadExperimentResultsOnce()
@@ -452,11 +473,15 @@ class DashboardViewModel(
     }
 
     /** Toggles the dashboard-wide previous-period comparison preference. */
-    fun toggleCompare() { _state.update { it.copy(compare = !it.compare) } }
+    fun toggleCompare() {
+        _state.update { it.copy(compare = !it.compare, comparison = ComparisonData(), comparisonErrors = emptyMap(),
+            analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
+        scope.launch { loadActive(_state.value.activeDestination) }
+    }
 
     /** Opens a drill-down using values already present in dashboard state. */
     fun openDrillDown(kind: String, key: String) {
-        _state.update { state -> state.copy(drillDown = selectDrillDown(state, kind, key)) }
+        _state.update { state -> state.copy(drillDown = DrillDownSelection(kind, key)) }
     }
 
     /** Closes the shared analytics drill-down drawer. */
@@ -464,7 +489,7 @@ class DashboardViewModel(
 
     fun setDemoMode(enabled: Boolean) {
         if (!_state.value.serverDebug) return
-        _state.update { it.copy(demoMode = enabled) }
+        _state.update { it.copy(demoMode = enabled, aggregates = null, comparison = ComparisonData(), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch { loadAggregates() }
     }
 
@@ -520,10 +545,22 @@ class DashboardViewModel(
     }
 
     private suspend fun loadUsersOnce() {
+        loadList(DataSection.Users, "GET /users", fetch = { api.listUsers().users }) { copy(users = it) }
+    }
+
+    /** Tracks list loading and rejects replaced requests and project-scoped stale replies. */
+    private suspend fun <T> loadList(section: DataSection, endpoint: String, projectId: String? = null, fetch: suspend () -> T, accept: DashboardState.(T) -> DashboardState) {
+        val token = Any()
+        analyticsRequests.update { it + (section to token) }
+        _state.update { it.copy(loadingSections = it.loadingSections + section) }
+        fun valid(state: DashboardState) = analyticsRequests.value[section] === token && (projectId == null || state.currentProjectId == projectId)
         try {
-            _state.update { it.copy(users = api.listUsers().users) }
+            val result = fetch()
+            _state.update { if (valid(it)) accept(it, result).clearingSectionError(section) else it }
         } catch (e: Throwable) {
-            _state.update { it.copy(error = e.toUiError("GET /users")) }
+            _state.update { if (valid(it)) it.withSectionError(section, e.toUiError(endpoint)) else it }
+        } finally {
+            if (analyticsRequests.value[section] === token) _state.update { it.copy(loadingSections = it.loadingSections - section) }
         }
     }
 
@@ -567,14 +604,10 @@ class DashboardViewModel(
 
     // ---- Access tokens (agents/CLIs) ----
 
-    fun loadTokens() {
-        scope.launch {
-            try {
-                _state.update { it.copy(accessTokens = api.listTokens().tokens) }
-            } catch (e: Throwable) {
-                _state.update { it.copy(error = e.toUiError("GET /tokens")) }
-            }
-        }
+    fun loadTokens() { scope.launch { loadTokensOnce() } }
+
+    private suspend fun loadTokensOnce() {
+        loadList(DataSection.Tokens, "GET /tokens", fetch = { api.listTokens().tokens }) { copy(accessTokens = it) }
     }
 
     fun createToken(name: String, scopes: List<String>? = null) {
@@ -644,39 +677,27 @@ class DashboardViewModel(
     private suspend fun loadFunnelsOnce() {
         val s = _state.value
         val projectId = s.currentProjectId ?: return
-        try {
-            val res = api.listFunnels(projectId)
-            val currentKey = s.selectedFunnelKey?.takeIf { key -> res.funnels.any { it.funnelKey == key } }
-                ?: res.funnels.firstOrNull()?.funnelKey
-            _state.update {
-                it.copy(funnels = res.funnels, selectedFunnelKey = currentKey)
-                    .clearingSectionError(DataSection.Funnels)
-            }
-            loadFunnelResultsOnce()
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Funnels, e.toUiError("GET /projects/{id}/funnels")) }
+        loadList(DataSection.Funnels, "GET /projects/{id}/funnels", projectId, fetch = { api.listFunnels(projectId) }) { res ->
+            val currentKey = selectedFunnelKey?.takeIf { key -> res.funnels.any { it.funnelKey == key } } ?: res.funnels.firstOrNull()?.funnelKey
+            copy(funnels = res.funnels, selectedFunnelKey = currentKey)
         }
+        if (_state.value.currentProjectId == projectId) loadFunnelResultsOnce()
     }
 
+    /** Loads selected funnel statistics without allowing stale controls to commit a response. */
     private suspend fun loadFunnelResultsOnce() {
-        val s = _state.value
-        val projectId = s.currentProjectId ?: return
-        val funnelKey = s.selectedFunnelKey ?: run {
-            _state.update { it.copy(funnelResults = null).clearingSectionError(DataSection.FunnelResults) }
-            return
-        }
-        try {
-            val res = api.funnelResults(projectId, funnelKey, s.range)
-            _state.update { it.copy(funnelResults = res).clearingSectionError(DataSection.FunnelResults) }
-        } catch (e: Throwable) {
-            _state.update {
-                it.withSectionError(DataSection.FunnelResults, e.toUiError("GET /projects/{id}/funnels/{key}/results"))
-            }
-        }
+        val snapshot = _state.value
+        val projectId = snapshot.currentProjectId ?: return
+        val key = snapshot.selectedFunnelKey ?: return
+        loadAnalytics(DataSection.FunnelResults, "GET /projects/{id}/funnels/{key}/results", snapshot,
+            fetch = { previous, anchor -> api.funnelResults(projectId, key, snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(funnel = result)) else copy(funnelResults = result)
+            })
     }
 
     fun selectFunnel(funnelKey: String) {
-        _state.update { it.copy(selectedFunnelKey = funnelKey) }
+        _state.update { it.copy(selectedFunnelKey = funnelKey, funnelResults = null, comparison = it.comparison.copy(funnel = null), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch { loadFunnelResultsOnce() }
     }
 
@@ -700,40 +721,27 @@ class DashboardViewModel(
     private suspend fun loadExperimentsOnce() {
         val s = _state.value
         val projectId = s.currentProjectId ?: return
-        try {
-            val res = api.listExperiments(projectId)
-            val currentKey = s.selectedExperimentKey?.takeIf { key -> res.experiments.any { it.key == key } }
-                ?: res.experiments.firstOrNull()?.key
-            _state.update {
-                it.copy(experiments = res.experiments, experimentLimit = res.limit, selectedExperimentKey = currentKey)
-                    .clearingSectionError(DataSection.Experiments)
-            }
-            loadExperimentResultsOnce()
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Experiments, e.toUiError("GET /projects/{id}/experiments")) }
+        loadList(DataSection.Experiments, "GET /projects/{id}/experiments", projectId, fetch = { api.listExperiments(projectId) }) { res ->
+            val currentKey = selectedExperimentKey?.takeIf { key -> res.experiments.any { it.key == key } } ?: res.experiments.firstOrNull()?.key
+            copy(experiments = res.experiments, experimentLimit = res.limit, selectedExperimentKey = currentKey)
         }
+        if (_state.value.currentProjectId == projectId) loadExperimentResultsOnce()
     }
 
+    /** Loads selected experiment statistics without allowing stale controls to commit a response. */
     private suspend fun loadExperimentResultsOnce() {
-        val s = _state.value
-        val projectId = s.currentProjectId ?: return
-        val key = s.selectedExperimentKey ?: run {
-            _state.update { it.copy(experimentResults = null).clearingSectionError(DataSection.ExperimentResults) }
-            return
-        }
-        try {
-            val res = api.experimentResults(projectId, key, s.range)
-            _state.update { it.acceptExperimentResults(res, projectId, key, s.range) }
-        } catch (e: Throwable) {
-            _state.update {
-                if (it.currentProjectId == projectId && it.selectedExperimentKey == key && it.range == s.range)
-                    it.withSectionError(DataSection.ExperimentResults, e.toUiError("GET /projects/{id}/experiments/{key}/results")) else it
-            }
-        }
+        val snapshot = _state.value
+        val projectId = snapshot.currentProjectId ?: return
+        val key = snapshot.selectedExperimentKey ?: return
+        loadAnalytics(DataSection.ExperimentResults, "GET /projects/{id}/experiments/{key}/results", snapshot,
+            fetch = { previous, anchor -> api.experimentResults(projectId, key, snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(experiment = result)) else copy(experimentResults = result, experimentResultsRange = snapshot.range)
+            })
     }
 
     fun selectExperiment(experimentKey: String) {
-        _state.update { it.copy(selectedExperimentKey = experimentKey, experimentResults = null, experimentResultsRange = null) }
+        _state.update { it.copy(selectedExperimentKey = experimentKey, experimentResults = null, experimentResultsRange = null, comparison = it.comparison.copy(experiment = null), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch { loadExperimentResultsOnce() }
     }
 
@@ -839,83 +847,108 @@ class DashboardViewModel(
     }
 
     private suspend fun loadProjects() {
-        try {
-            val res = api.listProjects()
-            val current = _state.value.currentProjectId
-                ?: res.projects.firstOrNull()?.id
-            _state.update { it.copy(projects = res.projects, currentProjectId = current) }
-        } catch (e: Throwable) {
-            _state.update { it.copy(error = e.toUiError("GET /projects")) }
+        loadList(DataSection.Projects, "GET /projects", fetch = { api.listProjects() }) { res ->
+            copy(projects = res.projects, currentProjectId = currentProjectId?.takeIf { key -> res.projects.any { it.id == key } } ?: res.projects.firstOrNull()?.id)
         }
     }
 
+    /** Loads aggregates and an optional previous period within one captured selection. */
     private suspend fun loadAggregates() {
-        val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
-        try {
-            val agg = api.aggregates(
-                projectId = s.currentProjectId.orEmpty(),
-                range = s.range,
-                demo = s.demoMode,
-            )
-            _state.update { it.copy(aggregates = agg).clearingSectionError(DataSection.Aggregates) }
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Aggregates, e.toUiError("GET /projects/{id}/aggregates")) }
-        }
+        val snapshot = _state.value
+        if (snapshot.currentProjectId == null && !snapshot.demoMode) return
+        loadAnalytics(DataSection.Aggregates, "GET /projects/{id}/aggregates", snapshot,
+            fetch = { previous, anchor -> api.aggregates(snapshot.currentProjectId.orEmpty(), snapshot.range, snapshot.demoMode, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(aggregates = result)) else copy(aggregates = result)
+            })
     }
 
+    /** Loads transitions and an optional previous period within one captured selection. */
     private suspend fun loadTransitions() {
-        val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
-        try {
-            val res = api.transitions(s.currentProjectId.orEmpty(), s.range)
-            _state.update { it.copy(transitions = res).clearingSectionError(DataSection.Transitions) }
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Transitions, e.toUiError("GET /projects/{id}/transitions")) }
-        }
+        val snapshot = _state.value
+        if (snapshot.currentProjectId == null && !snapshot.demoMode) return
+        loadAnalytics(DataSection.Transitions, "GET /projects/{id}/transitions", snapshot,
+            fetch = { previous, anchor -> api.transitions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(transitions = result)) else copy(transitions = result)
+            })
     }
 
+    /** Loads search and an optional previous period within one captured selection. */
     private suspend fun loadSearch() {
-        val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
-        try {
-            val res = api.search(s.currentProjectId.orEmpty(), s.range)
-            _state.update { it.copy(search = res).clearingSectionError(DataSection.Search) }
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Search, e.toUiError("GET /projects/{id}/search")) }
-        }
+        val snapshot = _state.value
+        if (snapshot.currentProjectId == null && !snapshot.demoMode) return
+        loadAnalytics(DataSection.Search, "GET /projects/{id}/search", snapshot,
+            fetch = { previous, anchor -> api.search(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(search = result)) else copy(search = result)
+            })
     }
 
+    /** Loads friction and an optional previous period within one captured selection. */
     private suspend fun loadFriction() {
-        val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
-        try {
-            val res = api.friction(s.currentProjectId.orEmpty(), s.range)
-            _state.update { it.copy(friction = res).clearingSectionError(DataSection.Friction) }
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Friction, e.toUiError("GET /projects/{id}/friction")) }
-        }
+        val snapshot = _state.value
+        if (snapshot.currentProjectId == null && !snapshot.demoMode) return
+        loadAnalytics(DataSection.Friction, "GET /projects/{id}/friction", snapshot,
+            fetch = { previous, anchor -> api.friction(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(friction = result)) else copy(friction = result)
+            })
     }
 
+    /** Loads sessions and an optional previous period within one captured selection. */
     private suspend fun loadSessions() {
-        val s = _state.value
-        if (!s.demoMode && s.currentProjectId == null) return
-        try {
-            val res = api.sessions(s.currentProjectId.orEmpty(), s.range)
-            _state.update { it.copy(sessions = res).clearingSectionError(DataSection.Sessions) }
-        } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Sessions, e.toUiError("GET /projects/{id}/sessions")) }
-        }
+        val snapshot = _state.value
+        if (snapshot.currentProjectId == null && !snapshot.demoMode) return
+        loadAnalytics(DataSection.Sessions, "GET /projects/{id}/sessions", snapshot,
+            fetch = { previous, anchor -> api.sessions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(sessions = result)) else copy(sessions = result)
+            })
     }
 
+    /** Loads retention and an optional previous period within one captured selection. */
     private suspend fun loadRetentionOnce() {
-        val s = _state.value
-        if (s.currentProjectId == null) return
+        val snapshot = _state.value
+        if (snapshot.currentProjectId == null && !snapshot.demoMode) return
+        loadAnalytics(DataSection.Retention, "GET /projects/{id}/retention", snapshot,
+            fetch = { previous, anchor -> api.retention(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            accept = { result, previous ->
+                if (previous) copy(comparison = comparison.copy(retention = result)) else copy(retention = result)
+            })
+    }
+
+    /** Loads current data first; comparison failure preserves the successful current response. */
+    private suspend fun <T> loadAnalytics(
+        section: DataSection,
+        endpoint: String,
+        snapshot: DashboardState,
+        fetch: suspend (Boolean, String) -> T,
+        accept: DashboardState.(T, Boolean) -> DashboardState,
+    ) {
+        val context = analyticsContext(snapshot)
+        val request = Any()
+        analyticsRequests.update { it + (section to request) }
+        _state.update { it.copy(loadingSections = it.loadingSections + section) }
+        fun stillCurrent(state: DashboardState): Boolean =
+            state.matchesAnalyticsContext(context) && analyticsRequests.value[section] === request
         try {
-            val res = api.retention(s.currentProjectId, s.range)
-            _state.update { it.copy(retention = res).clearingSectionError(DataSection.Retention) }
+            val current = fetch(false, context.anchor)
+            _state.update { if (stillCurrent(it)) it.accept(current, false).clearingSectionError(section) else it }
+            if (context.compare && !context.demo && stillCurrent(_state.value)) {
+                try {
+                    val previous = fetch(true, context.anchor)
+                    _state.update { if (stillCurrent(it)) it.accept(previous, true).copy(comparisonErrors = it.comparisonErrors - section) else it }
+                } catch (e: Throwable) {
+                    _state.update { if (stillCurrent(it)) it.copy(comparisonErrors = it.comparisonErrors + (section to e.toUiError(endpoint + "?period=previous"))) else it }
+                }
+            }
         } catch (e: Throwable) {
-            _state.update { it.withSectionError(DataSection.Retention, e.toUiError("GET /projects/{id}/retention")) }
+            _state.update { if (stillCurrent(it)) it.withSectionError(section, e.toUiError(endpoint)) else it }
+        } finally {
+            if (analyticsRequests.value[section] === request) {
+                _state.update { it.copy(loadingSections = it.loadingSections - section) }
+            }
         }
     }
 
@@ -923,7 +956,7 @@ class DashboardViewModel(
 
     /** Opens the Ask drawer, optionally pre-filling a drill-down or result-specific question. */
     fun openAskDrawer(prefill: String? = null) {
-        _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Open(prefill))) }
+        _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Open(prefill)), drillDown = null) }
     }
 
     /** Closes the Ask drawer without discarding its conversation. */
@@ -944,18 +977,20 @@ class DashboardViewModel(
         val pending = reduceAskDrawer(current.askDrawer, AskDrawerEvent.Submit(q))
         if (pending === current.askDrawer || pending.messages == current.askDrawer.messages) return
         _state.update { it.copy(askDrawer = pending) }
+        val snapshot = _state.value
+        val request = Any()
+        askRequest.value = request
         scope.launch {
-            val snapshot = _state.value
             val projectId = snapshot.currentProjectId
             if (projectId == null) {
-                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("Select a project before asking."))) }
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_project))) }
                 return@launch
             }
             try {
                 val answer = api.ask(projectId, pending.retryQuestion.orEmpty(), snapshot.range)
-                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) else it }
             } catch (_: Throwable) {
-                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("The answer couldn't be loaded. Try again."))) }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
             }
         }
     }
@@ -966,17 +1001,19 @@ class DashboardViewModel(
         val question = state.retryQuestion ?: return
         if (state.loading) return
         _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Retry)) }
+        val snapshot = _state.value
+        val request = Any()
+        askRequest.value = request
         scope.launch {
-            val snapshot = _state.value
             val projectId = snapshot.currentProjectId ?: run {
-                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("Select a project before asking."))) }
+                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_project))) }
                 return@launch
             }
             try {
                 val answer = api.ask(projectId, question, snapshot.range)
-                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) else it }
             } catch (_: Throwable) {
-                _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("The answer couldn't be loaded. Try again."))) }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
             }
         }
     }

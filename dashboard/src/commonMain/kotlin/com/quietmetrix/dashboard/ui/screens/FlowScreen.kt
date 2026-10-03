@@ -26,6 +26,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.SectionLoading
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,7 @@ import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.card_countries
 import com.quietmetrix.dashboard.resources.card_device_classes
@@ -84,7 +89,6 @@ import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import com.quietmetrix.dashboard.ui.components.EmptyState
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
@@ -95,9 +99,9 @@ import com.quietmetrix.dashboard.ui.components.table.Column
 import com.quietmetrix.dashboard.ui.components.table.DataTable
 import com.quietmetrix.dashboard.ui.components.table.SortColumn
 import com.quietmetrix.dashboard.ui.components.table.screenLabel
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import com.quietmetrix.dashboard.viewmodel.DataSection
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import com.quietmetrix.dashboard.nav.NavDestination as AppTab
@@ -166,9 +170,14 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
                 path = flowPath,
                 transitions = transitions,
                 onPick = { option -> extendFlowPath(flowPath, option)?.let { flowPath = it } },
+                onInspect = { screen -> viewModel.openDrillDown("flow", screen) },
+                previousTransitions = state.comparison.transitions?.transitions.orEmpty(),
+                compare = state.compare,
             )
 
-            if (transitions.isEmpty()) {
+            if (state.isLoading(DataSection.Transitions) && transitions.isEmpty()) {
+                SectionLoading()
+            } else if (transitions.isEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     EmptyState(Res.drawable.ic_flow, Res.string.state_no_transitions, Modifier.padding(16.dp))
                 }
@@ -181,7 +190,7 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
                                 Column(
                                     title = stringResource(Res.string.col_from),
                                     weight = 1f,
-                                    cell = { t: Transition -> Text(screenLabel(t.fromScreen, transitionNone), style = MaterialTheme.typography.bodyMedium) },
+                                    cell = { t: Transition -> Text(screenLabel(t.fromScreen, transitionNone), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable { viewModel.openDrillDown("flow", t.fromScreen.orEmpty()) }.handCursor()) },
                                     sortSelector = { it.fromScreen },
                                 ),
                                 Column(
@@ -213,6 +222,9 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
                 }
             }
 
+            if (transitions.isEmpty() && !state.isLoading(DataSection.Transitions) && state.sectionErrors[DataSection.Transitions] == null) SetupInstructionsSection()
+            state.sectionErrors[DataSection.Search]?.let { InlineErrorNotice(it, onRetry = { viewModel.refresh() }) }
+            state.sectionErrors[DataSection.Friction]?.let { InlineErrorNotice(it, onRetry = { viewModel.refresh() }) }
             val searchScreens = state.search?.screens ?: emptyList()
             if (searchScreens.isNotEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -314,7 +326,10 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
 
             FlowBreakdownCardsSection(
                 agg = state.aggregates,
-                loading = state.loading,
+                previous = state.comparison.aggregates,
+                compare = state.compare,
+                onInspect = viewModel::openDrillDown,
+                loading = state.isLoading(DataSection.Aggregates),
                 sizeClass = sizeClass,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -348,6 +363,9 @@ internal fun FlowBreakdownCardsSection(
     loading: Boolean,
     sizeClass: WindowSizeClass,
     modifier: Modifier = Modifier,
+    previous: AggregatesResponse? = null,
+    compare: Boolean = false,
+    onInspect: (String, String) -> Unit = { _, _ -> },
 ) {
     ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
         if (loading) {
@@ -355,9 +373,9 @@ internal fun FlowBreakdownCardsSection(
             FlowCardSkeleton(Modifier.fillSlot())
             FlowCardSkeleton(Modifier.fillSlot())
         } else {
-            FlowCountriesCard(agg, Modifier.fillSlot())
-            FlowPlatformsCard(agg, Modifier.fillSlot())
-            FlowDeviceTypesCard(agg, Modifier.fillSlot())
+            FlowCountriesCard(agg, Modifier.fillSlot(), previous, compare, onInspect)
+            FlowPlatformsCard(agg, Modifier.fillSlot(), previous, compare, onInspect)
+            FlowDeviceTypesCard(agg, Modifier.fillSlot(), previous, compare, onInspect)
         }
     }
 }
@@ -366,7 +384,7 @@ internal fun FlowBreakdownCardsSection(
  *  (same [computeBreakdownRows] data), reused here rather than re-invented — see this file's
  *  section KDoc for why this is empty in every real deployment today. */
 @Composable
-private fun FlowCountriesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier) {
+private fun FlowCountriesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier, previous: AggregatesResponse? = null, compare: Boolean = false, onInspect: (String, String) -> Unit = { _, _ -> }) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -374,12 +392,13 @@ private fun FlowCountriesCard(agg: AggregatesResponse?, modifier: Modifier = Mod
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (compare) ComparisonNote(previous?.countries?.takeIf { it.isNotEmpty() }?.sumOf { it.count }?.let(::formatCount))
             Spacer(Modifier.height(8.dp))
             val rows = computeBreakdownRows(agg?.countries.orEmpty())
             if (rows.isEmpty()) {
                 EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
             } else {
-                rows.forEach { FlowBarListRow(it) }
+                rows.forEach { FlowBarListRow(it) { onInspect("country", it.name) } }
             }
         }
     }
@@ -388,8 +407,8 @@ private fun FlowCountriesCard(agg: AggregatesResponse?, modifier: Modifier = Mod
 /** One row of the Countries bar list: name + share-of-total percent on one line, a lime
  *  [FlowBar] sized to [BreakdownRow.barFraction] below it. */
 @Composable
-private fun FlowBarListRow(row: BreakdownRow) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+private fun FlowBarListRow(row: BreakdownRow, onClick: () -> Unit = {}) {
+    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).handCursor().padding(vertical = 6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(row.name, style = MaterialTheme.typography.bodyMedium)
             Text(
@@ -408,7 +427,7 @@ private fun FlowBarListRow(row: BreakdownRow) {
  *  the counter pipeline — see `FlowPathLogic.kt`'s Task 23 section KDoc. This is the one card of
  *  the 3 with real content in every real deployment today (platform is a tracked dimension). */
 @Composable
-private fun FlowPlatformsCard(agg: AggregatesResponse?, modifier: Modifier = Modifier) {
+private fun FlowPlatformsCard(agg: AggregatesResponse?, modifier: Modifier = Modifier, previous: AggregatesResponse? = null, compare: Boolean = false, onInspect: (String, String) -> Unit = { _, _ -> }) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -416,13 +435,14 @@ private fun FlowPlatformsCard(agg: AggregatesResponse?, modifier: Modifier = Mod
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (compare) ComparisonNote(previous?.platforms?.takeIf { it.isNotEmpty() }?.sumOf { it.count }?.let(::formatCount))
             Spacer(Modifier.height(8.dp))
             val tiles = computePlatformStatTiles(agg?.platforms.orEmpty())
             if (tiles.isEmpty()) {
                 EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    tiles.forEach { tile -> FlowPlatformStatTile(tile, Modifier.weight(1f)) }
+                    tiles.forEach { tile -> FlowPlatformStatTile(tile, Modifier.weight(1f)) { onInspect("platform", tile.name) } }
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -439,10 +459,10 @@ private fun FlowPlatformsCard(agg: AggregatesResponse?, modifier: Modifier = Mod
  *  the platform name, its real count, and its share-of-total percent — a visually distinct unit
  *  from the Countries/Device types bar rows, per the design handoff's 3 different treatments. */
 @Composable
-private fun FlowPlatformStatTile(row: BreakdownRow, modifier: Modifier = Modifier) {
+private fun FlowPlatformStatTile(row: BreakdownRow, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     val extended = LocalExtendedColors.current
     Column(
-        modifier = modifier.background(extended.chipFill, QmShapeTokens.chip).padding(12.dp),
+        modifier = modifier.background(extended.chipFill, QmShapeTokens.chip).clickable(onClick = onClick).handCursor().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
@@ -467,7 +487,7 @@ private fun FlowPlatformStatTile(row: BreakdownRow, modifier: Modifier = Modifie
  *  cards read as 3 distinct treatments rather than 3 copies of the same component. Empty in every
  *  real deployment today — see this file's section KDoc. */
 @Composable
-private fun FlowDeviceTypesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier) {
+private fun FlowDeviceTypesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier, previous: AggregatesResponse? = null, compare: Boolean = false, onInspect: (String, String) -> Unit = { _, _ -> }) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -475,12 +495,13 @@ private fun FlowDeviceTypesCard(agg: AggregatesResponse?, modifier: Modifier = M
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (compare) ComparisonNote(previous?.deviceClasses?.takeIf { it.isNotEmpty() }?.sumOf { it.count }?.let(::formatCount))
             Spacer(Modifier.height(8.dp))
             val rows = computeBreakdownRows(agg?.deviceClasses.orEmpty())
             if (rows.isEmpty()) {
                 EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
             } else {
-                rows.forEach { FlowDeviceTypeRow(it) }
+                rows.forEach { FlowDeviceTypeRow(it) { onInspect("device", it.name) } }
             }
         }
     }
@@ -490,9 +511,9 @@ private fun FlowDeviceTypesCard(agg: AggregatesResponse?, modifier: Modifier = M
  *  then the percent — see [FlowDeviceTypesCard]'s KDoc for why this is a single-line layout
  *  distinct from [FlowBarListRow]'s stacked one. */
 @Composable
-private fun FlowDeviceTypeRow(row: BreakdownRow) {
+private fun FlowDeviceTypeRow(row: BreakdownRow, onClick: () -> Unit = {}) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).handCursor().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -659,6 +680,9 @@ internal fun FlowBreadcrumbSection(
     transitions: List<Transition>,
     onPick: (FlowStepOption) -> Unit,
     modifier: Modifier = Modifier,
+    onInspect: (String) -> Unit = {},
+    previousTransitions: List<Transition> = emptyList(),
+    compare: Boolean = false,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -681,7 +705,7 @@ internal fun FlowBreadcrumbSection(
                     )
                     val arrow = stringResource(Res.string.flow_path_arrow)
                     path.forEachIndexed { index, screen ->
-                        Pill(text = screen, variant = PillVariant.Neutral)
+                        Pill(text = screen, variant = PillVariant.Neutral, modifier = Modifier.clickable { onInspect(screen) }.handCursor())
                         if (index < path.lastIndex) {
                             Text(arrow, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -698,6 +722,8 @@ internal fun FlowBreadcrumbSection(
                             column = column,
                             selectedNext = path.getOrNull(index + 1),
                             onPick = onPick,
+                            previousTransitions = previousTransitions,
+                            compare = compare,
                         )
                     }
                 }
@@ -720,6 +746,8 @@ private fun FlowBreadcrumbColumnView(
     selectedNext: String?,
     onPick: (FlowStepOption) -> Unit,
     modifier: Modifier = Modifier,
+    previousTransitions: List<Transition> = emptyList(),
+    compare: Boolean = false,
 ) {
     Column(modifier = modifier.width(220.dp)) {
         val totalSeen = column.options.sumOf { it.count }
@@ -736,6 +764,9 @@ private fun FlowBreadcrumbColumnView(
                     selected = option.screen != null && option.screen == selectedNext,
                     onClick = { onPick(option) },
                 )
+                if (compare) ComparisonNote(previousTransitions.firstOrNull {
+                    it.fromScreen == column.screen && it.toScreen == option.screen
+                }?.count?.let(::formatCount))
             }
         }
     }

@@ -39,6 +39,7 @@ require_once __DIR__ . '/src/activationCounterAnalyze.php';
 require_once __DIR__ . '/src/searchCounterAnalyze.php';
 require_once __DIR__ . '/src/frictionCounterAnalyze.php';
 require_once __DIR__ . '/src/askAnalyticsAnalyze.php';
+require_once __DIR__ . '/src/analyticsWindow.php';
 require_once __DIR__ . '/src/bootstrap.php';
 
 // ---------------------------------------------------------------------------

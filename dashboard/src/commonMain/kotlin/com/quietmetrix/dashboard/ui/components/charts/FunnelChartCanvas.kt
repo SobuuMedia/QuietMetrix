@@ -1,6 +1,10 @@
 package com.quietmetrix.dashboard.ui.components.charts
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
@@ -35,9 +39,12 @@ fun FunnelChartCanvas(
     modifier: Modifier = Modifier,
     barColor: Color = MaterialTheme.colorScheme.primary,
     rowHeight: androidx.compose.ui.unit.Dp = 64.dp,
+    previousCounts: List<Int> = emptyList(),
+    onStepClick: ((Int) -> Unit)? = null,
 ) {
     if (steps.isEmpty() || steps.all { it.count == 0 }) return
     val textMeasurer = rememberTextMeasurer()
+    val previousColor = LocalExtendedColors.current.lavender
     val dropoffColor = LocalExtendedColors.current.chartDropoff
     // Labels live INSIDE the bar (contrasting color) when the bar is wide enough to hold
     // them, and just after the bar's edge (muted color) otherwise — see drawStepLabels. A
@@ -49,7 +56,14 @@ fun FunnelChartCanvas(
 
     val chartHeight = rowHeight * steps.size
 
-    Canvas(modifier.fillMaxWidth().height(chartHeight)) {
+    val interactive = if (onStepClick == null) modifier else modifier.pointerInput(steps, onStepClick) {
+        detectTapGestures { position ->
+            val bars = funnelBars(steps.map { it.count }, 8.dp.toPx(), 4.dp.toPx(), size.width - 16.dp.toPx(), size.height - 8.dp.toPx())
+            val index = bars.indexOfFirst { position.x >= it.x && position.x <= it.x + it.width && position.y >= it.y && position.y <= it.y + it.height }
+            if (index >= 0) onStepClick(index)
+        }
+    }
+    Canvas(interactive.fillMaxWidth().height(chartHeight)) {
         val leftPad = 8.dp.toPx()
         val rightPad = 8.dp.toPx()
         val topPad = 4.dp.toPx()
@@ -67,6 +81,7 @@ fun FunnelChartCanvas(
             areaWidth = areaW,
             areaHeight = areaH,
         )
+        val priorBars = if (previousCounts.size == steps.size) funnelBars(previousCounts, areaX, areaY, areaW, areaH) else emptyList()
         val corner = CornerRadius(4.dp.toPx(), 4.dp.toPx())
 
         bars.forEachIndexed { i, bar ->
@@ -79,6 +94,10 @@ fun FunnelChartCanvas(
                 size = Size(bar.width, bar.height),
                 cornerRadius = corner,
             )
+            priorBars.getOrNull(i)?.let { prior ->
+                drawRoundRect(previousColor, topLeft = Offset(prior.x, prior.y), size = Size(prior.width, prior.height), cornerRadius = corner,
+                    style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 3.dp.toPx()))))
+            }
             drawStepLabels(textMeasurer, onBarStyle, offBarStyle, steps[i], bar, areaX, areaW)
         }
     }

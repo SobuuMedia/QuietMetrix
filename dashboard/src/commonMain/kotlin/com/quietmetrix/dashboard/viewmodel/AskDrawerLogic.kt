@@ -1,10 +1,12 @@
 package com.quietmetrix.dashboard.viewmodel
 
+import org.jetbrains.compose.resources.StringResource
+
 /** Chat bubble kind for the Ask drawer. */
 enum class AskMessageRole { User, Answer, Error }
 
 /** One question or computed server response shown by the Ask drawer. */
-data class AskMessage(val role: AskMessageRole, val text: String, val source: String? = null)
+data class AskMessage(val role: AskMessageRole, val text: String, val source: String? = null, val errorRes: StringResource? = null)
 
 /** Reducer-owned Ask drawer state, including the currently pending retry question. */
 data class AskDrawerState(
@@ -22,7 +24,7 @@ internal sealed interface AskDrawerEvent {
     data class Edit(val text: String) : AskDrawerEvent
     data class Submit(val question: String) : AskDrawerEvent
     data class Answer(val text: String, val source: String) : AskDrawerEvent
-    data class Fail(val message: String) : AskDrawerEvent
+    data class Fail(val message: String, val errorRes: StringResource? = null) : AskDrawerEvent
     data object Retry : AskDrawerEvent
 }
 
@@ -38,7 +40,7 @@ internal fun reduceAskDrawer(state: AskDrawerState, event: AskDrawerEvent): AskD
     is AskDrawerEvent.Answer -> state.copy(loading = false, retryQuestion = null,
         messages = state.messages + AskMessage(AskMessageRole.Answer, event.text, event.source))
     is AskDrawerEvent.Fail -> state.copy(loading = false,
-        messages = state.messages + AskMessage(AskMessageRole.Error, event.message))
+        messages = state.messages + AskMessage(AskMessageRole.Error, event.message, errorRes = event.errorRes))
     AskDrawerEvent.Retry -> state.retryQuestion?.let { question ->
         state.copy(loading = true, messages = state.messages.filterNot { it.role == AskMessageRole.Error })
     } ?: state

@@ -448,7 +448,7 @@
     <string name="overview_hero_trend_down">trending down this period</string>
     <string name="overview_hero_tail_standout">Most of that was %1$s.</string>
     <string name="overview_hero_tail_generic">Keep an eye on what's trending next.</string>
-    <string name="overview_hero_ai_chip">✨ Written by AI from your numbers</string>
+    <string name="overview_hero_ai_chip">✨ From your recorded numbers</string>
     <string name="overview_hero_tell_me_more">Tell me more</string>
     <string name="overview_hero_copy">⧉ Copy</string>
     <string name="overview_hero_loading">🧮 Counting your people…</string>
@@ -457,8 +457,8 @@
     <string name="overview_empty_headline_highlight">first event</string>
     <string name="overview_empty_headline_tail">in about 5 minutes.</string>
     <string name="overview_error_headline">Here are your numbers for %1$s.</string>
-    <string name="overview_error_ai_nap_title">The AI summary is taking a nap</string>
-    <string name="overview_error_ai_nap_body">We couldn't write this week's summary because the AI model didn't answer. Your numbers below aren't affected.</string>
+    <string name="overview_error_ai_nap_title">The summary could not be updated</string>
+    <string name="overview_error_ai_nap_body">Current analytics could not be loaded. Previously loaded values may be out of date. Try again.</string>
     <string name="overview_privacy_title">Privacy check: all clear</string>
     <string name="overview_privacy_body">0 personal data stored. No cookies, no ad IDs, no fingerprinting. Your users stay anonymous.</string>
     <string name="overview_privacy_gdpr_chip">GDPR ✓</string>
@@ -487,7 +487,7 @@
     <string name="overview_vital_retention_caption">Share of new users still active the next day.</string>
     <string name="overview_vital_retention_not_tracked">Not tracked yet — visit Retention for cohort details.</string>
     <string name="overview_vital_errors_caption">Includes crashes, errors, and exceptions.</string>
-    <string name="overview_vital_filter_chip">Showing only %1$s ✕</string>
+    <string name="overview_vital_filter_chip">Selected segment: %1$s ✕</string>
 
     <!-- Task 20: Overview daily-volume chart card. The design handoff's segmented control is
          "People/Visits/Actions" and its title text implies "who showed up" (a distinct-people
@@ -659,4 +659,46 @@
     <string name="experiment_winner_medal">🏆</string>
     <string name="experiment_meter_min">0</string>
     <string name="experiment_meter_max">95 │ 100</string>
+    <string name="comparison_was">Was %1$s (previous period)</string>
+    <string name="comparison_unavailable">Previous period unavailable</string>
+    <string name="comparison_scope">UTC daily totals · today is still accumulating. Retention uses cohorts started in each period.</string>
+    <string name="comparison_current">Current period</string>
+    <string name="comparison_previous">Previous period</string>
+    <string name="drill_scope">%1$s · %2$s</string>
+    <string name="drill_ask">Ask about this</string>
+    <string name="drill_question">Explain %1$s for the selected project and date range.</string>
+    <string name="drill_copy">Copy numbers</string>
+    <string name="drill_copied">Numbers copied</string>
+    <string name="drill_unavailable">No matching visible value is available for this selection.</string>
+    <string name="drill_sessions_detail">Sessions recorded in this window. These are visits, not distinct people.</string>
+    <string name="drill_duration_detail">Average session length estimated from the reported duration buckets.</string>
+    <string name="drill_errors_detail">Combined events named error, crash or exception in this window.</string>
+    <string name="drill_retention_detail">Newest cohort with a visible value for this return age. Missing or privacy-suppressed values remain unavailable.</string>
+    <string name="drill_cohort_detail">Return rates and visible cohort size, as observed through the end of the selected period.</string>
+    <string name="drill_flow_detail">Recorded outgoing transitions from this screen. This describes aggregate edges, not individual journeys.</string>
+    <string name="drill_screen_detail">Recorded arrivals at this screen inferred from screen transitions.</string>
+    <string name="drill_breakdown_detail">Visible event counts for this segment in the selected period.</string>
+    <string name="drill_day_detail">Reported UTC day total for the selected metric. An absent bucket is unavailable, not a confirmed zero.</string>
+    <string name="drill_funnel_detail">SDK-evaluated funnel counts for the selected definition and period.</string>
+    <string name="drill_breakdown">Breakdown</string>
+    <string name="drill_daily">Daily volume</string>
+    <string name="drill_raw">Raw statistics</string>
+    <string name="drill_cohort">Cohort %1$s</string>
+    <string name="drill_delta">%1$s → %2$s</string>
+    <string name="analytics_loading">Counting the selected data…</string>
+    <string name="flow_details">Screen details</string>
+    <string name="cohort_reported_toggle">By cohort</string>
+    <string name="cohort_reported_note">SDK cohorts are seven-day bins starting on January 1. Only cohorts started in the selected dates are shown.</string>
+    <string name="ask_error_project">Select a project before asking.</string>
+    <string name="ask_error_fetch">The answer could not be loaded. Try again.</string>
+    <string name="ask_overview_question">How many sessions were recorded?</string>
+    <string name="ask_retention_question">What is Day 1 retention?</string>
+    <string name="ask_funnel_question">Why did people leave at %1$s?</string>
+    <string name="analytics_period_label">Current UTC dates: %1$s through %2$s · Previous: %3$s through %4$s</string>
+    <string name="overview_chart_title_weekly">Who showed up each week</string>
+    <string name="drill_raw_values">Metric: %1$s\nKey: %2$s\nValue: %3$s</string>
+    <string name="team_invite_hint">Invite someone to share access to your projects.</string>
+    <string name="drill_week_detail">Sum of visible daily counts in this seven-day block. Missing or privacy-suppressed days are not inferred as zero.</string>
+    <string name="analytics_daily_scope">Counters have UTC daily resolution. The 1h and 1d selections show today; today is still accumulating.</string>
+    <string name="ask_retention_why_question">Why did retention change between the latest cohorts?</string>
 </resources>

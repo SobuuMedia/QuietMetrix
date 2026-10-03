@@ -39,7 +39,6 @@ import io.ktor.server.routing.Routing
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.inject
-import java.time.Duration
 import java.time.Instant
 
 /**
@@ -49,6 +48,8 @@ import java.time.Instant
  * these handlers ever run, so each resolves its principal via [resolveApiPrincipal] instead.
  */
 fun Routing.configureDashboardRoutes() {
+    val projectRepo by inject<com.quietmetrix.server.persistence.ProjectRepository>()
+    val memberRepo by inject<com.quietmetrix.server.persistence.ProjectMemberRepository>()
     val counterRepo by inject<CounterRepository>()
     val rateLimiter by inject<RateLimiter>()
     val accessTokenRepo by inject<AccessTokenRepository>()
@@ -77,6 +78,15 @@ fun Routing.configureDashboardRoutes() {
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
                 return@get
             }
+            val project = projectRepo.findById(id) ?: run {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                return@get
+            }
+            val owner = (project["ownerUserId"] as? Number)?.toLong() == principal.userId
+            if (!principal.isAdmin() && !owner && memberRepo.findMembership(id, principal.userId) == null) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You cannot access this project"))
+                return@get
+            }
             val userId = principal.userId.toString()
             if (!rateLimiter.tryConsume("dashboard:$userId")) {
                 call.response.header("Retry-After", "60")
@@ -88,19 +98,28 @@ fun Routing.configureDashboardRoutes() {
             // (1h|1d|7d|30d|90d, default 7d) like every other analytics endpoint — the
             // dashboard client only ever sends `range`, so `from`/`to` alone must not be
             // required. Explicit `from`/`to` still wins when both are given.
-            val toParam = call.parameters["to"]
-            val fromParam = call.parameters["from"]
-            val toInstant = toParam?.let { Instant.parse(it) } ?: Instant.now()
-            val fromInstant = fromParam?.let { Instant.parse(it) } ?: toInstant.minusSeconds(parseRangeSeconds(call.parameters["range"]))
-
-            val rangeDays = Duration.between(fromInstant, toInstant).toDays()
-            if (rangeDays > 90) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Aggregate date range cannot exceed 90 days"))
-                return@get
+            val window = if (call.parameters["from"] == null && call.parameters["to"] == null) {
+                call.requestAnalyticsWindow(parseRangeSeconds(call.parameters["range"])) ?: return@get
+            } else {
+                val explicit = runCatching {
+                    require(call.parameters["period"] == null && call.parameters["anchor"] == null) { "Explicit dates cannot be combined with period/anchor" }
+                    val to = call.parameters["to"]?.let { Instant.parse(it) } ?: Instant.now()
+                    val from = call.parameters["from"]?.let { Instant.parse(it) } ?: to.minusSeconds(parseRangeSeconds(call.parameters["range"]))
+                    require(from <= to) { "from must precede to" }
+                    val first = from.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    val last = to.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    val days = java.time.temporal.ChronoUnit.DAYS.between(first, last) + 1
+                    require(days in 1..90) { "Aggregate date range cannot exceed 90 UTC dates" }
+                    AnalyticsWindow(first, last, days)
+                }.getOrElse {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid aggregate dates"))
+                    return@get
+                }
+                explicit
             }
-
-            val fromDay = fromInstant.atZone(java.time.ZoneOffset.UTC).toLocalDate()
-            val toDay = toInstant.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val rangeDays = window.days
+            val fromDay = window.fromDay
+            val toDay = window.toDay
 
             // "Ship what maps cleanly": top_events, screen_durations (bucket-approximated),
             // platforms, and daily totals all read from counters. top_screens is approximated
@@ -175,6 +194,15 @@ fun Routing.configureDashboardRoutes() {
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
                 return@get
             }
+            val project = projectRepo.findById(id) ?: run {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                return@get
+            }
+            val owner = (project["ownerUserId"] as? Number)?.toLong() == principal.userId
+            if (!principal.isAdmin() && !owner && memberRepo.findMembership(id, principal.userId) == null) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You cannot access this project"))
+                return@get
+            }
             val userId = principal.userId.toString()
             if (!rateLimiter.tryConsume("dashboard:$userId")) {
                 call.response.header("Retry-After", "60")
@@ -183,9 +211,9 @@ fun Routing.configureDashboardRoutes() {
             }
 
             val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
-            val now = Instant.now()
-            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-            val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val window = call.requestAnalyticsWindow(windowSeconds) ?: return@get
+            val fromDay = window.fromDay
+            val toDay = window.toDay
 
             val transitions = counterRepo.readCells(id, "screen_transition", fromDay, toDay)
                 .mapNotNull { cell ->
@@ -222,6 +250,15 @@ fun Routing.configureDashboardRoutes() {
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
                 return@get
             }
+            val project = projectRepo.findById(id) ?: run {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                return@get
+            }
+            val owner = (project["ownerUserId"] as? Number)?.toLong() == principal.userId
+            if (!principal.isAdmin() && !owner && memberRepo.findMembership(id, principal.userId) == null) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You cannot access this project"))
+                return@get
+            }
             val userId = principal.userId.toString()
             if (!rateLimiter.tryConsume("dashboard:$userId")) {
                 call.response.header("Retry-After", "60")
@@ -230,9 +267,9 @@ fun Routing.configureDashboardRoutes() {
             }
 
             val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
-            val now = Instant.now()
-            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-            val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val window = call.requestAnalyticsWindow(windowSeconds) ?: return@get
+            val fromDay = window.fromDay
+            val toDay = window.toDay
 
             val searchCells = counterRepo.readCells(id, "search", fromDay, toDay)
             val zeroResultCells = counterRepo.readCells(id, "search_zero_result", fromDay, toDay)
@@ -265,6 +302,15 @@ fun Routing.configureDashboardRoutes() {
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
                 return@get
             }
+            val project = projectRepo.findById(id) ?: run {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                return@get
+            }
+            val owner = (project["ownerUserId"] as? Number)?.toLong() == principal.userId
+            if (!principal.isAdmin() && !owner && memberRepo.findMembership(id, principal.userId) == null) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You cannot access this project"))
+                return@get
+            }
             val userId = principal.userId.toString()
             if (!rateLimiter.tryConsume("dashboard:$userId")) {
                 call.response.header("Retry-After", "60")
@@ -273,9 +319,9 @@ fun Routing.configureDashboardRoutes() {
             }
 
             val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
-            val now = Instant.now()
-            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-            val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val window = call.requestAnalyticsWindow(windowSeconds) ?: return@get
+            val fromDay = window.fromDay
+            val toDay = window.toDay
 
             val frictionCells = counterRepo.readCells(id, "friction", fromDay, toDay)
             val screens = FrictionCounterAnalyzer.analyze(frictionCells)
@@ -307,6 +353,15 @@ fun Routing.configureDashboardRoutes() {
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
                 return@get
             }
+            val project = projectRepo.findById(id) ?: run {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                return@get
+            }
+            val owner = (project["ownerUserId"] as? Number)?.toLong() == principal.userId
+            if (!principal.isAdmin() && !owner && memberRepo.findMembership(id, principal.userId) == null) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You cannot access this project"))
+                return@get
+            }
             val userId = principal.userId.toString()
             if (!rateLimiter.tryConsume("dashboard:$userId")) {
                 call.response.header("Retry-After", "60")
@@ -315,9 +370,9 @@ fun Routing.configureDashboardRoutes() {
             }
 
             val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
-            val now = Instant.now()
-            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-            val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val window = call.requestAnalyticsWindow(windowSeconds) ?: return@get
+            val fromDay = window.fromDay
+            val toDay = window.toDay
 
             // `session{bucket}` cells (see the SDK's SessionTracker) carry no per-session
             // duration, so avgDurationSec is a bucket-midpoint approximation — see
@@ -359,6 +414,15 @@ fun Routing.configureDashboardRoutes() {
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "This token cannot read analytics"))
                 return@get
             }
+            val project = projectRepo.findById(id) ?: run {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Project not found"))
+                return@get
+            }
+            val owner = (project["ownerUserId"] as? Number)?.toLong() == principal.userId
+            if (!principal.isAdmin() && !owner && memberRepo.findMembership(id, principal.userId) == null) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "You cannot access this project"))
+                return@get
+            }
             val userId = principal.userId.toString()
             if (!rateLimiter.tryConsume("dashboard:$userId")) {
                 call.response.header("Retry-After", "60")
@@ -367,13 +431,15 @@ fun Routing.configureDashboardRoutes() {
             }
 
             val windowSeconds = parseRangeWindowSeconds(call.parameters["range"], call.parameters["days"])
-            val now = Instant.now()
-            val fromDay = now.minusSeconds(windowSeconds).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-            val toDay = now.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            val window = call.requestAnalyticsWindow(windowSeconds) ?: return@get
+            val fromDay = window.fromDay
+            val toDay = window.toDay
 
             val cells = counterRepo.readCells(id, "retention", fromDay, toDay)
                 .mapNotNull { cell ->
                     val cohort = cell.dims["cohort"] ?: return@mapNotNull null
+                    val started = reportedCohortStart(cohort) ?: return@mapNotNull null
+                    if (started < fromDay || started > toDay) return@mapNotNull null
                     val day = cell.dims["day"]?.toIntOrNull() ?: return@mapNotNull null
                     RetentionCounterCell(cohort, day, cell.n)
                 }

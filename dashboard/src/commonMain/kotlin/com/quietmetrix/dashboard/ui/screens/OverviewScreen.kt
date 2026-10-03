@@ -23,6 +23,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +56,7 @@ import com.quietmetrix.dashboard.format.formatDuration
 import com.quietmetrix.dashboard.format.formatMinorUnits
 import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_dismiss
 import com.quietmetrix.dashboard.resources.card_top_events
@@ -107,7 +111,6 @@ import com.quietmetrix.dashboard.resources.overview_chart_metric_actions
 import com.quietmetrix.dashboard.resources.overview_chart_metric_visits
 import com.quietmetrix.dashboard.resources.overview_chart_record_day
 import com.quietmetrix.dashboard.resources.overview_chart_title_daily
-import com.quietmetrix.dashboard.resources.overview_chart_title_hourly
 import com.quietmetrix.dashboard.resources.overview_error_headline
 import com.quietmetrix.dashboard.resources.overview_hero_ai_chip
 import com.quietmetrix.dashboard.resources.overview_hero_copy
@@ -145,7 +148,6 @@ import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import com.quietmetrix.dashboard.ui.components.ContentState
 import com.quietmetrix.dashboard.ui.components.EmptyState
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.LayoutFlow
@@ -159,9 +161,11 @@ import com.quietmetrix.dashboard.ui.components.charts.BarData
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.layoutFlowFor
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
+import com.quietmetrix.dashboard.ui.components.comparisonNoteText
+import com.quietmetrix.dashboard.viewmodel.ComparisonData
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import com.quietmetrix.dashboard.viewmodel.DataSection
 import com.quietmetrix.dashboard.viewmodel.serverUnreachableError
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -214,7 +218,8 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
 
             val agg = state.aggregates
             val sess = state.sessions
-            val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }
+            val overviewQuestion = stringResource(Res.string.ask_overview_question)
+    val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }
                 ?.name?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.value_none)
 
             // Hero + privacy card: a flexible hero column next to a fixed-width privacy card on
@@ -228,9 +233,9 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         range = state.range,
                         agg = agg,
                         sess = sess,
-                        loading = state.loading,
+                        loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                         serverUnreachable = state.serverUnreachableError != null,
-                        onTellMeMore = { viewModel.openAskDrawer("Explain the overview for this project.") },
+                        onTellMeMore = { viewModel.openAskDrawer(overviewQuestion) },
                         modifier = Modifier.weight(1f),
                     )
                     PrivacyCard(modifier = Modifier.width(320.dp))
@@ -242,9 +247,9 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         range = state.range,
                         agg = agg,
                         sess = sess,
-                        loading = state.loading,
+                        loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                         serverUnreachable = state.serverUnreachableError != null,
-                        onTellMeMore = { viewModel.openAskDrawer("Explain the overview for this project.") },
+                        onTellMeMore = { viewModel.openAskDrawer(overviewQuestion) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     PrivacyCard(modifier = Modifier.fillMaxWidth())
@@ -257,16 +262,24 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
             // Offline-captured are no longer shown as standalone vitals cards per the new
             // design (they aren't among its 4 vitals); events remain visible via the daily
             // volume chart below.
+            val resolvedEmpty = (agg != null || sess != null) && isOverviewEmpty(agg, sess) &&
+                !state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention) &&
+                state.sectionErrors.keys.none { it in setOf(DataSection.Aggregates, DataSection.Sessions) }
+            if (resolvedEmpty) {
+                SetupInstructionsSection(Modifier.fillMaxWidth())
+            } else {
             var activeVitalsFilter by remember { mutableStateOf<String?>(null) }
             VitalsSection(
                 agg = agg,
                 sess = sess,
                 retention = state.retention,
-                loading = state.loading,
+                loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                 sizeClass = sizeClass,
                 activeFilter = activeVitalsFilter,
                 onClearFilter = { activeVitalsFilter = null },
                 onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) },
+                compare = state.compare,
+                previous = state.comparison,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -280,6 +293,11 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 agg = agg,
                 sess = sess,
                 range = state.range,
+                compare = state.compare,
+                previous = state.comparison,
+                anchor = state.analyticsAnchor,
+                onDayClick = { kind, date -> viewModel.openDrillDown(kind, date) },
+                loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -293,10 +311,12 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         )
                         Spacer(Modifier.height(8.dp))
                         val top = agg?.topEvents ?: emptyList()
-                        if (top.isEmpty()) {
+                        if (state.isLoading(DataSection.Aggregates) && agg == null) {
+                            SkeletonBox(Modifier.fillMaxWidth().height(80.dp))
+                        } else if (top.isEmpty()) {
                             EmptyState(Res.drawable.ic_events, Res.string.state_no_data)
                         } else {
-                            top.forEach { TopEventRow(it) }
+                            top.forEach { TopEventRow(it, state.compare, state.comparison.aggregates?.topEvents?.firstOrNull { prior -> prior.eventName == it.eventName }?.count) }
                         }
                     }
                 }
@@ -309,31 +329,29 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         )
                         Spacer(Modifier.height(8.dp))
                         val topValues = agg?.topValues ?: emptyList()
-                        if (topValues.isEmpty()) {
+                        if (state.isLoading(DataSection.Aggregates) && agg == null) {
+                            SkeletonBox(Modifier.fillMaxWidth().height(80.dp))
+                        } else if (topValues.isEmpty()) {
                             EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
                         } else {
-                            topValues.forEach { TopValueRow(it) }
+                            topValues.forEach { TopValueRow(it, state.compare, state.comparison.aggregates?.topValues?.firstOrNull { prior -> prior.name == it.name }?.totalMinorUnits) }
                         }
                     }
                 }
             }
 
-            // Task 21: whole-screen Empty state (OverviewTopListsLogic.kt's isOverviewEmpty)
-            // swaps the 3-card row/"Worth a look"/key card region for numbered setup
-            // instructions (design_handoff_dashboard_redesign/README.md > Interactions &
-            // Behavior > "Empty state") — see SetupInstructionsSection's KDoc. The vitals grid
-            // and daily-volume chart above keep their own Task 19/20 all-zero/EmptyState
-            // treatments; only this region (never built until now) gets the setup-instructions
-            // swap, matching OverviewHeroEmpty's own note that this content was deferred here.
-            if (isOverviewEmpty(agg, sess) && !state.loading) {
-                SetupInstructionsSection(modifier = Modifier.fillMaxWidth())
-            } else {
                 ScreensPlatformsCountriesSection(
                     agg = agg,
-                    loading = state.loading,
+                    loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                     sizeClass = sizeClass,
                     activeFilter = activeVitalsFilter,
-                    onSelectFilter = { activeVitalsFilter = it },
+                    onSelectFilter = {
+                    activeVitalsFilter = it
+                    viewModel.openDrillDown(if (agg?.topScreens?.any { row -> row.screen == it } == true) "screen"
+                        else if (agg?.platforms?.any { row -> row.displayName == it } == true) "platform" else "country", it)
+                },
+                compare = state.compare,
+                previous = state.comparison.aggregates,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -342,7 +360,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         WorthALookSection(
                             agg = agg,
                             dismissedIds = state.dismissedWorthALookIds,
-                            loading = state.loading,
+                            loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                             onDismiss = { viewModel.hideWorthALook(it, snooze = false) },
                             onSnooze = { viewModel.hideWorthALook(it, snooze = true) },
                             modifier = Modifier.weight(1f),
@@ -360,7 +378,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                         WorthALookSection(
                             agg = agg,
                             dismissedIds = state.dismissedWorthALookIds,
-                            loading = state.loading,
+                            loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                             onDismiss = { viewModel.hideWorthALook(it, snooze = false) },
                             onSnooze = { viewModel.hideWorthALook(it, snooze = true) },
                             modifier = Modifier.fillMaxWidth(),
@@ -380,22 +398,28 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
 }
 
 @Composable
-private fun TopEventRow(item: TopEvent) {
+private fun TopEventRow(item: TopEvent, compare: Boolean = false, previous: Long? = null) {
+    Column {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(item.eventName, modifier = Modifier.weight(1f),
              style = MaterialTheme.typography.bodyMedium)
         Text(item.count.toString(), style = MaterialTheme.typography.bodyMedium,
              color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    if (compare) ComparisonNote(previous?.let(::formatCount))
+    }
 }
 
 @Composable
-private fun TopValueRow(item: TopValue) {
+private fun TopValueRow(item: TopValue, compare: Boolean = false, previous: Long? = null) {
+    Column {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(item.name, modifier = Modifier.weight(1f),
              style = MaterialTheme.typography.bodyMedium)
         Text(formatMinorUnits(item.totalMinorUnits), style = MaterialTheme.typography.bodyMedium,
              color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (compare) ComparisonNote(previous?.let(::formatMinorUnits))
     }
 }
 
@@ -413,11 +437,11 @@ private fun formatDwell(ms: Long): String {
 // ---------------------------------------------------------------------------
 
 /**
- * The Overview hero: a state-dependent greeting + large headline. Normal shows an "AI-written"
- * plain-language summary with lime-highlighted numbers ([OverviewHeroNormal]); Loading shows a
+ * The Overview hero: a state-dependent greeting + large headline. Normal shows a computed
+ * computed plain-language summary with lime-highlighted numbers ([OverviewHeroNormal]); Loading shows a
  * contextual loading line ([OverviewHeroLoading]); Empty shows a first-run setup prompt
  * ([OverviewHeroEmpty]); and while the server is unreachable, a plain numbers-may-be-stale
- * headline plus an "AI summary unavailable" notice ([OverviewHeroError]) — the header-level
+ * headline plus a summary-unavailable notice ([OverviewHeroError]) — the header-level
  * `ServerUnreachableBanner` (`DashboardShell.kt`, Task 17) already communicates the connection
  * problem itself, so this branch only avoids claiming a fresh AI summary it can't produce right
  * now, rather than duplicating that message.
@@ -443,6 +467,8 @@ internal fun OverviewHero(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         when {
             serverUnreachable -> OverviewHeroError(projectName, range)
+            loading && sess == null -> OverviewHeroLoading()
+            sess == null && agg != null -> OverviewHeroError(projectName, range)
             else -> when (contentStateFor(loading, isEmpty)) {
                 ContentState.Loading -> OverviewHeroLoading()
                 ContentState.Empty -> OverviewHeroEmpty(projectName)
@@ -452,7 +478,7 @@ internal fun OverviewHero(
     }
 }
 
-/** Normal-state hero content: greeting line + the AI-written headline + its attribution chip. */
+/** Normal-state hero content: greeting, computed headline and source attribution. */
 @Composable
 private fun OverviewHeroNormal(hero: HeroNumbers, projectName: String, range: TimeRange, onTellMeMore: () -> Unit) {
     val extended = LocalExtendedColors.current
@@ -663,28 +689,8 @@ internal fun PrivacyCard(modifier: Modifier = Modifier) {
  *
  * Only Sessions gets a delta pill: it's the only one of the 4 with a daily historical series
  * ([SessionsResponse.dailySessions]) to honestly compute a trend from (see [VitalsNumbers]'s
- * KDoc). The design handoff's "was N (last week)" Compare-mode note
- * ([KpiCard]'s `compareNote` parameter) is deliberately never populated with real data here for
- * the same reason: there is no previous-period total anywhere in
- * [AggregatesResponse]/[SessionsResponse]/[RetentionResponse] to honestly show as "last week"
- * (the exact gap Task 18's review already flagged and fixed for the hero's percent-change) — a
- * "Compare" toggle also doesn't reach this screen at all yet (`DashboardShell.kt`'s `compareOn` is
- * local header state, never threaded down to screen content), so this is a double gap: no
- * plumbing AND no honest number to plumb. `KpiCard.compareNote`'s capability is proven separately
- * by `KpiCardScreenshotTest`'s own fixture.
- *
- * [activeFilter]/[onClearFilter] are driven by [OverviewScreen]'s own local `remember` state for
- * now — there is no filter SOURCE yet (the 3-card row that would set it, per the README excerpt
- * above, is a later task), so in the running app [activeFilter] is always null and this chip never
- * actually appears yet. It's built and screenshot-tested here (see
- * `OverviewVitalsScreenshotTest.withActiveFilterChipMatchesGolden`) so that later task only has to
- * call `onClearFilter`'s sibling setter, not build the chip itself — same "stub now, wire for real
- * later" convention as the hero's "Tell me more"/"Copy" links (Task 18).
- *
- * Loading shows 4 [KpiSkeleton]s; every other case (real data, including all-zero "first run"
- * data, and stale data rendered while the server is unreachable — this composable has no
- * server-reachability awareness of its own, matching the pre-redesign KPI rows it replaces) shows
- * the 4 real cards.
+ * KDoc). When Compare is enabled, cards use the separately loaded previous UTC window.
+ * Unknown or privacy-suppressed previous values stay unavailable.
  */
 @Composable
 internal fun VitalsSection(
@@ -697,6 +703,8 @@ internal fun VitalsSection(
     activeFilter: String? = null,
     onClearFilter: () -> Unit = {},
     onDrillDown: (String, String) -> Unit = { _, _ -> },
+    compare: Boolean = false,
+    previous: ComparisonData = ComparisonData(),
 ) {
     val vitals = computeVitalsNumbers(agg, sess, retention)
 
@@ -733,18 +741,20 @@ internal fun VitalsSection(
                     }
                     KpiCard(
                         label = stringResource(Res.string.overview_vital_sessions_label),
-                        value = formatCount(v.sessionCount),
+                        value = sess?.totalSessions?.toLong()?.let(::formatCount) ?: stringResource(Res.string.value_none),
                         sub = stringResource(Res.string.overview_vital_sessions_caption),
                         delta = sessionDelta,
                         deltaPositive = v.sessionTrendIsIncrease,
-                        onClick = { onDrillDown("sessions", "Sessions") },
+                        onClick = { onDrillDown("sessions", "sessions") },
+                        compareNote = if (compare) comparisonNoteText(previous.sessions?.totalSessions?.toLong()?.let(::formatCount)) else null,
                         modifier = Modifier.fillSlot(),
                     )
                     KpiCard(
                         label = stringResource(Res.string.overview_vital_duration_label),
-                        value = formatDuration(v.avgDurationSec),
+                        value = sess?.avgDurationSec?.let(::formatDuration) ?: stringResource(Res.string.value_none),
                         sub = stringResource(Res.string.overview_vital_duration_caption),
-                        onClick = { onDrillDown("duration", "Average duration") },
+                        onClick = { onDrillDown("duration", "duration") },
+                        compareNote = if (compare) comparisonNoteText(previous.sessions?.avgDurationSec?.let(::formatDuration)) else null,
                         modifier = Modifier.fillSlot(),
                     )
                     val retentionValue = v.retentionDay1?.let { formatPercent(it) } ?: stringResource(Res.string.value_none)
@@ -757,14 +767,16 @@ internal fun VitalsSection(
                         label = stringResource(Res.string.overview_vital_retention_label),
                         value = retentionValue,
                         sub = retentionCaption,
-                        onClick = { onDrillDown("retention", (v.retentionDay1 ?: 0.0).toString()) },
+                        onClick = { onDrillDown("retention", "day1") },
+                        compareNote = if (compare) comparisonNoteText(computeRetentionVitals(previous.retention).day1?.let(::formatPercent)) else null,
                         modifier = Modifier.fillSlot(),
                     )
                     KpiCard(
                         label = stringResource(Res.string.kpi_errors),
-                        value = formatCount(v.errorsCount),
+                        value = agg?.totals?.errors?.let(::formatCount) ?: stringResource(Res.string.value_none),
                         sub = stringResource(Res.string.overview_vital_errors_caption),
-                        onClick = { onDrillDown("errors", "Errors") },
+                        onClick = { onDrillDown("errors", "errors") },
+                        compareNote = if (compare) comparisonNoteText(previous.aggregates?.totals?.errors?.let(::formatCount)) else null,
                         modifier = Modifier.fillSlot(),
                     )
                 }
@@ -813,30 +825,11 @@ internal fun VitalsSection(
  * their actual record day. Instead, a plain, true caption — "🔥 Busiest day: {label}" — is shown
  * under the chart, derived from the same real [recordDayIndex] the bar highlight uses.
  *
- * **Deliberately out of scope (documented, not silently dropped):**
- * - **Hover tooltip / click-to-drill-down**: the design handoff asks for both ("Hover a bar →
- *   tooltip with exact number; click → opens that day's drill-down"). The drill-down drawer itself
- *   is not wired anywhere in this codebase yet — every existing `KpiCard.onClick` callsite leaves
- *   it unset, and Tasks 10/14's reports already name this a project-wide, explicitly-deferred gap
- *   for later tasks (26/40/41) to wire up. Building a one-off hover/click affordance here that
- *   opens nothing would be a dead-end interaction, so both are left for whichever task wires the
- *   drill-down drawer for real.
- * - **Compare-mode ghost bars + legend**: the design handoff's "When Compare is on, each bar gets
- *   a dashed lavender ghost bar behind it for the previous period, plus a legend." Checked
- *   `ChartLogic.kt`/`BarChartCanvas.kt` first per this task's brief: **neither has any ghost-bar or
- *   previous-period support today.** Not adding it here either, for the same two-part reason
- *   Task 19's report already documented for the vitals grid's unpopulated `compareNote`: (a) there
- *   is no previous-period data anywhere in [AggregatesResponse]/[SessionsResponse] to honestly draw
- *   a ghost bar from, and (b) `DashboardShell.kt`'s `compareOn` Compare toggle is local header state
- *   that still isn't threaded down to any screen content. Rendering a dashed ghost bar from
- *   invented numbers would be exactly the fabrication this codebase's Task 18 precedent rules out;
- *   building the pure layout math for a feature with no real data to feed it would be speculative,
- *   untested-by-real-usage code. This is a scope *omission*, not a stub — unlike `KpiCard.onClick`,
- *   there is no Compare-aware parameter on this composable at all.
+ * Bars open their stable date key in the shared drawer. Compare renders separately fetched,
+ * aligned previous-period values as dashed lavender bars and a legend.
  *
  * Empty state (no buckets for the selected metric) shows the existing [EmptyState] placeholder,
- * matching the pre-redesign cards' own behavior — no new skeleton/loading treatment was added here
- * since neither pre-redesign card had one either.
+ * while pending requests show a chart skeleton.
  */
 @Composable
 internal fun DailyVolumeSection(
@@ -844,6 +837,11 @@ internal fun DailyVolumeSection(
     sess: SessionsResponse?,
     range: TimeRange,
     modifier: Modifier = Modifier,
+    compare: Boolean = false,
+    previous: ComparisonData = ComparisonData(),
+    anchor: String = com.quietmetrix.dashboard.viewmodel.analyticsAnchorToday(),
+    onDayClick: (String, String) -> Unit = { _, _ -> },
+    loading: Boolean = false,
 ) {
     var metric by remember { mutableStateOf(DailyVolumeMetric.Actions) }
 
@@ -855,7 +853,7 @@ internal fun DailyVolumeSection(
             ) {
                 Text(
                     text = stringResource(
-                        if (range.hourly) Res.string.overview_chart_title_hourly else Res.string.overview_chart_title_daily,
+                        if (range == TimeRange.Day90) Res.string.overview_chart_title_weekly else Res.string.overview_chart_title_daily,
                     ),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -865,14 +863,27 @@ internal fun DailyVolumeSection(
             }
             Spacer(Modifier.height(8.dp))
 
-            val bars = dailyVolumeBars(agg, sess, metric, range.hourly)
-            if (bars.isEmpty()) {
+            val currentPoints = if (metric == DailyVolumeMetric.Visits) sess?.dailySessions.orEmpty() else agg?.daily.orEmpty()
+            val previousPoints = if (metric == DailyVolumeMetric.Visits) previous.sessions?.dailySessions.orEmpty() else previous.aggregates?.daily.orEmpty()
+            val points = analyticsChartPoints(currentPoints, range, anchor)
+            val priorPoints = analyticsChartPoints(previousPoints, range, anchor, previous = true)
+            val bars = points.map { DailyVolumeBar(formatBucketLabel(it.day, false), it.total) }
+            if (compare) {
+                Text(stringResource(Res.string.comparison_current) + " / " + stringResource(Res.string.comparison_previous),
+                    style = MaterialTheme.typography.labelSmall, color = LocalExtendedColors.current.lavender)
+                ComparisonNote(if (previousPoints.isEmpty()) null else formatCount(previousPoints.sumOf { it.total }))
+            }
+            if (loading && bars.isEmpty()) {
+                SkeletonBox(Modifier.fillMaxWidth().height(220.dp))
+            } else if (bars.isEmpty()) {
                 EmptyState(Res.drawable.ic_events, Res.string.state_no_data)
             } else {
                 val recordIndex = recordDayIndex(bars)
                 BarChartCanvas(
                     bars = bars.map { BarData(it.label, it.value.toFloat()) },
                     highlightIndex = recordIndex,
+                    previousValues = if (compare) comparisonDailyValues(points, priorPoints, ((range.seconds + 86399) / 86400).toInt()) else emptyList(),
+                    onBarClick = { index -> onDayClick(if (metric == DailyVolumeMetric.Visits) "day-visits" else "day-actions", points[index].day) },
                 )
                 if (recordIndex != null) {
                     Spacer(Modifier.height(8.dp))
@@ -949,6 +960,8 @@ internal fun ScreensPlatformsCountriesSection(
     modifier: Modifier = Modifier,
     activeFilter: String? = null,
     onSelectFilter: (String) -> Unit = {},
+    compare: Boolean = false,
+    previous: AggregatesResponse? = null,
 ) {
     ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
         if (loading) {
@@ -969,6 +982,7 @@ internal fun ScreensPlatformsCountriesSection(
                     } else {
                         rows.forEach { row ->
                             ScreenUsageRowItem(row, selected = row.screen == activeFilter, onClick = { onSelectFilter(row.screen) })
+                            if (compare) ComparisonNote(previous?.topScreens?.firstOrNull { it.screen == row.screen }?.count?.let(::formatCount))
                         }
                     }
                 }
@@ -986,6 +1000,7 @@ internal fun ScreensPlatformsCountriesSection(
                     } else {
                         rows.forEach { row ->
                             BreakdownRowItem(row, selected = row.name == activeFilter, onClick = { onSelectFilter(row.name) })
+                            if (compare) ComparisonNote(previous?.platforms?.firstOrNull { it.displayName == row.name }?.count?.let(::formatCount))
                         }
                     }
                 }
@@ -1003,6 +1018,7 @@ internal fun ScreensPlatformsCountriesSection(
                     } else {
                         rows.forEach { row ->
                             BreakdownRowItem(row, selected = row.name == activeFilter, onClick = { onSelectFilter(row.name) })
+                            if (compare) ComparisonNote(previous?.countries?.firstOrNull { it.displayName == row.name }?.count?.let(::formatCount))
                         }
                     }
                 }

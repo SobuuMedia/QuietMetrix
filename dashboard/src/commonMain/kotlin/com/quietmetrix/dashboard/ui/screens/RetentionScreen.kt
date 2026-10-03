@@ -3,6 +3,7 @@ package com.quietmetrix.dashboard.ui.screens
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +28,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.SectionLoading
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +56,7 @@ import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_a
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_b
@@ -107,7 +113,6 @@ import com.quietmetrix.dashboard.ui.components.CohortGrouping
 import com.quietmetrix.dashboard.ui.components.CohortHeatmap
 import com.quietmetrix.dashboard.ui.components.CohortHeatmapRow
 import com.quietmetrix.dashboard.ui.components.EmptyState
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
@@ -118,9 +123,9 @@ import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.table.Column
 import com.quietmetrix.dashboard.ui.components.table.DataTable
 import com.quietmetrix.dashboard.ui.components.table.SortColumn
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import com.quietmetrix.dashboard.viewmodel.DataSection
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -171,8 +176,12 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
-            val cohorts = state.retention?.cohorts ?: emptyList()
-            if (cohorts.isEmpty()) {
+            if (state.retention?.cohorts?.isEmpty() == true && !state.isLoading(DataSection.Retention) && state.sectionErrors[DataSection.Retention] == null) SetupInstructionsSection()
+            val retentionQuestion = stringResource(Res.string.ask_retention_why_question)
+    val cohorts = state.retention?.cohorts ?: emptyList()
+            if (state.isLoading(DataSection.Retention) && cohorts.isEmpty()) {
+                SectionLoading()
+            } else if (cohorts.isEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     EmptyState(Res.drawable.ic_retention, Res.string.state_no_retention, Modifier.padding(16.dp))
                 }
@@ -180,12 +189,13 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 val vitals = computeRetentionVitals(state.retention)
                 var comparisonRows by remember { mutableStateOf(emptyList<CohortHeatmapRow>()) }
                 RetentionHero(vitals)
-                RetentionVitalCardsRow(vitals, sizeClass, onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) })
-                CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it })
+                RetentionVitalCardsRow(vitals, sizeClass, onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) },
+                    compare = state.compare, previous = computeRetentionVitals(state.comparison.retention))
+                CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it }, onInspect = viewModel::openDrillDown,
+                    compare = state.compare, previousCohorts = state.comparison.retention?.cohorts.orEmpty(),
+                    periodDays = ((state.range.seconds + 86399) / 86400).toInt())
                 if (comparisonRows.size == 2) {
-                RetentionComparisonPanel(comparisonRows[0], comparisonRows[1], onAskWhy = {
-                    viewModel.openAskDrawer("Why does retention differ between ${comparisonRows[0].label} and ${comparisonRows[1].label}?")
-                })
+                RetentionComparisonPanel(comparisonRows[0], comparisonRows[1])
                 }
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -194,7 +204,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                                 Column<RetentionCohort>(
                                     title = stringResource(Res.string.col_cohort),
                                     weight = 1f,
-                                    cell = { c -> Text(c.cohortDate, style = MaterialTheme.typography.bodyMedium) },
+                                    cell = { c -> Text(c.cohortDate, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable { viewModel.openDrillDown("cohort", c.cohortDate) }.handCursor()) },
                                     sortSelector = { it.cohortDate },
                                 ),
                                 Column<RetentionCohort>(
@@ -218,7 +228,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                         )
                     }
                 }
-                RetentionClosingInsightCard(cohorts, onAskWhy = { viewModel.openAskDrawer("Why did retention change between the two most recent cohorts?") })
+                RetentionClosingInsightCard(cohorts, onAskWhy = { viewModel.openAskDrawer(retentionQuestion) })
             }
         }
     }
@@ -333,27 +343,33 @@ internal fun RetentionHero(vitals: RetentionVitals, modifier: Modifier = Modifie
  * one card per [RetentionVitals] field.
  */
 @Composable
-internal fun RetentionVitalCardsRow(vitals: RetentionVitals, sizeClass: WindowSizeClass, onDrillDown: (String, String) -> Unit = { _, _ -> }, modifier: Modifier = Modifier) {
+internal fun RetentionVitalCardsRow(vitals: RetentionVitals, sizeClass: WindowSizeClass, onDrillDown: (String, String) -> Unit = { _, _ -> }, modifier: Modifier = Modifier, compare: Boolean = false, previous: RetentionVitals = RetentionVitals(null, null, null)) {
     ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
         RetentionVitalCard(
             label = stringResource(Res.string.retention_card_day1_label),
             fraction = vitals.day1,
+            compare = compare,
+            previous = previous.day1,
             captionRes = Res.string.retention_card_caption_day1,
-            onClick = { onDrillDown("retention", (vitals.day1 ?: 0.0).toString()) },
+            onClick = { onDrillDown("retention", "day1") },
             modifier = Modifier.fillSlot(),
         )
         RetentionVitalCard(
             label = stringResource(Res.string.retention_card_day7_label),
             fraction = vitals.day7,
+            compare = compare,
+            previous = previous.day7,
             captionRes = Res.string.retention_card_caption_day7,
-            onClick = { onDrillDown("retention", (vitals.day7 ?: 0.0).toString()) },
+            onClick = { onDrillDown("retention", "day7") },
             modifier = Modifier.fillSlot(),
         )
         RetentionVitalCard(
             label = stringResource(Res.string.retention_card_day30_label),
             fraction = vitals.day30,
+            compare = compare,
+            previous = previous.day30,
             captionRes = Res.string.retention_card_caption_day30,
-            onClick = { onDrillDown("retention", (vitals.day30 ?: 0.0).toString()) },
+            onClick = { onDrillDown("retention", "day30") },
             modifier = Modifier.fillSlot(),
         )
     }
@@ -394,6 +410,8 @@ private fun RetentionVitalCard(
     captionRes: StringResource,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    compare: Boolean = false,
+    previous: Double? = null,
 ) {
     val extended = LocalExtendedColors.current
     val shape = MaterialTheme.shapes.extraLarge
@@ -420,6 +438,7 @@ private fun RetentionVitalCard(
         interactionSource = interactionSource,
     ) {
         Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (compare) ComparisonNote(previous?.let(::formatPercent))
             Text(label, style = MaterialTheme.typography.titleMedium)
             if (fraction != null) {
                 Text(formatPercent(fraction), style = MaterialTheme.typography.displaySmall)
@@ -483,7 +502,7 @@ private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Mo
  * KDoc.
  */
 @Composable
-internal fun RetentionComparisonPanel(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, onAskWhy: () -> Unit = {}, modifier: Modifier = Modifier) {
+internal fun RetentionComparisonPanel(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, modifier: Modifier = Modifier) {
     val takeaway = computeRetentionComparisonTakeaway(rowA, rowB)
 
     Card(modifier = modifier.fillMaxWidth()) {
@@ -613,9 +632,7 @@ private fun RetentionComparisonColumnsRow(rowA: CohortHeatmapRow, rowB: CohortHe
  * [RetentionComparisonPanel] already computes for a user-selected pair — just applied
  * automatically to the latest-vs-previous cohort — rather than any invented AI-sounding insight.
  *
- * "Ask why" is a stubbed callback: the real AI Ask drawer this should open is Task 40's scope, not
- * this one's — same "stub now, wire for real later" convention [RetentionVitalCard]'s own click
- * handler already established.
+ * The Ask action opens the global drawer with a scoped retention question.
  *
  * **Scope note (post-review fix)**: this card ALWAYS compares the 2 most recent individual
  * [RetentionCohort]s (see [computeRetentionClosingInsightTakeaway]'s KDoc) regardless of whatever

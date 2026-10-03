@@ -209,11 +209,11 @@ function handleExperimentResults(string $projectId, string $experimentKey): void
     }
 
     $seconds = windowSeconds(365);
-    $now = time();
-    $fromIso = gmdate('Y-m-d\TH:i:s\Z', $now - $seconds);
-    $toIso = gmdate('Y-m-d\TH:i:s\Z', $now);
-    $fromDay = gmdate('Y-m-d', $now - $seconds);
-    $toDay = gmdate('Y-m-d', $now);
+    $window = requestAnalyticsWindow($seconds);
+    $fromIso = $window['from'];
+    $toIso = $window['to'];
+    $fromDay = $window['from_day'];
+    $toDay = $window['to_day'];
 
     $cells = counterReadCells($projectId, 'experiment', $fromDay, $toDay);
     $experimentForAnalysis = [

@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -111,6 +112,7 @@ fun DrawerShell(
     title: String,
     onDismiss: () -> Unit,
     footer: (@Composable () -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Dialog(
@@ -135,6 +137,7 @@ fun DrawerShell(
                 shape = DrawerPanelShape,
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier
+                    .testTag("drawer-panel")
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
                     .width(panelWidth),
@@ -144,6 +147,7 @@ fun DrawerShell(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(20.dp),
                     ) {
+                        leading?.invoke()
                         Text(title, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
                         IconButton(onClick = onDismiss, modifier = Modifier.handCursor()) {
                             Icon(

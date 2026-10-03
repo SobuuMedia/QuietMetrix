@@ -4,6 +4,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.SectionLoading
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +25,7 @@ import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import org.jetbrains.compose.resources.stringResource
 
@@ -64,11 +69,12 @@ internal fun ExperimentResultsPanel(state: DashboardState, experiment: Experimen
                             }
                         }
                         val metric = results?.variants?.firstOrNull { it.name == variant.name }
-                        if (state.loading && results == null) KpiSkeleton(Modifier.fillMaxWidth())
+                        if (state.isLoading(DataSection.ExperimentResults) && results == null) KpiSkeleton(Modifier.fillMaxWidth())
                         else {
                             Text(metric?.rate?.let { formatPercent(it) } ?: stringResource(Res.string.experiment_results_not_enough_data),
                                 style = MaterialTheme.typography.headlineMedium)
                             Text(stringResource(Res.string.experiment_rate_label), style = MaterialTheme.typography.labelMedium)
+                            if (state.compare) ComparisonNote(state.comparison.experiment?.variants?.firstOrNull { it.name == variant.name }?.rate?.let(::formatPercent))
                         }
                     }
                 }
@@ -81,6 +87,7 @@ internal fun ExperimentResultsPanel(state: DashboardState, experiment: Experimen
                     Text(confidenceScoreFor(verdict)?.let { "$it%" } ?: "—", style = MaterialTheme.typography.headlineSmall)
                 }
                 ConfidenceMeter(confidenceScoreFor(verdict))
+                if (state.compare) ComparisonNote(confidenceScoreFor(verdictFor(state.comparison.experiment?.comparison))?.let { "$it%" })
                 Text(when (verdict) {
                     is ExperimentVerdict.NotEnoughData -> stringResource(Res.string.experiment_verdict_not_enough_data)
                     is ExperimentVerdict.NoDifference -> stringResource(Res.string.experiment_plain_tie)

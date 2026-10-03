@@ -19,4 +19,15 @@ class AskAnalyticsAnalyzerTest {
         assertContains(answer.text, "can't establish causes")
         assertContains(answer.text, "sessions")
     }
+    @Test
+    fun causalQuestionsAboutKnownMetricsStillDiscloseLimits() {
+        val answer = AskAnalyticsAnalyzer.answer("Why did retention fall?", emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), "7d")
+        assertContains(answer.text, "can't establish causes")
+    }
+
+    @Test
+    fun spanishSessionSuggestionsUseTheSessionAggregate() {
+        val answer = AskAnalyticsAnalyzer.answer("¿Cuántas sesiones hubo?", listOf(CounterCell(mapOf("bucket" to "0_10s"), 12, 5)), emptyList(), emptyList(), emptyList(), emptyList(), "7d")
+        assertContains(answer.text, "12 sessions")
+    }
 }

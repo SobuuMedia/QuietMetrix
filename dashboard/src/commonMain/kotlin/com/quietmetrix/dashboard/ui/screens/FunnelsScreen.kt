@@ -1,6 +1,7 @@
 package com.quietmetrix.dashboard.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,12 +52,12 @@ import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
 import com.quietmetrix.dashboard.api.FunnelStepResultDto
-import com.quietmetrix.dashboard.api.TimeRange
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.col_conversion_from_entry
 import com.quietmetrix.dashboard.resources.col_conversion_from_previous
@@ -71,7 +75,6 @@ import com.quietmetrix.dashboard.resources.funnel_delete_confirm_title
 import com.quietmetrix.dashboard.resources.funnel_dropoff_message
 import com.quietmetrix.dashboard.resources.funnel_dropoff_why
 import com.quietmetrix.dashboard.resources.funnel_editor_cancel
-import com.quietmetrix.dashboard.resources.funnel_empty
 import com.quietmetrix.dashboard.resources.funnel_expert_table_title
 import com.quietmetrix.dashboard.resources.funnel_expert_toggle
 import com.quietmetrix.dashboard.resources.funnel_eyebrow_emoji
@@ -97,7 +100,6 @@ import com.quietmetrix.dashboard.resources.funnel_tutorial_step1
 import com.quietmetrix.dashboard.resources.funnel_tutorial_step2
 import com.quietmetrix.dashboard.resources.funnel_tutorial_title
 import com.quietmetrix.dashboard.resources.funnels_title
-import com.quietmetrix.dashboard.resources.ic_delete
 import com.quietmetrix.dashboard.resources.ic_funnel
 import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_plus
@@ -110,7 +112,6 @@ import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.ui.components.ContentState
 import com.quietmetrix.dashboard.ui.components.EmptyState
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
@@ -126,9 +127,10 @@ import com.quietmetrix.dashboard.ui.components.charts.FunnelStepData
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.table.DataTable
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
+import com.quietmetrix.dashboard.ui.components.comparisonNoteText
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
-import com.quietmetrix.dashboard.viewmodel.DataSection
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -149,7 +151,8 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
     // the header's 🤓 Expert pill isn't plumbed to any screen yet, so this screen keeps its own
     // local flag for Task 28's "Expert mode adds a raw step table" requirement rather than
     // blocking on that larger, out-of-scope app-wide wiring.
-    var expertOn by remember { mutableStateOf(false) }
+    val whyQuestion = stringResource(Res.string.ask_funnel_question)
+    val expertOn = state.expertMode
     var newFunnelGuideOpen by remember { mutableStateOf(false) }
 
     val funnel = currentFunnel(state.funnels, state.selectedFunnelKey)
@@ -186,7 +189,7 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
-            when (contentStateFor(state.loading, state.funnels.isEmpty())) {
+            when (contentStateFor(state.isLoading(DataSection.Funnels), state.funnels.isEmpty())) {
                 ContentState.Loading -> {
                     ResponsiveRowOrColumn(sizeClass) {
                         KpiSkeleton(Modifier.fillSlot())
@@ -210,8 +213,8 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                             onDelete = { pendingDelete = funnel },
                             onNewFunnel = { newFunnelGuideOpen = true },
                             expertOn = expertOn,
-                            onExpertToggle = { expertOn = !expertOn },
-                            onAskWhy = { step -> viewModel.openAskDrawer("Why did people leave at ${step.name ?: step.key}?") },
+                            onExpertToggle = { viewModel.toggleExpertMode() },
+                            onAskWhy = { step -> viewModel.openAskDrawer(whyQuestion.replace("%1\$s", step.name ?: step.key)) },
                             onDrillDown = { key -> viewModel.openDrillDown("funnel", key) },
                         )
                     }
@@ -329,7 +332,7 @@ private fun FunnelDetail(
     }
 
     val results = state.funnelResults
-    FunnelStatCardsRow(results, sizeClass, state.loading, onDrillDown)
+    FunnelStatCardsRow(results, sizeClass, state.isLoading(DataSection.FunnelResults), onDrillDown, compare = state.compare, previous = state.comparison.funnel)
 
     if (results != null) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -346,9 +349,11 @@ private fun FunnelDetail(
                     // The tapering overview chart (Task 27) above the Task 28 per-step list below
                     // it — see FunnelStepList's KDoc for why these are two distinct, complementary
                     // visualizations rather than one replacing the other.
-                    FunnelChartCanvas(results.steps.map { FunnelStepData(it.name ?: it.key, it.count) })
+                    FunnelChartCanvas(results.steps.map { FunnelStepData(it.name ?: it.key, it.count) },
+                        previousCounts = if (state.compare) state.comparison.funnel?.steps?.map { it.count }.orEmpty() else emptyList(),
+                        onStepClick = { index -> onDrillDown(results.steps[index].key) })
                     Spacer(Modifier.height(16.dp))
-                    FunnelStepList(results.steps, onAskWhy = onAskWhy)
+                    FunnelStepList(results.steps, onAskWhy = onAskWhy, onDrillDown = onDrillDown, compare = state.compare, previousSteps = state.comparison.funnel?.steps.orEmpty())
                 }
             }
         }
@@ -421,13 +426,17 @@ internal fun CsvCopyButton(csv: String) {
  * duplicates.
  */
 @Composable
-internal fun FunnelStepList(steps: List<FunnelStepResultDto>, onAskWhy: (FunnelStepResultDto) -> Unit = {}, modifier: Modifier = Modifier) {
+internal fun FunnelStepList(steps: List<FunnelStepResultDto>, onAskWhy: (FunnelStepResultDto) -> Unit = {}, modifier: Modifier = Modifier,
+    onDrillDown: (String) -> Unit = {}, compare: Boolean = false, previousSteps: List<FunnelStepResultDto> = emptyList()) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         steps.forEachIndexed { index, step ->
             if (shouldShowDropoffBefore(step, isFirstStep = index == 0)) {
                 FunnelDropoffCallout(step, onAskWhy = { onAskWhy(step) })
             }
-            FunnelStepRow(index = index, step = step)
+            Column(Modifier.clickable { onDrillDown(step.key) }.handCursor()) {
+                FunnelStepRow(index = index, step = step)
+                if (compare) ComparisonNote(previousSteps.firstOrNull { it.key == step.key }?.count?.toLong()?.let(::formatCount))
+            }
         }
     }
 }
@@ -787,7 +796,7 @@ internal fun NewFunnelGuideModal(onDismiss: () -> Unit) {
  * drawer is Task 41's scope, not this one's.
  */
 @Composable
-internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: WindowSizeClass, loading: Boolean, onDrillDown: (String) -> Unit = {}) {
+internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: WindowSizeClass, loading: Boolean, onDrillDown: (String) -> Unit = {}, compare: Boolean = false, previous: FunnelResultsResponse? = null) {
     ResponsiveRowOrColumn(sizeClass) {
         when (contentStateFor(loading, results == null)) {
             ContentState.Loading -> {
@@ -798,24 +807,27 @@ internal fun FunnelStatCardsRow(results: FunnelResultsResponse?, sizeClass: Wind
             else -> {
                 KpiCard(
                     stringResource(Res.string.funnel_kpi_started),
-                    formatCount((results?.entered ?: 0).toLong()),
+                    results?.entered?.toLong()?.let(::formatCount) ?: stringResource(Res.string.value_none),
                     Modifier.fillSlot(),
-                    onClick = { onDrillDown("Started") },
+                    onClick = { onDrillDown("started") },
+                    compareNote = if (compare) comparisonNoteText(previous?.entered?.toLong()?.let(::formatCount)) else null,
                 )
                 KpiCard(
                     stringResource(Res.string.funnel_kpi_completed),
-                    formatCount((results?.converted ?: 0).toLong()),
+                    results?.converted?.toLong()?.let(::formatCount) ?: stringResource(Res.string.value_none),
                     Modifier.fillSlot(),
-                    onClick = { onDrillDown("Completed") },
+                    onClick = { onDrillDown("completed") },
+                    compareNote = if (compare) comparisonNoteText(previous?.converted?.toLong()?.let(::formatCount)) else null,
                 )
                 val overallInterval = results?.let { wilsonInterval(it.converted.toLong(), it.entered.toLong()) }
                 KpiCard(
                     stringResource(Res.string.funnel_kpi_success_rate),
-                    formatPercent(results?.overallConversion ?: 0.0),
+                    results?.overallConversion?.let(::formatPercent) ?: stringResource(Res.string.value_none),
                     Modifier.fillSlot(),
                     sub = overallInterval?.let { formatWilsonRange(it) },
                     highlighted = true,
-                    onClick = { onDrillDown("Success rate") },
+                    onClick = { onDrillDown("rate") },
+                    compareNote = if (compare) comparisonNoteText(previous?.overallConversion?.let(::formatPercent)) else null,
                 )
             }
         }

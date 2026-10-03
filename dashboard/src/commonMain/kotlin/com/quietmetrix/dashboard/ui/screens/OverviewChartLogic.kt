@@ -66,3 +66,31 @@ fun recordDayIndex(bars: List<DailyVolumeBar>): Int? {
     if (bars.size > 1 && bars.all { it.value == maxValue }) return null
     return bars.indexOfFirst { it.value == maxValue }
 }
+
+/** Aligns sparse previous day totals by calendar distance, preserving absent buckets as null. */
+internal fun comparisonDailyValues(current: List<com.quietmetrix.dashboard.api.DailyPoint>, previous: List<com.quietmetrix.dashboard.api.DailyPoint>, days: Int): List<Float?> {
+    val byDay = previous.mapNotNull { point -> epochDayFromIsoOrNull(point.day)?.let { it to point.total.toFloat() } }.toMap()
+    return current.map { point -> epochDayFromIsoOrNull(point.day)?.let { byDay[it - days] } }
+}
+
+/** Keeps native daily resolution; long windows group measured days into aligned seven-day blocks. */
+@OptIn(kotlin.time.ExperimentalTime::class)
+internal fun analyticsChartPoints(points: List<com.quietmetrix.dashboard.api.DailyPoint>, range: com.quietmetrix.dashboard.api.TimeRange, anchor: String, previous: Boolean = false): List<com.quietmetrix.dashboard.api.DailyPoint> {
+    if (range != com.quietmetrix.dashboard.api.TimeRange.Day90) return points.sortedBy { it.day }
+    val end = epochDayFromIsoOrNull(anchor) ?: return points
+    val days = ((range.seconds + 86399) / 86400).coerceAtLeast(1)
+    val start = end - days + 1 - (if (previous) days else 0)
+    return points.mapNotNull { point -> epochDayFromIsoOrNull(point.day)?.let { day -> (start + (day - start).floorDiv(7) * 7) to point } }
+        .groupBy({ it.first }, { it.second }).entries.sortedBy { it.key }.map { (day, values) ->
+            com.quietmetrix.dashboard.api.DailyPoint(kotlin.time.Instant.fromEpochSeconds(day * 86400).toString().take(10), values.sumOf { it.total })
+        }
+}
+
+/** Explicit inclusive UTC dates explain what daily counters mean for a selected range. */
+@OptIn(kotlin.time.ExperimentalTime::class)
+internal fun analyticsPeriodDates(range: com.quietmetrix.dashboard.api.TimeRange, anchor: String): List<String> {
+    val end = epochDayFromIsoOrNull(anchor) ?: return List(4) { anchor }
+    val days = ((range.seconds + 86399) / 86400).coerceAtLeast(1)
+    fun date(day: Long) = kotlin.time.Instant.fromEpochSeconds(day * 86400).toString().take(10)
+    return listOf(date(end - days + 1), date(end), date(end - 2 * days + 1), date(end - days))
+}

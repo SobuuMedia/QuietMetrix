@@ -60,15 +60,17 @@ fun Routing.configureAskRoutes() {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Question or range is invalid")); return@post
             }
             val seconds = parseRangeSeconds(request.range)
-            val to = Instant.now()
-            val fromDay = to.minusSeconds(seconds).atZone(ZoneOffset.UTC).toLocalDate()
-            val toDay = to.atZone(ZoneOffset.UTC).toLocalDate()
+            val window = analyticsWindow(seconds, null, null)
+            val fromDay = window.fromDay
+            val toDay = window.toDay
             val sessions = counterRepo.readCells(projectId, "session", fromDay, toDay)
             val transitions = counterRepo.readCells(projectId, "screen_transition", fromDay, toDay)
             val searches = counterRepo.readCells(projectId, "search", fromDay, toDay)
             val zeroResults = counterRepo.readCells(projectId, "search_zero_result", fromDay, toDay)
             val retention = counterRepo.readCells(projectId, "retention", fromDay, toDay).mapNotNull { cell ->
                 val cohort = cell.dims["cohort"] ?: return@mapNotNull null
+                val started = reportedCohortStart(cohort) ?: return@mapNotNull null
+                if (started < fromDay || started > toDay) return@mapNotNull null
                 val day = cell.dims["day"]?.toIntOrNull() ?: return@mapNotNull null
                 RetentionCounterCell(cohort, day, cell.n)
             }

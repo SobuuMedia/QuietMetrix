@@ -101,6 +101,12 @@ internal fun effectiveDayValue(cohort: RetentionCohort, dayNumber: Int, rawValue
  * to a different Gradle module.
  */
 internal fun epochDayFromIsoOrNull(iso: String): Long? {
+    val reportedWeek = Regex("(\\d{4})-W(\\d{2})").matchEntire(iso)
+    if (reportedWeek != null) {
+        val week = reportedWeek.groupValues[2].toInt()
+        if (week !in 1..53) return null
+        return epochDayFromIsoOrNull("${reportedWeek.groupValues[1]}-01-01")?.plus((week - 1) * 7L)
+    }
     val parts = iso.split("-")
     if (parts.size != 3) return null
     val year = parts[0].toIntOrNull() ?: return null

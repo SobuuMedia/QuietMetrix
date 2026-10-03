@@ -28,6 +28,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.quietmetrix.dashboard.viewmodel.isLoading
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.ui.components.SectionLoading
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ApiManagedUser
 import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.nav.WindowSizeClass
+import com.quietmetrix.dashboard.resources.team_invite_hint
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.access_add_user
 import com.quietmetrix.dashboard.resources.access_empty
@@ -121,9 +126,17 @@ fun UsersTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: Wi
                 }
             }
 
-            if (state.users.isEmpty()) {
+            state.sectionErrors[DataSection.Users]?.let { InlineErrorNotice(it, onRetry = { viewModel.loadUsers() }) }
+            if (state.isLoading(DataSection.Users) && state.users.isEmpty()) {
+                SectionLoading()
+            } else if (state.users.isEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    EmptyState(Res.drawable.ic_users, Res.string.users_empty, Modifier.padding(16.dp))
+                    Column(Modifier.padding(16.dp)) {
+                        state.user?.let { user ->
+                            UserRow(ApiManagedUser(user.id, user.email, user.role), onRoleChange = {}, roleEnabled = false, removeEnabled = false, onRemove = {})
+                        }
+                        Text(stringResource(Res.string.team_invite_hint), style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             } else {
                 state.users.forEach { user ->

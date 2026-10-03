@@ -43,7 +43,9 @@ import androidx.compose.ui.window.Popup
 import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatPercent
+import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.ui.screens.epochDayFromIsoOrNull
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_a
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_b
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_content_description_selected
@@ -108,6 +110,10 @@ internal fun CohortHeatmap(
     modifier: Modifier = Modifier,
     onSelectionChange: (List<String>) -> Unit = {},
     onSelectedRowsChange: (List<CohortHeatmapRow>) -> Unit = {},
+    onInspect: (String, String) -> Unit = { _, _ -> },
+    previousCohorts: List<RetentionCohort> = emptyList(),
+    compare: Boolean = false,
+    periodDays: Int = 7,
 ) {
     if (cohorts.isEmpty()) return
 
@@ -115,6 +121,7 @@ internal fun CohortHeatmap(
     var selected by remember { mutableStateOf(emptyList<String>()) }
     val todayEpochDay = remember { Clock.System.now().toEpochMilliseconds().floorDiv(86_400_000L) }
     val rows = remember(cohorts, grouping, todayEpochDay) { buildCohortHeatmapRows(cohorts, grouping, todayEpochDay) }
+    val previousRows = remember(previousCohorts, grouping, todayEpochDay) { buildCohortHeatmapRows(previousCohorts, grouping, todayEpochDay) }
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -129,6 +136,7 @@ internal fun CohortHeatmap(
                 )
                 CohortGroupingToggle(
                     grouping = grouping,
+                    reportedWeeks = cohorts.any { it.cohortDate.contains("-W") },
                     onSelect = { newGrouping ->
                         grouping = newGrouping
                         selected = emptyList()
@@ -146,11 +154,18 @@ internal fun CohortHeatmap(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (cohorts.any { it.cohortDate.contains("-W") }) Text(stringResource(Res.string.cohort_reported_note), style = MaterialTheme.typography.labelSmall)
             CohortHeatmapHeaderRow()
             rows.forEach { row ->
                 CohortHeatmapDataRow(
                     row = row,
                     selectionSlot = selected.indexOf(row.id).takeIf { it >= 0 },
+                    onInspect = { onInspect(if (grouping == CohortGrouping.ByWeek) "cohort-week" else "cohort", row.id) },
+                    compare = compare,
+                    previous = previousRows.firstOrNull { prior ->
+                        val currentDay = epochDayFromIsoOrNull(row.label)
+                        currentDay != null && epochDayFromIsoOrNull(prior.label) == currentDay - periodDays
+                    },
                     onToggleSelect = {
                         selected = toggleCohortHeatmapSelection(selected, row.id)
                         onSelectionChange(selected)
@@ -199,8 +214,9 @@ private fun dayColumnLabel(dayNumber: Int): String = when (dayNumber) {
 }
 
 @Composable
-private fun CohortHeatmapDataRow(row: CohortHeatmapRow, selectionSlot: Int?, onToggleSelect: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun CohortHeatmapDataRow(row: CohortHeatmapRow, selectionSlot: Int?, onToggleSelect: () -> Unit,
+    onInspect: () -> Unit = {}, compare: Boolean = false, previous: CohortHeatmapRow? = null) {
+    Row(modifier = Modifier.fillMaxWidth().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onInspect).handCursor(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         CohortSelectorCheckbox(selectionSlot = selectionSlot, cohortLabel = row.label, onClick = onToggleSelect)
         Text(row.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.7f))
         Text(
@@ -210,13 +226,11 @@ private fun CohortHeatmapDataRow(row: CohortHeatmapRow, selectionSlot: Int?, onT
             modifier = Modifier.weight(0.9f),
         )
         row.cells.forEachIndexed { index, cell ->
-            CohortHeatmapCellView(
-                cell = cell,
-                row = row,
-                dayNumber = COHORT_HEATMAP_DAY_NUMBERS[index],
-                dayLabel = dayColumnLabel(COHORT_HEATMAP_DAY_NUMBERS[index]),
-                modifier = Modifier.weight(1f),
-            )
+            Column(Modifier.weight(1f)) {
+                CohortHeatmapCellView(cell = cell, row = row, dayNumber = COHORT_HEATMAP_DAY_NUMBERS[index],
+                    dayLabel = dayColumnLabel(COHORT_HEATMAP_DAY_NUMBERS[index]), modifier = Modifier.fillMaxWidth())
+                if (compare) ComparisonNote(previous?.cells?.getOrNull(index)?.fraction?.let(::formatPercent))
+            }
         }
     }
 }
@@ -339,7 +353,7 @@ private fun CohortHeatmapCellView(cell: CohortHeatmapCell, row: CohortHeatmapRow
 /** The "By week" / "By day" segmented toggle, reusing [Pill] the same way [OverviewScreen]'s own
  *  metric segmented control already does (Lavender = selected, Neutral = not). */
 @Composable
-private fun CohortGroupingToggle(grouping: CohortGrouping, onSelect: (CohortGrouping) -> Unit) {
+private fun CohortGroupingToggle(grouping: CohortGrouping, reportedWeeks: Boolean = false, onSelect: (CohortGrouping) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Pill(
             text = stringResource(Res.string.cohort_heatmap_toggle_by_week),
@@ -347,7 +361,7 @@ private fun CohortGroupingToggle(grouping: CohortGrouping, onSelect: (CohortGrou
             onClick = { onSelect(CohortGrouping.ByWeek) },
         )
         Pill(
-            text = stringResource(Res.string.cohort_heatmap_toggle_by_day),
+            text = stringResource(if (reportedWeeks) Res.string.cohort_reported_toggle else Res.string.cohort_heatmap_toggle_by_day),
             variant = if (grouping == CohortGrouping.ByDay) PillVariant.Lavender else PillVariant.Neutral,
             onClick = { onSelect(CohortGrouping.ByDay) },
         )

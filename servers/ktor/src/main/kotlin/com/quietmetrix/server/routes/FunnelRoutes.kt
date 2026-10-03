@@ -189,13 +189,11 @@ fun Routing.configureFunnelRoutes() {
                 // ingest doesn't carry per-step timing or a dimensional breakdown any more —
                 // see FunnelCounterAnalyzer's class doc for what's gone versus deferred.
 
-                val nowEpochSeconds = java.time.Instant.now().epochSecond
-                val fromEpochSeconds = nowEpochSeconds - rangeSeconds
-                val fromJava = java.time.Instant.ofEpochSecond(fromEpochSeconds)
-                val toJava = java.time.Instant.ofEpochSecond(nowEpochSeconds)
-
-                val fromDay = fromJava.atZone(java.time.ZoneOffset.UTC).toLocalDate()
-                val toDay = toJava.atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                val window = call.requestAnalyticsWindow(rangeSeconds) ?: return@get
+                val fromJava = window.fromInstant
+                val toJava = window.toInstant
+                val fromDay = window.fromDay
+                val toDay = window.toDay
                 val cells = counterRepo.readCells(projectId, "funnel_step", fromDay, toDay)
                     .filter { it.dims["f"] == funnel.funnelKey }
                     .mapNotNull { cell -> cell.dims["step"]?.toIntOrNull()?.let { step -> FunnelStepCell(step, cell.n) } }
