@@ -12,8 +12,8 @@ class ResponsiveLayoutTest {
     }
 
     @Test
-    fun mediumLaysOutAsRow() {
-        assertEquals(LayoutFlow.Row, layoutFlowFor(WindowSizeClass.Medium))
+    fun mediumUsesTwoColumnGrid() {
+        assertEquals(LayoutFlow.TwoColumnGrid, layoutFlowFor(WindowSizeClass.Medium))
     }
 
     @Test

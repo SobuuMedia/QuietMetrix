@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +38,7 @@ import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.ic_chevron_down
 import com.quietmetrix.dashboard.ui.components.handCursor
 import org.jetbrains.compose.resources.painterResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 data class Column<T>(
     val title: String,

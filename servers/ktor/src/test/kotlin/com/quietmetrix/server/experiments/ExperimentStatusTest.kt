@@ -52,7 +52,7 @@ class ExperimentStatusTest {
 
     @Test
     fun `draft allows editing everything, active and paused allow only name screen and traffic, ended allows nothing`() {
-        assertEquals(setOf("name", "screen", "traffic_percent", "variants", "countries"), ExperimentStatus.editableFields("draft"))
+        assertEquals(setOf("name", "screen", "traffic_percent", "variants", "countries", "mode", "placement_key", "b_percent", "languages", "match_mode", "goal_event", "icon_key"), ExperimentStatus.editableFields("draft"))
         assertEquals(setOf("name", "screen", "traffic_percent"), ExperimentStatus.editableFields("active"))
         assertEquals(setOf("name", "screen", "traffic_percent"), ExperimentStatus.editableFields("paused"))
         assertTrue(ExperimentStatus.editableFields("ended").isEmpty())

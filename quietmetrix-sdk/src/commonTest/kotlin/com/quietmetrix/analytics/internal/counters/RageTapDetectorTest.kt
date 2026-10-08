@@ -58,7 +58,7 @@ class RageTapDetectorTest {
     }
 
     @Test
-    fun `after firing, a fresh burst can fire again`() {
+    fun `after firing and a fresh burst can fire again`() {
         val d = detector()
         d.onTap(0f, 0f, 0L)
         d.onTap(0f, 0f, 100L)
@@ -70,7 +70,7 @@ class RageTapDetectorTest {
     }
 
     @Test
-    fun `normal, well-spaced taps never fire`() {
+    fun `normal and well-spaced taps never fire`() {
         val d = detector()
         for (i in 0 until 10) {
             assertFalse(d.onTap(i * 100f, 0f, i * 2_000L))

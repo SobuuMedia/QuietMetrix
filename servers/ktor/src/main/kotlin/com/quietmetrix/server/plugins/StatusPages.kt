@@ -9,6 +9,15 @@ import io.ktor.server.response.respond
 
 fun Application.configureStatusPages() {
     install(StatusPages) {
+        exception<com.quietmetrix.server.persistence.ProjectLimitExceeded> { call, _ ->
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse("project_limit_reached", "Organization project limit reached"))
+        }
+        exception<com.quietmetrix.server.util.RequestBodyTimedOut> { call, _ ->
+            call.respond(HttpStatusCode.RequestTimeout, ErrorResponse("request_timeout", "Request body timed out"))
+        }
+        exception<com.quietmetrix.server.util.RequestTooLarge> { call, _ ->
+            call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("payload_too_large", "Request body exceeds 1 MB"))
+        }
         exception<Throwable> { call, cause ->
             call.application.environment.log.info("Unhandled: ${cause::class.simpleName}: ${cause.message}")
             call.application.environment.log.debug("Unhandled exception detail", cause)

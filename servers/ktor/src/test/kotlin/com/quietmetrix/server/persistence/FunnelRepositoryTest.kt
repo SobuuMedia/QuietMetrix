@@ -2,10 +2,15 @@ package com.quietmetrix.server.persistence
 
 import com.quietmetrix.server.funnels.FunnelDefinition
 import com.quietmetrix.server.funnels.FunnelStepDefinition
+import com.quietmetrix.server.persistence.tables.FunnelDefinitionRevisions
 import com.quietmetrix.server.persistence.tables.Funnels
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,7 +24,7 @@ class FunnelRepositoryTest {
         Database.connect("jdbc:h2:mem:funnelrepo_${java.util.UUID.randomUUID()};DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
 
     private fun seed(db: Database): Pair<FunnelRepository, Long> {
-        transaction(db) { SchemaUtils.create(Users, Projects, Funnels) }
+        transaction(db) { SchemaUtils.create(Users, Projects, Funnels, FunnelDefinitionRevisions) }
         val userRepo = UserRepository(db)
         val projectRepo = ProjectRepository(db)
         userRepo.create("admin@quietmetrix.com", "password123")
@@ -50,6 +55,28 @@ class FunnelRepositoryTest {
         assertEquals("screen_view", found?.steps?.get(0)?.event)
         assertEquals("signup", found?.steps?.get(0)?.screen)
         assertEquals("signup_submitted", found?.steps?.get(1)?.event)
+    }
+
+    @Test
+    fun `semantic edits create immutable revisions while label edits retain revision`() {
+        val db = freshDb()
+        val (repo, projectId) = seed(db)
+        val initial = definition()
+        repo.create(projectId, initial)
+        assertEquals(1, repo.findByKey(projectId, initial.funnelKey)?.revision)
+        repo.update(projectId, initial.funnelKey, name = "New label", description = null, steps = null, windowSeconds = null, lock = true)
+        assertEquals(1, repo.findByKey(projectId, initial.funnelKey)?.revision)
+        val changedSteps = initial.steps.mapIndexed { index, step -> if (index == 1) step.copy(event = "account_created") else step }
+        repo.update(projectId, initial.funnelKey, name = null, description = null, steps = changedSteps, windowSeconds = null, lock = true)
+        assertEquals(2, repo.findByKey(projectId, initial.funnelKey)?.revision)
+        val snapshots = transaction(db) {
+            FunnelDefinitionRevisions.selectAll().where {
+                (FunnelDefinitionRevisions.projectId eq projectId) and (FunnelDefinitionRevisions.funnelKey eq initial.funnelKey)
+            }.associate { it[FunnelDefinitionRevisions.revision] to it[FunnelDefinitionRevisions.steps] }
+        }
+        assertEquals(setOf(1, 2), snapshots.keys)
+        assertTrue(snapshots.getValue(1).contains("signup_submitted"))
+        assertTrue(snapshots.getValue(2).contains("account_created"))
     }
 
     @Test

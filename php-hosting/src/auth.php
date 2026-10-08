@@ -22,11 +22,11 @@ function requireSession(): array {
         exit;
     }
     $payload = jwt_decode(substr($header, 7), JWT_SECRET);
-    if ($payload === null) {
+    if ($payload === null || !validAccessClaims($payload)) {
         errorResponse(401, 'unauthorized', 'Invalid or expired token');
         exit;
     }
-    return $payload;
+    return validateCurrentSession($payload);
 }
 
 /**
@@ -121,15 +121,15 @@ function requireSessionOrToken(): array {
             errorResponse(401, 'unauthorized', 'Invalid or expired token');
             exit;
         }
-        return ['sub' => $validated['userId'], 'scopes' => $validated['scopes']];
+        return attachTenantScope(['sub' => $validated['userId'], 'scopes' => $validated['scopes']]);
     }
 
     $payload = jwt_decode($credential, JWT_SECRET);
-    if ($payload === null) {
+    if ($payload === null || !validAccessClaims($payload)) {
         errorResponse(401, 'unauthorized', 'Invalid or expired token');
         exit;
     }
-    return $payload;
+    return validateCurrentSession($payload);
 }
 
 /** True if [$session] (from requireSessionOrToken()) is an admin dashboard session. A PAT is never admin. */
@@ -176,5 +176,52 @@ function requireAnalyticsAccess(string $projectId): array {
         exit;
     }
     requireProjectAccess($session, $projectId);
+    return $session;
+}
+
+/** Safe rolling compatibility for existing role-bearing access tokens only. */
+function validAccessClaims(array $payload): bool {
+    return in_array($payload['type'] ?? 'access', ['access'], true)
+        && in_array($payload['role'] ?? '', ['admin', 'developer', 'reviewer'], true)
+        && isset($payload['sub']);
+}
+
+function validateCurrentSession(array $payload): array {
+    $stmt = getDb()->prepare('SELECT role, status FROM users WHERE id = ?');
+    $stmt->execute([$payload['sub']]);
+    $user = $stmt->fetch();
+    $valid = $user && $user['status'] === 'active' && $user['role'] === $payload['role'];
+    if (($payload['type'] ?? null) === 'access') {
+        $stmt = getDb()->prepare('SELECT 1 FROM auth_sessions WHERE id=? AND user_id=? AND expires_at>?');
+        $stmt->execute([$payload['sessionId'] ?? '', $payload['sub'], time()]);
+        $valid = $valid && $stmt->fetchColumn() !== false;
+    }
+    if (!$valid) { errorResponse(401, 'unauthorized', 'Session expired or account changed'); exit; }
+    return attachTenantScope($payload);
+}
+
+/** Database-owned organization metadata applies to sessions and scoped tokens alike. */
+function cloudMode(): bool { return strtolower(getenv('QM_PROFILE') ?: 'selfhost') === 'cloud'; }
+function attachTenantScope(array $session): array {
+    $q = getDb()->prepare('SELECT tenant_id, platform_operator, status, plan_id, role FROM users WHERE id=?');
+    $q->execute([$session['sub']]); $user = $q->fetch();
+    if (!$user || $user['status'] !== 'active') { errorResponse(401, 'unauthorized', 'Account unavailable'); exit; }
+    $session['tenantId'] = $user['tenant_id'];
+    $session['planId'] = $user['plan_id'];
+    $session['platformOperator'] = (bool)$user['platform_operator'];
+    if (isset($session['scopes']) && $user['role'] !== 'admin') $session['scopes'] = array_values(array_diff($session['scopes'], ['projects:create']));
+    if (cloudMode() && !$session['platformOperator']) {
+         $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
+        if (defined('BASE_PATH') && BASE_PATH !== '' && str_starts_with($path, BASE_PATH . '/')) $path = substr($path, strlen(BASE_PATH));
+        $parts = explode('/', trim($path, '/'));
+        if (count($parts) >= 4 && $parts[0] === 'api' && in_array($parts[1], ['v1','v2'], true)) {
+            $sql = $parts[2] === 'projects' ? 'SELECT u.tenant_id FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=?'
+                 : ($parts[2] === 'users' ? 'SELECT tenant_id FROM users WHERE id=?' : null);
+            if ($sql !== null) {
+                $q = getDb()->prepare($sql); $q->execute([$parts[3]]); $tenant = $q->fetchColumn();
+                if ($tenant !== false && $tenant !== $session['tenantId']) { errorResponse(404, 'not_found', 'Resource not found'); exit; }
+            }
+        }
+    }
     return $session;
 }

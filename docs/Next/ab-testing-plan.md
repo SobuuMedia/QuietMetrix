@@ -1,5 +1,7 @@
 # Plan: A/B Testing for Web & App (dashboard, both backends, SDKs)
 
+> Superseded for new app-element experiments by [the dashboard fidelity plan](dashboard-fidelity-plan.md), section 10. That plan uses direct B visibility allocation, app-supplied country/language targeting, v2 config, and native Compose/SwiftUI wrappers. This document remains as historical design context for the legacy session-based experiment path; do not implement its proposed traffic gate or counter dimensions for v2.
+
 ## 1. Goal
 
 Let a QuietMetrix customer run an experiment (e.g. "new onboarding flow" vs "old

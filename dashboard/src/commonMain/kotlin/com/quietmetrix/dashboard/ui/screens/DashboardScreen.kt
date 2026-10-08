@@ -24,7 +24,7 @@ fun DashboardScreen(viewModel: DashboardViewModel, state: DashboardState) {
             AppTab.Funnels   -> FunnelsTab(viewModel, state, sizeClass)
             AppTab.Experiments -> ExperimentsTab(viewModel, state, sizeClass)
             AppTab.Users     -> UsersTab(viewModel, state, sizeClass)
-            AppTab.Settings  -> SettingsTab(viewModel, state)
+            AppTab.Settings  -> SettingsTab(viewModel, state, sizeClass)
         }
     }
 

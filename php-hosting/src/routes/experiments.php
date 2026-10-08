@@ -20,7 +20,7 @@ function handleExperimentsList(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $stmt = getDb()->prepare(
-        'SELECT experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, created_at, started_at, ended_at
+        'SELECT experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, mode, placement_key, revision, b_percent, languages, match_mode, goal_event, icon_key, created_at, started_at, ended_at
            FROM experiments WHERE project_id = ? ORDER BY created_at DESC'
     );
     $stmt->execute([$projectId]);
@@ -47,6 +47,13 @@ function handleExperimentsCreate(string $projectId): void {
         'traffic_percent' => $body['traffic_percent'] ?? 100,
         'variants' => $body['variants'] ?? [['name' => 'a', 'weight' => 50], ['name' => 'b', 'weight' => 50]],
         'countries' => experimentNormalizeCountries($body['countries'] ?? null),
+        'mode' => $body['mode'] ?? 'legacy',
+        'placement_key' => isset($body['placement_key']) ? trim((string)$body['placement_key']) : null,
+        'b_percent' => $body['b_percent'] ?? null,
+        'languages' => normalizeExperimentLanguages($body['languages'] ?? null),
+        'match_mode' => strtolower((string)($body['match_mode'] ?? 'all')),
+        'goal_event' => isset($body['goal_event']) ? trim((string)$body['goal_event']) : null,
+        'icon_key' => isset($body['icon_key']) ? trim((string)$body['icon_key']) : null,
     ];
     if ($definition['screen'] === '') $definition['screen'] = null;
 
@@ -66,12 +73,15 @@ function handleExperimentsCreate(string $projectId): void {
     $id = uuid4();
     $now = now();
     getDb()->prepare(
-        'INSERT INTO experiments (id, project_id, experiment_key, name, screen, status, traffic_percent, variants, countries, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO experiments (id, project_id, experiment_key, name, screen, status, traffic_percent, variants, countries, mode, placement_key, revision, b_percent, languages, match_mode, goal_event, icon_key, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )->execute([
         $id, $projectId, $definition['key'], $definition['name'], $definition['screen'], 'draft', $definition['traffic_percent'],
         json_encode($definition['variants'], JSON_UNESCAPED_UNICODE),
         $definition['countries'] === null ? null : json_encode($definition['countries'], JSON_UNESCAPED_UNICODE),
+        $definition['mode'], $definition['placement_key'], $definition['mode'] === 'legacy' ? 0 : 1, $definition['b_percent'],
+        $definition['languages'] === null ? null : json_encode($definition['languages'], JSON_UNESCAPED_UNICODE), $definition['match_mode'],
+        $definition['goal_event'], $definition['icon_key'],
         $now, $now,
     ]);
 
@@ -215,17 +225,31 @@ function handleExperimentResults(string $projectId, string $experimentKey): void
     $fromDay = $window['from_day'];
     $toDay = $window['to_day'];
 
-    $cells = counterReadCells($projectId, 'experiment', $fromDay, $toDay);
     $experimentForAnalysis = [
         'experiment_key' => $existing['experiment_key'],
         'variants' => json_decode($existing['variants'], true),
+        'revision' => (int)($existing['revision'] ?? 0),
     ];
-    $analyzed = experimentCounterAnalyze($experimentForAnalysis, $cells);
+    $v2 = in_array($existing['mode'] ?? 'legacy', ['visibility', 'variants'], true);
+    if ($v2) {
+        $resultFrom = substr((string)($existing['started_at'] ?? $existing['created_at']), 0, 10);
+        $resultTo = gmdate('Y-m-d');
+        $analyzed = experimentCounterAnalyzeV2(
+            $experimentForAnalysis,
+            counterReadExperimentCellsV2($projectId, 'experiment_exposure_v2', $resultFrom, $resultTo, $experimentKey, (int)($existing['revision'] ?? 0)),
+            counterReadExperimentCellsV2($projectId, 'experiment_goal_v2', $resultFrom, $resultTo, $experimentKey, (int)($existing['revision'] ?? 0)),
+        );
+        $fromIso = (string)($existing['started_at'] ?? $existing['created_at']);
+        $toIso = $resultTo . 'T00:00:00Z';
+    } else {
+        $analyzed = experimentCounterAnalyze($experimentForAnalysis, counterReadCells($projectId, 'experiment', $fromDay, $toDay));
+    }
 
     jsonResponse(200, [
         'experiment' => rowToExperimentResponse($existing),
         'range' => ['from' => $fromIso, 'to' => $toIso],
-        'unit' => 'sessions',
+        'unit' => $v2 ? 'installations' : 'sessions',
+        'basis' => $v2 ? 'since_revision_started' : 'selected_range',
         'variants' => $analyzed['variants'],
         'comparison' => $analyzed['comparison'],
     ]);
@@ -249,12 +273,67 @@ function handleExperimentsConfig(): void {
 
     $stmt = getDb()->prepare(
         "SELECT experiment_key, status, selected_variant, traffic_percent, variants, countries
-           FROM experiments WHERE project_id = ? AND status IN ('active', 'shipped')"
+           FROM experiments WHERE project_id = ? AND status IN ('active', 'shipped') AND mode = 'legacy'"
     );
     $stmt->execute([$projectId]);
 
     header('Cache-Control: public, max-age=300');
     jsonResponse(200, ['experiments' => array_map('experimentConfigResponse', $stmt->fetchAll())]);
+}
+
+/** V2 SDK config contains app-authored placement rules, never an installation identifier. */
+function handleExperimentsConfigV2(): void {
+    checkOrigin();
+    $projectId = requireApiKey();
+    $ip = clientIp() ?? 'unknown';
+    if (defined('INGEST_IP_ENABLED') && INGEST_IP_ENABLED && $ip !== 'unknown') {
+        $ipRps = defined('INGEST_IP_RPS') ? (int)INGEST_IP_RPS : 5;
+        $ipBurst = defined('INGEST_IP_BURST') ? (int)INGEST_IP_BURST : 60;
+        enforceLimit("experiments:config:ip:$ip", $ipRps, $ipBurst);
+    }
+    $stmt = getDb()->prepare(
+        "SELECT experiment_key, status, selected_variant, variants, countries, mode, placement_key, revision, b_percent, languages, match_mode, goal_event
+           FROM experiments WHERE project_id = ? AND status IN ('active', 'shipped') AND mode IN ('visibility', 'variants')"
+    );
+    $stmt->execute([$projectId]);
+    $items = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $variants = json_decode($row['variants'], true) ?: [];
+        $selectedIndex = null;
+        foreach ($variants as $i => $variant) if (($variant['name'] ?? null) === ($row['selected_variant'] ?? null)) $selectedIndex = $i;
+        $shippedId = $selectedIndex === null ? null : ($selectedIndex === 0 ? 'a' : 'b');
+        $variantDtos = [];
+        foreach ($variants as $i => $variant) {
+            $id = $i === 0 ? 'a' : 'b';
+            $variantDtos[] = [
+                'id' => $id,
+                'label' => (string)($variant['name'] ?? $id),
+                'weight' => $row['status'] === 'shipped' ? ($id === $shippedId ? 100 : 0) : (int)($variant['weight'] ?? 0),
+            ];
+        }
+        $items[] = [
+            'key' => $row['experiment_key'], 'revision' => (int)$row['revision'], 'mode' => $row['mode'],
+            'status' => $row['status'], 'placement_key' => $row['placement_key'],
+            'b_percent' => $row['status'] === 'shipped' ? ($shippedId === 'b' ? 100 : 0) : (int)$row['b_percent'],
+            'variants' => $variantDtos,
+            'audience' => ['countries' => $row['countries'] === null ? null : json_decode($row['countries'], true),
+                'languages' => $row['languages'] === null ? null : json_decode($row['languages'], true), 'match_mode' => $row['match_mode']],
+            'goal_event' => $row['goal_event'], 'selected_variant' => $shippedId,
+        ];
+    }
+    header('Cache-Control: public, max-age=300');
+    jsonResponse(200, ['schema' => 2, 'experiments' => $items]);
+}
+
+function normalizeExperimentLanguages($raw): ?array {
+    if (!is_array($raw)) return null;
+    $values = [];
+    foreach ($raw as $language) {
+        $code = strtolower(explode('-', trim((string)$language))[0]);
+        if ($code !== '' && !in_array($code, $values, true)) $values[] = $code;
+    }
+    sort($values);
+    return $values ?: null;
 }
 
 /** Whether $from -> $to is an allowed status transition. Mirrors ExperimentStatus.kt exactly. */
@@ -280,7 +359,7 @@ function experimentEditableFields(string $status): array {
 
 function findExperimentRow(string $projectId, string $experimentKey): ?array {
     $stmt = getDb()->prepare(
-        'SELECT experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, created_at, started_at, ended_at
+        'SELECT experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, mode, placement_key, revision, b_percent, languages, match_mode, goal_event, icon_key, created_at, started_at, ended_at
            FROM experiments WHERE project_id = ? AND experiment_key = ? LIMIT 1'
     );
     $stmt->execute([$projectId, $experimentKey]);
@@ -303,6 +382,14 @@ function rowToExperimentResponse(array $row): array {
         'traffic_percent' => (int)$row['traffic_percent'],
         'variants' => json_decode($row['variants'], true),
         'countries' => $row['countries'] !== null ? json_decode($row['countries'], true) : null,
+        'mode' => $row['mode'] ?? 'legacy',
+        'placement_key' => $row['placement_key'] ?? null,
+        'revision' => (int)($row['revision'] ?? 0),
+        'b_percent' => isset($row['b_percent']) ? (int)$row['b_percent'] : null,
+        'languages' => isset($row['languages']) ? json_decode($row['languages'], true) : null,
+        'match_mode' => $row['match_mode'] ?? 'all',
+        'goal_event' => $row['goal_event'] ?? null,
+        'icon_key' => $row['icon_key'] ?? null,
         'created_at' => $row['created_at'],
         'started_at' => $row['started_at'],
         'ended_at' => $row['ended_at'],

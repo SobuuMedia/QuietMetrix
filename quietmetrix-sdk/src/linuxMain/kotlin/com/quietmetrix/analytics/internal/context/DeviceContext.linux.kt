@@ -21,6 +21,7 @@ private fun kernelRelease(): String? = memScoped {
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "linux"
+    actual val deviceClass: String = "desktop"
     actual val language: String? = envLanguage()
     actual val appVersion: String? = null
     actual val screenWidth: Int? = null

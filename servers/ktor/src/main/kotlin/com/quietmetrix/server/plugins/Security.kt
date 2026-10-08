@@ -2,7 +2,9 @@ package com.quietmetrix.server.plugins
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.quietmetrix.server.auth.acceptsSession
 import com.quietmetrix.server.config.AppConfig
+import com.quietmetrix.server.persistence.UserRepository
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -10,8 +12,10 @@ import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.response.respond
+import org.koin.ktor.ext.inject
 
 fun Application.configureSecurity(config: AppConfig) {
+    val users by inject<UserRepository>()
     val jwtSecret = config.auth.jwtSecret
     val jwtIssuer = config.auth.jwtIssuer
     val jwtAudience = config.auth.jwtAudience
@@ -26,7 +30,7 @@ fun Application.configureSecurity(config: AppConfig) {
             )
             validate { credential ->
                 if (credential.payload.audience.contains(jwtAudience) &&
-                    credential.payload.issuer == jwtIssuer) {
+                    credential.payload.issuer == jwtIssuer && users.acceptsSession(credential.payload)) {
                     JWTPrincipal(credential.payload)
                 } else null
             }

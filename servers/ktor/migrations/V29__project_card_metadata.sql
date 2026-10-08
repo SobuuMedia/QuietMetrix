@@ -1,0 +1,5 @@
+ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS icon_key VARCHAR(32) NOT NULL DEFAULT 'book';
+
+ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS declared_platforms TEXT NOT NULL DEFAULT '[]';

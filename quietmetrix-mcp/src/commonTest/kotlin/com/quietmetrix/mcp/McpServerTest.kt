@@ -100,7 +100,7 @@ class McpServerTest {
     fun createProjectToolCallSucceeds() = runTest {
         val http = FakeHttpClient()
         http.enqueue(201, """{"id":"proj_1","name":"App","api_key":"qm_ak_abc","api_key_last4":"kabc"}""")
-        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"quietmetrix_create_project","arguments":{"url":"https://qm.example.com","name":"App"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -115,7 +115,7 @@ class McpServerTest {
 
     @Test
     fun createProjectToolCallWithoutTokenReturnsToolError() = runTest {
-        val response = server(FakeHttpClient(), emptyMap()).handle(
+        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"quietmetrix_create_project","arguments":{"url":"https://qm.example.com","name":"App"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -138,7 +138,7 @@ class McpServerTest {
     fun listProjectsToolCallReturnsServerBody() = runTest {
         val http = FakeHttpClient()
         http.enqueue(200, """{"projects":[],"total":0}""")
-        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"quietmetrix_list_projects","arguments":{"url":"https://qm.example.com"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -172,7 +172,7 @@ class McpServerTest {
     fun getAggregatesToolCallSendsRangeAndReturnsServerBody() = runTest {
         val http = FakeHttpClient()
         http.enqueue(200, """{"top_events":[]}""")
-        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"quietmetrix_get_aggregates","arguments":{"url":"https://qm.example.com","project_id":"proj_1","range":"1d"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -189,7 +189,7 @@ class McpServerTest {
     fun getAggregatesToolCallDefaultsRangeToSevenDays() = runTest {
         val http = FakeHttpClient()
         http.enqueue(200, """{"top_events":[]}""")
-        server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"quietmetrix_get_aggregates","arguments":{"url":"https://qm.example.com","project_id":"proj_1"}}}"""
         )
         assertTrue(http.requests.single().url.contains("range=7d"))
@@ -197,7 +197,7 @@ class McpServerTest {
 
     @Test
     fun getAggregatesToolCallWithoutProjectIdReturnsToolError() = runTest {
-        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"quietmetrix_get_aggregates","arguments":{"url":"https://qm.example.com"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -208,7 +208,7 @@ class McpServerTest {
 
     @Test
     fun getAggregatesToolCallWithAnInvalidRangeReturnsToolError() = runTest {
-        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"quietmetrix_get_aggregates","arguments":{"url":"https://qm.example.com","project_id":"proj_1","range":"1w"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -219,7 +219,7 @@ class McpServerTest {
     fun listFunnelsToolCallReturnsServerBody() = runTest {
         val http = FakeHttpClient()
         http.enqueue(200, """{"funnels":[{"funnel_key":"signup"}]}""")
-        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"quietmetrix_list_funnels","arguments":{"url":"https://qm.example.com","project_id":"proj_1"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -231,7 +231,7 @@ class McpServerTest {
     fun getFunnelResultsToolCallSendsFunnelKeyInThePathAndRangeInTheQuery() = runTest {
         val http = FakeHttpClient()
         http.enqueue(200, """{"entered":10,"converted":4}""")
-        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"quietmetrix_get_funnel_results","arguments":{"url":"https://qm.example.com","project_id":"proj_1","funnel_key":"signup","range":"30d"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -245,7 +245,7 @@ class McpServerTest {
 
     @Test
     fun getFunnelResultsToolCallWithoutFunnelKeyReturnsToolError() = runTest {
-        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz")).handle(
+        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_TOKEN" to "qm_pat_xyz", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"quietmetrix_get_funnel_results","arguments":{"url":"https://qm.example.com","project_id":"proj_1"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -256,7 +256,7 @@ class McpServerTest {
 
     @Test
     fun analyticsToolCallWithoutTokenReturnsToolError() = runTest {
-        val response = server(FakeHttpClient(), emptyMap()).handle(
+        val response = server(FakeHttpClient(), mapOf("QUIETMETRIX_URL" to "https://qm.example.com")).handle(
             """{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"quietmetrix_get_aggregates","arguments":{"url":"https://qm.example.com","project_id":"proj_1"}}}"""
         )!!
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
@@ -275,4 +275,14 @@ class McpServerTest {
         val result = json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject
         assertEquals(true, result["isError"]!!.jsonPrimitive.content.toBoolean())
     }
+    @Test
+    fun callerCannotForwardCredentialToAnotherOrigin() = runTest {
+        val http = FakeHttpClient()
+        val response = server(http, mapOf("QUIETMETRIX_TOKEN" to "private-token", "QUIETMETRIX_URL" to "https://qm.example.com")).handle(
+            """{"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"quietmetrix_list_projects","arguments":{"url":"https://attacker.example"}}}"""
+        )!!
+        assertTrue(http.requests.isEmpty())
+        assertEquals(true, json.parseToJsonElement(response).jsonObject["result"]!!.jsonObject["isError"]!!.jsonPrimitive.content.toBoolean())
+    }
+
 }

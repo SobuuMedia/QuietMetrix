@@ -1,13 +1,17 @@
 package com.quietmetrix.server
 
+import com.quietmetrix.server.ai.configureAiMaintenance
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.config.appModule
+import com.quietmetrix.server.maintenance.configureDataMaintenance
 import com.quietmetrix.server.plugins.configureCors
 import com.quietmetrix.server.plugins.configureDefaultHeaders
 import com.quietmetrix.server.plugins.configureMonitoring
+import com.quietmetrix.server.plugins.configurePublicRequestLimits
 import com.quietmetrix.server.plugins.configureSecurity
 import com.quietmetrix.server.plugins.configureSerialization
 import com.quietmetrix.server.plugins.configureStatusPages
+import com.quietmetrix.server.plugins.configureTenantBoundary
 import com.quietmetrix.server.routes.configureAllRoutes
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -24,18 +28,24 @@ fun Application.module() {
         modules(appModule(config))
     }
 
+    configureAiMaintenance()
+    configureDataMaintenance(config)
     configureSerialization()
     configureMonitoring()
     configureDefaultHeaders()
     configureCors(config)
     configureStatusPages()
     configureSecurity(config)
+    configureTenantBoundary(config)
+    configurePublicRequestLimits(config)
 
     // Seed an initial admin from QM_ADMIN_EMAIL / QM_ADMIN_PASSWORD on first run.
     val userRepo: com.quietmetrix.server.persistence.UserRepository = get()
     if (seedAdminUser(userRepo, config.auth.adminEmail, config.auth.adminPassword)) {
         environment.log.info("Seeded initial admin user: ${config.auth.adminEmail}")
     }
+
+    config.auth.adminEmail?.let(userRepo::markPlatformOperator)
 
     routing {
         configureAllRoutes(config)

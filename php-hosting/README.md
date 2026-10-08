@@ -9,3 +9,5 @@ Drop-in PHP backend + static dashboard for IONOS / shared hosting.
 - Static dashboard ships in `dashboard/`, served from the same domain.
 
 See [SETUP.md](SETUP.md) for step-by-step IONOS install instructions.
+
+Optional AI summaries and questions: [configuration, hosted allowances and operator API](../docs/ai.md).

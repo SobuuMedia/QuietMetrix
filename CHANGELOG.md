@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-08
+
+### Added
+- Dashboard-managed experiment visibility and A/B variants with anonymous local assignment,
+  country/language audiences, match-all/match-any rules and consent-aware Compose/SwiftUI placements.
+- Versioned remote funnel definitions and exact supported-window/hourly People counters.
+- Aligned core, Compose and optional debug artifact releases; npm web package and iOS XCFramework assets.
+- Release staging and completeness checks across macOS, Linux and Windows build hosts.
+
+### Fixed
+- Browser tracking now uses the consent-gated aggregate pipeline without the legacy raw transport.
+- Consent/opt-out persist across reloads and process kills; unreadable/corrupt storage and failed writes fail closed.
+- Expanded schema-2 envelopes stay within 512 items and replay immutable receipts after lost acknowledgements.
+- JavaScript outbox mutation, alias contributor witnesses, hourly deduplication and mobile visit lifecycle handling.
+- A disabled restart discards unsent counters left by interrupted consent revocation.
+- Restored the repository's documented MIT license text and included it in release assets.
+
+### Upgrade notes
+- Tracking defaults to disabled until consent. Supply an Android application context and explicit audience values.
+- Build consumers with a Kotlin 2.4.20-compatible compiler. Compose wrappers require Compose Multiplatform 1.12.0.
+- Upgrade the server alongside this SDK for dashboard-managed experiments and schema-2 reporting.
+- See [SDK 0.7.0 release notes](docs/releases/sdk-0.7.0.md) for platform coverage and release steps.
+
 ## [0.6.0] - 2026-09-17
 
 ### Added

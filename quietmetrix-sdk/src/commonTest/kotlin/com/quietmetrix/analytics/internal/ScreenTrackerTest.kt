@@ -24,8 +24,8 @@ class ScreenTrackerTest {
     @BeforeTest
     fun setUp() = runTest {
         ConfigHolder.reset()
-        InMemoryStore.clear()
-        QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "test_", trackingAllowedByDefault = true))
+        com.quietmetrix.analytics.internal.resetTestPreferences()
+        ConfigHolder.set(QuietMetrixConfig(storageKeyPrefix = "test_", trackingAllowedByDefault = true))
         ScreenTracker.reset()
         MetricGateway.reset()
     }
@@ -40,7 +40,7 @@ class ScreenTrackerTest {
         SessionTracker.reset()
         QuietMetrix.stop()
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
         MetricGateway.reset()
     }
 
@@ -81,7 +81,7 @@ class ScreenTrackerTest {
     }
 
     @Test
-    fun `props supplied on enter are dropped, not attached to any counter`() = runTest {
+    fun `props supplied on enter are dropped and not attached to any counter`() = runTest {
         ScreenTracker.enter("Home", props = mapOf("tab" to "feed"), now = t0)
         ScreenTracker.enter("Cart", now = t0.plus(2.seconds))
 

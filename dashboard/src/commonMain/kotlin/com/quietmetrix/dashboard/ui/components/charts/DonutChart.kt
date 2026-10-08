@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +36,7 @@ import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.ResponsiveScope
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.min
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 data class DonutData(val label: String, val value: Float)
 

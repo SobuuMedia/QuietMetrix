@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Regression test: ensureInstalled() must create the `counters` / `counters_quarantine`
+ * Regression test: ensureInstalled() must create the v1/v2 counter tables
  * tables on an EXISTING install (one whose `users` table already exists), not just on a
  * fresh install. schema.sql only ever runs in full when `users` is missing (see
  * ensureInstalled()'s step 1), so a table added to schema.sql after a project has already
@@ -49,6 +49,11 @@ function check(string $label, $expected, $actual): void {
     echo '    expected: ' . var_export($expected, true) . "\n";
     echo '    actual:   ' . var_export($actual, true) . "\n";
 }
+function columnExists(PDO $db, string $table, string $column): bool {
+    $stmt = $db->prepare('SELECT 1 FROM information_schema.columns WHERE table_schema=? AND table_name=? AND column_name=? LIMIT 1');
+    $stmt->execute([DB_NAME, $table, $column]);
+    return $stmt->fetchColumn() !== false;
+}
 
 // --- fixture: a full install (all tables, including counters/counters_quarantine) --------
 
@@ -65,10 +70,13 @@ foreach (explode(';', $cleaned) as $stmt) {
 // migration added to schema.sql without a matching createTableIfMissing() guard.
 $db->exec('DROP TABLE IF EXISTS counters');
 $db->exec('DROP TABLE IF EXISTS counters_quarantine');
+$db->exec('DROP TABLE IF EXISTS counter_batch_receipts_v2');
+$db->exec('DROP TABLE IF EXISTS counter_cells_v2');
 
 check('fixture: users already exists (existing install, not fresh)', true, tableExists($db, 'users'));
 check('fixture: counters is missing before ensureInstalled()', false, tableExists($db, 'counters'));
 check('fixture: counters_quarantine is missing before ensureInstalled()', false, tableExists($db, 'counters_quarantine'));
+check('fixture: v2 counter cells are missing before ensureInstalled()', false, tableExists($db, 'counter_cells_v2'));
 
 // --- the actual bug: ensureInstalled() on this existing install must still create them ---
 
@@ -79,6 +87,14 @@ ensureInstalled();
 
 check('ensureInstalled() creates counters on an existing install', true, tableExists($db, 'counters'));
 check('ensureInstalled() creates counters_quarantine on an existing install', true, tableExists($db, 'counters_quarantine'));
+check('ensureInstalled() creates v2 counter cells on an existing install', true, tableExists($db, 'counter_cells_v2'));
+check('ensureInstalled() creates v2 batch receipts on an existing install', true, tableExists($db, 'counter_batch_receipts_v2'));
+// Simulate an install created before the additive expiry/version columns were released.
+$db->exec('ALTER TABLE counter_cells_v2 DROP COLUMN sdk_version');
+$db->exec('ALTER TABLE counter_batch_receipts_v2 DROP COLUMN expires_at');
+ensureInstalled();
+check('ensureInstalled() adds sdk_version to an existing v2 cells table', true, columnExists($db, 'counter_cells_v2', 'sdk_version'));
+check('ensureInstalled() adds expires_at to an existing v2 receipt table', true, columnExists($db, 'counter_batch_receipts_v2', 'expires_at'));
 
 // A second run must stay idempotent (CREATE TABLE IF NOT EXISTS semantics via tableExists()).
 ensureInstalled();

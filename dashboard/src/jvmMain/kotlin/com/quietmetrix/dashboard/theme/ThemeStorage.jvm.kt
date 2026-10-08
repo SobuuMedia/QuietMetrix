@@ -12,8 +12,9 @@ actual fun saveThemeMode(mode: ThemeMode) {
 }
 
 actual fun getThemeMode(): ThemeMode {
-    val raw = store[KEY] ?: return ThemeMode.Dark
-    return runCatching { ThemeMode.valueOf(raw) }.getOrDefault(ThemeMode.Dark)
+    return parseThemeMode(store[KEY])
 }
 
 actual fun resolveSystemThemeMode(): ThemeMode = ThemeMode.Dark
+
+actual fun observeSystemThemeMode(onChange: (ThemeMode) -> Unit): () -> Unit = {}

@@ -10,7 +10,8 @@ function handleUsersList(): void {
     $session = requireSession();
     requireAdmin($session);
 
-    $stmt = getDb()->query('SELECT id, email, role, status, created_at FROM users ORDER BY created_at DESC');
+     $stmt = getDb()->prepare('SELECT id, email, role, status, created_at FROM users' . (cloudMode() && !$session['platformOperator'] ? ' WHERE tenant_id=?' : '') . ' ORDER BY created_at DESC');
+    $stmt->execute(cloudMode() && !$session['platformOperator'] ? [$session['tenantId']] : []);
     jsonResponse(200, ['users' => $stmt->fetchAll()]);
 }
 
@@ -41,14 +42,17 @@ function handleUserInvite(): void {
         return;
     }
 
+    $newOrganization = ($body['new_organization'] ?? false) === true;
+    if ($newOrganization && (!$session['platformOperator'] || $role !== 'admin')) { errorResponse(403, 'forbidden', 'Only a platform operator can invite an organization administrator'); return; }
+    $tenant = $newOrganization ? uuid4() : $session['tenantId'];
     $id      = uuid4();
     $token   = randomToken();
     $expires = gmdate('Y-m-d\TH:i:s\Z', time() + INVITE_EXPIRY_DAYS * 86400);
 
     getDb()->prepare(
-        'INSERT INTO users (id, email, password_hash, role, status, invite_token, invite_expires, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    )->execute([$id, $email, '!invited', $role, 'invited', tokenHash($token), $expires, now()]);
+        'INSERT INTO users (id, email, password_hash, role, status, invite_token, invite_expires, created_at, tenant_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([$id, $email, '!invited', $role, 'invited', tokenHash($token), $expires, now(), $tenant]);
 
     $link = inviteLink($token);
     if (defined('INVITE_EMAIL_ENABLED') && INVITE_EMAIL_ENABLED) {
@@ -73,7 +77,7 @@ function handleUserUpdateRole(string $userId): void {
         return;
     }
 
-    $stmt = getDb()->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+    $stmt = getDb()->prepare('SELECT role, tenant_id FROM users WHERE id = ? LIMIT 1');
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
     if ($user === false) {
@@ -81,7 +85,7 @@ function handleUserUpdateRole(string $userId): void {
         return;
     }
     // Don't allow demoting the last remaining admin.
-    if ($user['role'] === 'admin' && $role !== 'admin' && countAdmins() <= 1) {
+    if ($user['role'] === 'admin' && $role !== 'admin' && countAdmins(cloudMode() ? $user['tenant_id'] : null) <= 1) {
         errorResponse(400, 'last_admin', 'Cannot remove the last admin');
         return;
     }
@@ -99,19 +103,35 @@ function handleUserDelete(string $userId): void {
         errorResponse(400, 'invalid_request', 'You cannot delete your own account');
         return;
     }
-    $stmt = getDb()->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+    $stmt = getDb()->prepare('SELECT role, tenant_id FROM users WHERE id = ? LIMIT 1');
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
     if ($user === false) {
         errorResponse(404, 'not_found', 'User not found');
         return;
     }
-    if ($user['role'] === 'admin' && countAdmins() <= 1) {
+    if ($user['role'] === 'admin' && countAdmins(cloudMode() ? $user['tenant_id'] : null) <= 1) {
         errorResponse(400, 'last_admin', 'Cannot delete the last admin');
         return;
     }
 
-    getDb()->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
+    $db = getDb();
+    $db->beginTransaction();
+    try {
+        $db->prepare('SELECT id FROM users WHERE id=? FOR UPDATE')->execute([$userId]);
+        $owned = $db->prepare('SELECT COUNT(*) FROM projects WHERE owner_user_id=?');
+        $owned->execute([$userId]);
+        if ((int)$owned->fetchColumn() > 0) {
+            $db->rollBack();
+            errorResponse(409, 'account_owns_projects', "Delete this account's projects before deleting the account");
+            return;
+        }
+        $db->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
     jsonResponse(200, ['ok' => true]);
 }
 
@@ -143,12 +163,27 @@ function handleInviteAccept(string $token): void {
         return;
     }
 
-    getDb()->prepare(
-        'UPDATE users SET password_hash = ?, status = ?, invite_token = NULL, invite_expires = NULL WHERE id = ?'
-    )->execute([password_hash($pass, PASSWORD_BCRYPT, ['cost' => 10]), 'active', $user['id']]);
-
-    $jwt     = jwt_encode($user['id'], $user['email'], $user['role'], JWT_SECRET);
-    $refresh = jwt_encode_refresh($user['id'], JWT_SECRET);
+    $db = getDb();
+    $hash = password_hash($pass, PASSWORD_BCRYPT, ['cost'=>10]);
+    $sessionId = bin2hex(random_bytes(16));
+    $jwt = jwt_encode($user['id'], $user['email'], $user['role'], JWT_SECRET, $sessionId);
+    $refresh = jwt_encode_refresh($user['id'], JWT_SECRET, $sessionId);
+    $db->beginTransaction();
+    try {
+        $accept = $db->prepare('UPDATE users SET password_hash=?,status=?,invite_token=NULL,invite_expires=NULL WHERE id=? AND invite_token=? AND invite_expires>?');
+        $accept->execute([$hash,'active',$user['id'],tokenHash($token),now()]);
+        if ($accept->rowCount() !== 1) {
+            $db->rollBack();
+            errorResponse(404,'invalid_invite','Invitation already used or expired');
+            return;
+        }
+        $db->prepare('DELETE FROM auth_sessions WHERE user_id=?')->execute([$user['id']]);
+        $db->prepare('INSERT INTO auth_sessions (id,user_id,refresh_hash,expires_at) VALUES (?,?,?,?)')->execute([$sessionId,$user['id'],hash('sha256',$refresh),time()+172800]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
     jsonResponse(200, [
         'token'         => $jwt,
         'refresh_token' => $refresh,
@@ -162,15 +197,16 @@ function handleInviteAccept(string $token): void {
 function findValidInvite(string $token): ?array {
     $stmt = getDb()->prepare(
         "SELECT id, email, role FROM users
-          WHERE invite_token = ? AND status = 'invited' AND invite_expires > ? LIMIT 1"
+          WHERE invite_token = ? AND status IN ('invited','active') AND invite_expires > ? LIMIT 1"
     );
     $stmt->execute([tokenHash($token), now()]);
     $user = $stmt->fetch();
     return $user === false ? null : $user;
 }
 
-function countAdmins(): int {
-    return (int)getDb()->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
+function countAdmins(?string $tenant = null): int {
+    $q = getDb()->prepare("SELECT COUNT(*) FROM users WHERE role='admin'" . ($tenant !== null ? ' AND tenant_id=?' : ''));
+    $q->execute($tenant !== null ? [$tenant] : []); return (int)$q->fetchColumn();
 }
 
 /** Builds the dashboard invitation link for a raw (unhashed) token. */
@@ -193,4 +229,14 @@ function sendInviteEmail(string $to, string $link): void {
              . "Open this link to set your password and sign in:\n$link\n";
     $headers = "From: $from\r\nContent-Type: text/plain; charset=UTF-8\r\n";
     @mail($to, $subject, $message, $headers);
+}
+
+/** Tenant-authorized assisted recovery; the password changes only after link acceptance. */
+function handleUserRecovery(string $id): void {
+    $session = requireSession(); requireAdmin($session);
+    $q=getDb()->prepare("SELECT id,email,role FROM users WHERE id=? AND status='active'"); $q->execute([$id]); $user=$q->fetch();
+    if (!$user) { errorResponse(404,'not_found','Active account not found'); return; }
+    $token=randomToken();
+    getDb()->prepare('UPDATE users SET invite_token=?,invite_expires=? WHERE id=?')->execute([tokenHash($token),gmdate('Y-m-d\TH:i:s\Z',time()+1800),$id]);
+    jsonResponse(200,['invite_link'=>inviteLink($token),'user'=>$user+['status'=>'active']]);
 }

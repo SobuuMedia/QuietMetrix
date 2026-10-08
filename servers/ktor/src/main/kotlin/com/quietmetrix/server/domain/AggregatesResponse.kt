@@ -15,6 +15,8 @@ import kotlinx.serialization.Serializable
 data class AggregatesResponse(
     val demo: Boolean = false,
     @SerialName("window_days") val windowDays: Int,
+    /** Null means no reportable fixed-window installation count is available for this range. */
+    val people: Long? = null,
     val totals: AggregatesTotals,
     @SerialName("top_events") val topEvents: List<TopEventItem> = emptyList(),
     @SerialName("top_screens") val topScreens: List<TopScreenItem> = emptyList(),

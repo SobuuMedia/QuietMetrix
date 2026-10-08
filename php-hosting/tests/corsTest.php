@@ -22,33 +22,33 @@ function check(string $label, $expected, $actual): void {
     echo '    actual:   ' . var_export($actual, true) . "\n";
 }
 
-$dash = 'https://quietmetrix.getsobuu.com';
-$list = 'https://devweb.getsobuu.com,https://getsobuu.com,https://www.getsobuu.com';
+$dash = 'https://analytics.example.com';
+$list = 'https://dev.example.com,https://example.com,https://www.example.com';
 
-check('echoes an allowlisted dev origin', 'https://devweb.getsobuu.com',
-    resolveCorsOrigin('https://devweb.getsobuu.com', $dash, $list));
-check('echoes the prod apex origin', 'https://getsobuu.com',
-    resolveCorsOrigin('https://getsobuu.com', $dash, $list));
-check('echoes the prod www origin', 'https://www.getsobuu.com',
-    resolveCorsOrigin('https://www.getsobuu.com', $dash, $list));
+check('echoes an allowlisted dev origin', 'https://dev.example.com',
+    resolveCorsOrigin('https://dev.example.com', $dash, $list));
+check('echoes the prod apex origin', 'https://example.com',
+    resolveCorsOrigin('https://example.com', $dash, $list));
+check('echoes the prod www origin', 'https://www.example.com',
+    resolveCorsOrigin('https://www.example.com', $dash, $list));
 check('unlisted origin falls back to the pinned origin (not echoed)', $dash,
     resolveCorsOrigin('https://evil.example.com', $dash, $list));
 check('null request origin falls back to the pinned origin', $dash,
     resolveCorsOrigin(null, $dash, $list));
 check('no allowlist keeps legacy single-origin behaviour', $dash,
-    resolveCorsOrigin('https://devweb.getsobuu.com', $dash, ''));
+    resolveCorsOrigin('https://dev.example.com', $dash, ''));
 check('wildcard as the single pin is honoured', '*',
-    resolveCorsOrigin('https://devweb.getsobuu.com', '*', $list));
+    resolveCorsOrigin('https://dev.example.com', '*', $list));
 check('wildcard inside the allowlist means any origin', '*',
     resolveCorsOrigin('https://anything.example.com', $dash, '*'));
-check('allowlist entries are whitespace-trimmed', 'https://getsobuu.com',
-    resolveCorsOrigin('https://getsobuu.com', $dash, ' https://getsobuu.com , https://www.getsobuu.com '));
+check('allowlist entries are whitespace-trimmed', 'https://example.com',
+    resolveCorsOrigin('https://example.com', $dash, ' https://example.com , https://www.example.com '));
 check('empty pinned origin + unlisted request yields null (no header)', null,
     resolveCorsOrigin('https://evil.example.com', '', $list));
 
 // --- ingest origin policy (isIngestOriginAllowed) --------------------------
 check('ingest: allowlisted browser origin is accepted', true,
-    isIngestOriginAllowed('https://devweb.getsobuu.com', $list));
+    isIngestOriginAllowed('https://dev.example.com', $list));
 check('ingest: unlisted browser origin is rejected', false,
     isIngestOriginAllowed('https://evil.example.com', $list));
 check('ingest: wildcard accepts any origin', true,

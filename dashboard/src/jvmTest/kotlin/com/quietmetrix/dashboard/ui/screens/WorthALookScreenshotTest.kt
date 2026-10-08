@@ -9,7 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -178,7 +178,7 @@ class WorthALookScreenshotTest {
             }
         }
         waitForIdle()
-        onAllNodesWithText("✕")[0].performClick()
+        onAllNodesWithContentDescription("Dismiss")[0].performClick()
         waitForIdle()
         assertEquals("offline_sync", dismissedId)
     }
@@ -202,7 +202,7 @@ class WorthALookScreenshotTest {
             }
         }
         waitForIdle()
-        onAllNodesWithText("💤")[0].performClick()
+        onAllNodesWithContentDescription("Snooze until tomorrow")[0].performClick()
         waitForIdle()
         assertEquals("offline_sync", snoozedId)
     }

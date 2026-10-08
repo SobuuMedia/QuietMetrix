@@ -4,7 +4,9 @@ import com.quietmetrix.server.persistence.tables.Counters
 import com.quietmetrix.server.persistence.tables.CountersQuarantine
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.LocalDate
 import kotlin.test.Test
@@ -205,4 +207,24 @@ class CounterRepositoryTest {
         val totals = repo.totalsByPlatform(pid, "event", day, day, k = 3)
         assertEquals(setOf("ios"), totals.map { it.platform }.toSet())
     }
+    @Test
+    fun `one installation across five days cannot pass distinct installation gate`() {
+        val (repo, pid) = seed(freshDb())
+        repeat(5) { offset -> repo.upsert(pid, day.plusDays(offset.toLong()), delta()) }
+        assertTrue(repo.readCells(pid, "screen_transition", day, day.plusDays(4), k = 5).isEmpty())
+        assertTrue(repo.readTransitionCells(pid, day, day.plusDays(4), "all", k = 5).isEmpty())
+    }
+
+    @Test
+    fun `quarantine never retains rejected personal dimensions`() {
+        val db = freshDb()
+        val (repo, pid) = seed(db)
+        repo.upsert(pid, day, delta(dims = mapOf("email" to "private@example.test")))
+        transaction(db) {
+            val payload = CountersQuarantine.selectAll().single()[CountersQuarantine.payload]
+            assertTrue(!payload.contains("private@example.test"))
+            assertTrue(!payload.contains("email"))
+        }
+    }
+
 }

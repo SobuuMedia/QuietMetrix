@@ -1,8 +1,11 @@
 package com.quietmetrix.dashboard.ui.components
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -11,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.analytics_loading
 import org.jetbrains.compose.resources.stringResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /** Shared loading rows for first-load data sections. */
 @Composable

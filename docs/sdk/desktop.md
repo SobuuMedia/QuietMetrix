@@ -9,11 +9,11 @@ Add the QuietMetrix dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 }
 ```
 
-The KMP SDK publishes multiplatform artifacts for `macosArm64`, `macosX64`, `windowsX64`, and `linuxX64`. Gradle resolves the correct variant automatically based on your target.
+The KMP SDK publishes multiplatform artifacts for `macosArm64`, `mingwX64` (Windows), and `linuxX64`; JVM desktop apps use the `jvm` artifact. Gradle resolves the correct variant automatically based on your target.
 
 ### Platform-specific notes
 

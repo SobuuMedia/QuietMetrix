@@ -6,19 +6,23 @@ import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.config.AuthConfig
 import com.quietmetrix.server.config.DbConfig
 import com.quietmetrix.server.config.RateLimitConfig
+import com.quietmetrix.server.domain.AggregatesResponse
 import com.quietmetrix.server.funnels.CreateFunnelRequest
 import com.quietmetrix.server.funnels.FunnelDefinition
 import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.funnels.FunnelStepDefinition
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
+import com.quietmetrix.server.persistence.CounterV2Repository
 import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.persistence.tables.AccessTokens
+import com.quietmetrix.server.persistence.tables.CounterCellsV2
 import com.quietmetrix.server.persistence.tables.Counters
 import com.quietmetrix.server.persistence.tables.CountersQuarantine
+import com.quietmetrix.server.persistence.tables.FunnelDefinitionRevisions
 import com.quietmetrix.server.persistence.tables.FunnelManifests
 import com.quietmetrix.server.persistence.tables.Funnels
 import com.quietmetrix.server.persistence.tables.ProjectMembers
@@ -48,6 +52,8 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Date
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -94,6 +100,7 @@ class AnalyticsTokenAuthIntegrationTest {
                 single { ProjectMemberRepository(get()) }
                 single { AccessTokenRepository(get()) }
                 single { CounterRepository(get()) }
+                single { CounterV2Repository(get()) }
                 single { FunnelRepository(get()) }
                 single { FunnelRegistrationService(get()) }
                 single { RateLimiter(config.rateLimit, kotlinx.coroutines.CoroutineScope(Dispatchers.Default + SupervisorJob())) }
@@ -112,7 +119,7 @@ class AnalyticsTokenAuthIntegrationTest {
         transaction(db) {
             SchemaUtils.create(
                 Users, Projects, ProjectMembers, AccessTokens,
-                Funnels, FunnelManifests, Counters, CountersQuarantine,
+                Funnels, FunnelDefinitionRevisions, FunnelManifests, Counters, CounterCellsV2, CountersQuarantine,
             )
         }
         return db
@@ -164,6 +171,33 @@ class AnalyticsTokenAuthIntegrationTest {
         }
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(!response.bodyAsText().contains("Parameter 'from' is required"))
+    }
+
+    @Test
+    fun `aggregates reports exact seven day installations only after the witness gate`() = testApplication {
+        val config = testConfig()
+        val db = freshDb("aggregates_people_window")
+        val userId = UserRepository(db).create("admin@test.com", "password")
+        val projectId = seedProject(db, userId)
+        val pat = AccessTokenRepository(db).create(userId, "agent", setOf("analytics:read"))
+        val today = LocalDate.now(ZoneOffset.UTC)
+        val repo = CounterRepository(db, kThreshold = 5)
+        val dims = mapOf("scope_kind" to "project", "scope_key" to "all", "days" to "7", "end_day" to today.toString())
+        val contribution = CounterRepository.CounterDelta("unique_window_v2", dims, platform = "android", n = 1, isNewDevice = true)
+        repeat(4) { repo.upsert(projectId, today, contribution) }
+        application { testModule(config, db) }
+
+        val hidden = client.get("/api/v1/projects/proj_$projectId/aggregates?range=7d") {
+            header("Authorization", "Bearer ${pat.token}")
+        }
+        assertEquals(HttpStatusCode.OK, hidden.status)
+        assertEquals(null, Json.decodeFromString<AggregatesResponse>(hidden.bodyAsText()).people)
+
+        repo.upsert(projectId, today, contribution)
+        val reportable = client.get("/api/v1/projects/proj_$projectId/aggregates?range=7d") {
+            header("Authorization", "Bearer ${pat.token}")
+        }
+        assertEquals(5L, Json.decodeFromString<AggregatesResponse>(reportable.bodyAsText()).people)
     }
 
     @Test
@@ -349,6 +383,7 @@ class AnalyticsTokenAuthIntegrationTest {
         val db = freshDb("analytics_auth10")
         val owner = UserRepository(db).create("owner@test.com", "password")
         val stranger = UserRepository(db).create("stranger@test.com", "password")
+        UserRepository(db).updateRole(stranger, "reviewer")
         val projectId = seedProject(db, owner)
         val pat = AccessTokenRepository(db).create(stranger, "agent", setOf("analytics:read"))
         application { testModule(config, db) }
@@ -364,6 +399,7 @@ class AnalyticsTokenAuthIntegrationTest {
         val repo = UserRepository(db)
         val owner = repo.create("owner@isolation.test", "password")
         val stranger = repo.create("stranger@isolation.test", "password")
+        UserRepository(db).updateRole(stranger, "reviewer")
         val projectId = seedProject(db, owner)
         application { testModule(config, db) }
         for (metric in listOf("aggregates", "sessions", "transitions", "search", "friction", "retention")) {
@@ -380,6 +416,7 @@ class AnalyticsTokenAuthIntegrationTest {
         val config = testConfig()
         val db = freshDb("analytics_adjacent_periods")
         val owner = UserRepository(db).create("owner@periods.test", "password")
+        UserRepository(db).updateRole(owner, "developer")
         val projectId = seedProject(db, owner)
         val counters = CounterRepository(db)
         val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)

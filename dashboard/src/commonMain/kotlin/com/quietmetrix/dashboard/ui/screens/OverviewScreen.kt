@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,15 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import com.quietmetrix.dashboard.viewmodel.isLoading
-import com.quietmetrix.dashboard.viewmodel.DataSection
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -56,31 +54,35 @@ import com.quietmetrix.dashboard.format.formatDuration
 import com.quietmetrix.dashboard.format.formatMinorUnits
 import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.nav.WindowSizeClass
-import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_dismiss
-import com.quietmetrix.dashboard.resources.card_top_events
-import com.quietmetrix.dashboard.resources.card_top_values
+import com.quietmetrix.dashboard.resources.ask_overview_question
+import com.quietmetrix.dashboard.resources.comparison_current
+import com.quietmetrix.dashboard.resources.comparison_previous
+import com.quietmetrix.dashboard.resources.ic_ask
+import com.quietmetrix.dashboard.resources.ic_close
+import com.quietmetrix.dashboard.resources.ic_copy
+import com.quietmetrix.dashboard.resources.ic_events
+import com.quietmetrix.dashboard.resources.ic_info
+import com.quietmetrix.dashboard.resources.ic_lock
+import com.quietmetrix.dashboard.resources.ic_twemoji_1f465
+import com.quietmetrix.dashboard.resources.ic_twemoji_1f501
+import com.quietmetrix.dashboard.resources.ic_twemoji_26a0
 import com.quietmetrix.dashboard.resources.overview_breakdown_filter_cd
 import com.quietmetrix.dashboard.resources.overview_card_countries_title
 import com.quietmetrix.dashboard.resources.overview_card_platforms_title
 import com.quietmetrix.dashboard.resources.overview_card_screens_title
-import com.quietmetrix.dashboard.resources.overview_screen_row_visits
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_dominant_platform_body
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_dominant_platform_title
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_empty_body
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_empty_title
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_offline_body
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_offline_title
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_snooze_cd
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_title
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_top_screen_body
-import com.quietmetrix.dashboard.resources.overview_worth_a_look_top_screen_title
-import com.quietmetrix.dashboard.resources.overview_key_card_manage
-import com.quietmetrix.dashboard.resources.overview_key_card_status_receiving
-import com.quietmetrix.dashboard.resources.overview_key_card_status_unknown
-import com.quietmetrix.dashboard.resources.overview_key_card_status_waiting
-import com.quietmetrix.dashboard.resources.overview_key_card_title
+import com.quietmetrix.dashboard.resources.overview_chart_metric_actions
+import com.quietmetrix.dashboard.resources.overview_chart_metric_people
+import com.quietmetrix.dashboard.resources.overview_chart_metric_visits
+import com.quietmetrix.dashboard.resources.overview_chart_record_day
+import com.quietmetrix.dashboard.resources.overview_chart_title_daily
+import com.quietmetrix.dashboard.resources.overview_chart_title_hourly
+import com.quietmetrix.dashboard.resources.overview_chart_title_weekly
+import com.quietmetrix.dashboard.resources.overview_empty_greeting
+import com.quietmetrix.dashboard.resources.overview_empty_headline_highlight
+import com.quietmetrix.dashboard.resources.overview_empty_headline_lead
+import com.quietmetrix.dashboard.resources.overview_empty_headline_tail
 import com.quietmetrix.dashboard.resources.overview_empty_setup_code_init_js
 import com.quietmetrix.dashboard.resources.overview_empty_setup_code_init_kotlin
 import com.quietmetrix.dashboard.resources.overview_empty_setup_code_init_swift
@@ -96,58 +98,70 @@ import com.quietmetrix.dashboard.resources.overview_empty_setup_step3_body
 import com.quietmetrix.dashboard.resources.overview_empty_setup_step3_title
 import com.quietmetrix.dashboard.resources.overview_empty_setup_title
 import com.quietmetrix.dashboard.resources.overview_empty_setup_waiting
-import com.quietmetrix.dashboard.resources.ic_events
-import com.quietmetrix.dashboard.resources.ic_info
-import com.quietmetrix.dashboard.resources.ic_overview
-import com.quietmetrix.dashboard.resources.kpi_errors
-import com.quietmetrix.dashboard.resources.overview_empty_greeting
-import com.quietmetrix.dashboard.resources.overview_empty_headline_highlight
-import com.quietmetrix.dashboard.resources.overview_empty_headline_lead
-import com.quietmetrix.dashboard.resources.overview_empty_headline_tail
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_body
-import com.quietmetrix.dashboard.resources.overview_error_ai_nap_emoji
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_title
-import com.quietmetrix.dashboard.resources.overview_chart_metric_actions
-import com.quietmetrix.dashboard.resources.overview_chart_metric_visits
-import com.quietmetrix.dashboard.resources.overview_chart_record_day
-import com.quietmetrix.dashboard.resources.overview_chart_title_daily
 import com.quietmetrix.dashboard.resources.overview_error_headline
 import com.quietmetrix.dashboard.resources.overview_hero_ai_chip
+import com.quietmetrix.dashboard.resources.overview_hero_change_less
+import com.quietmetrix.dashboard.resources.overview_hero_change_more
+import com.quietmetrix.dashboard.resources.overview_hero_change_same
+import com.quietmetrix.dashboard.resources.overview_hero_copied
 import com.quietmetrix.dashboard.resources.overview_hero_copy
+import com.quietmetrix.dashboard.resources.overview_hero_current_period
 import com.quietmetrix.dashboard.resources.overview_hero_greeting
 import com.quietmetrix.dashboard.resources.overview_hero_loading
 import com.quietmetrix.dashboard.resources.overview_hero_opened
-import com.quietmetrix.dashboard.resources.overview_hero_sessions
-import com.quietmetrix.dashboard.resources.overview_hero_tail_generic
+import com.quietmetrix.dashboard.resources.overview_hero_people
 import com.quietmetrix.dashboard.resources.overview_hero_tail_standout
 import com.quietmetrix.dashboard.resources.overview_hero_tell_me_more
-import com.quietmetrix.dashboard.resources.overview_hero_trend_down
-import com.quietmetrix.dashboard.resources.overview_hero_trend_up
+import com.quietmetrix.dashboard.resources.overview_hero_unavailable
+import com.quietmetrix.dashboard.resources.overview_key_card_manage
+import com.quietmetrix.dashboard.resources.overview_key_card_status_receiving
+import com.quietmetrix.dashboard.resources.overview_key_card_status_unknown
+import com.quietmetrix.dashboard.resources.overview_key_card_status_waiting
+import com.quietmetrix.dashboard.resources.overview_key_card_title
 import com.quietmetrix.dashboard.resources.overview_privacy_body
 import com.quietmetrix.dashboard.resources.overview_privacy_gdpr_chip
 import com.quietmetrix.dashboard.resources.overview_privacy_info_cd
-import com.quietmetrix.dashboard.resources.overview_privacy_info_glyph
-import com.quietmetrix.dashboard.resources.overview_privacy_lock_emoji
 import com.quietmetrix.dashboard.resources.overview_privacy_no_banner_chip
 import com.quietmetrix.dashboard.resources.overview_privacy_title
-import com.quietmetrix.dashboard.resources.overview_vital_duration_caption
+import com.quietmetrix.dashboard.resources.overview_screen_row_visits
+import com.quietmetrix.dashboard.resources.overview_vital_crashes_label
+import com.quietmetrix.dashboard.resources.overview_vital_crashes_reported_caption
+import com.quietmetrix.dashboard.resources.overview_vital_crashes_suppressed_caption
+import com.quietmetrix.dashboard.resources.overview_vital_crashes_unavailable
+import com.quietmetrix.dashboard.resources.overview_vital_duration_approximate_caption
 import com.quietmetrix.dashboard.resources.overview_vital_duration_label
-import com.quietmetrix.dashboard.resources.overview_vital_errors_caption
+import com.quietmetrix.dashboard.resources.overview_vital_duration_reported_caption
+import com.quietmetrix.dashboard.resources.overview_vital_duration_suppressed_caption
 import com.quietmetrix.dashboard.resources.overview_vital_filter_chip
+import com.quietmetrix.dashboard.resources.overview_vital_people_caption
+import com.quietmetrix.dashboard.resources.overview_vital_people_label
+import com.quietmetrix.dashboard.resources.overview_vital_people_suppressed
+import com.quietmetrix.dashboard.resources.overview_vital_people_unavailable
 import com.quietmetrix.dashboard.resources.overview_vital_retention_caption
 import com.quietmetrix.dashboard.resources.overview_vital_retention_label
 import com.quietmetrix.dashboard.resources.overview_vital_retention_not_tracked
-import com.quietmetrix.dashboard.resources.overview_vital_sessions_caption
-import com.quietmetrix.dashboard.resources.overview_vital_sessions_label
-import com.quietmetrix.dashboard.resources.overview_vital_trend_down
-import com.quietmetrix.dashboard.resources.overview_vital_trend_up
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_dominant_platform_body
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_dominant_platform_title
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_empty_body
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_empty_title
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_offline_body
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_offline_title
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_snooze_cd
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_title
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_top_screen_body
+import com.quietmetrix.dashboard.resources.overview_worth_a_look_top_screen_title
 import com.quietmetrix.dashboard.resources.state_no_data
-import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
 import com.quietmetrix.dashboard.ui.components.ContentState
+import com.quietmetrix.dashboard.ui.components.DashboardCard
+import com.quietmetrix.dashboard.ui.components.EmojiVector
 import com.quietmetrix.dashboard.ui.components.EmptyState
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.LayoutFlow
@@ -158,19 +172,25 @@ import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.SkeletonBox
 import com.quietmetrix.dashboard.ui.components.charts.BarChartCanvas
 import com.quietmetrix.dashboard.ui.components.charts.BarData
+import com.quietmetrix.dashboard.ui.components.comparisonNoteText
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.ui.components.layoutFlowFor
-import com.quietmetrix.dashboard.ui.components.ComparisonNote
-import com.quietmetrix.dashboard.ui.components.comparisonNoteText
+import com.quietmetrix.dashboard.ui.components.responsiveDisplayStyle
+import com.quietmetrix.dashboard.ui.components.screenGlyphFor
 import com.quietmetrix.dashboard.viewmodel.ComparisonData
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.viewmodel.isLoading
 import com.quietmetrix.dashboard.viewmodel.serverUnreachableError
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 import com.quietmetrix.dashboard.nav.NavDestination as AppTab
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 // ---------------------------------------------------------------------------
 // Overview screen (Task 18: hero + privacy card; Tasks 19-21 restyle the
@@ -184,30 +204,12 @@ import com.quietmetrix.dashboard.nav.NavDestination as AppTab
  */
 @Composable
 internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
+    MaxWidthContainer(sizeClass = sizeClass, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                WindowPicker(state.range) { viewModel.selectRange(it) }
-                if (state.demoMode) DemoBadge()
-                IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Overview) },
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.tab_info_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
+            if (state.demoMode) DemoBadge()
 
             state.sectionErrors[DataSection.Aggregates]?.let {
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
@@ -218,6 +220,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
 
             val agg = state.aggregates
             val sess = state.sessions
+            state.aiInsight?.takeIf { it.mode == "ai" }?.let { insight -> Text(insight.text, style = MaterialTheme.typography.bodyLarge) }
             val overviewQuestion = stringResource(Res.string.ask_overview_question)
     val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }
                 ?.name?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.value_none)
@@ -227,12 +230,13 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
             // on compact widths — the same breakpoint ResponsiveRowOrColumn uses elsewhere, but a
             // plain Row/Column here since the two children are NOT evenly weighted like a KPI row.
             if (layoutFlowFor(sizeClass) == LayoutFlow.Row) {
-                Row(horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(40.dp), modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 16.dp)) {
                     OverviewHero(
                         projectName = projectName,
                         range = state.range,
                         agg = agg,
                         sess = sess,
+                        previous = state.comparison.aggregates.takeIf { state.compare },
                         loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                         serverUnreachable = state.serverUnreachableError != null,
                         onTellMeMore = { viewModel.openAskDrawer(overviewQuestion) },
@@ -241,12 +245,13 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                     PrivacyCard(modifier = Modifier.width(320.dp))
                 }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 16.dp)) {
                     OverviewHero(
                         projectName = projectName,
                         range = state.range,
                         agg = agg,
                         sess = sess,
+                        previous = state.comparison.aggregates.takeIf { state.compare },
                         loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                         serverUnreachable = state.serverUnreachableError != null,
                         onTellMeMore = { viewModel.openAskDrawer(overviewQuestion) },
@@ -256,8 +261,8 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 }
             }
 
-            // Task 19: the redesigned 4-vital grid (Sessions/Time per visit/Came back next
-            // day/Errors — see VitalsSection's KDoc) replaces the pre-redesign 5-card Events/
+            // Task 19: the redesigned 4-vital grid (People/Time per visit/Came back next
+            // day/Crashes — see VitalsSection's KDoc) replaces the pre-redesign 5-card Events/
             // Offline-captured/Errors/Sessions/Avg-duration rows above. Events and
             // Offline-captured are no longer shown as standalone vitals cards per the new
             // design (they aren't among its 4 vitals); events remain visible via the daily
@@ -293,6 +298,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 agg = agg,
                 sess = sess,
                 range = state.range,
+                sizeClass = sizeClass,
                 compare = state.compare,
                 previous = state.comparison,
                 anchor = state.analyticsAnchor,
@@ -300,45 +306,6 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions),
                 modifier = Modifier.fillMaxWidth(),
             )
-
-            ResponsiveRowOrColumn(sizeClass) {
-                Card(modifier = Modifier.fillSlot()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            stringResource(Res.string.card_top_events),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        val top = agg?.topEvents ?: emptyList()
-                        if (state.isLoading(DataSection.Aggregates) && agg == null) {
-                            SkeletonBox(Modifier.fillMaxWidth().height(80.dp))
-                        } else if (top.isEmpty()) {
-                            EmptyState(Res.drawable.ic_events, Res.string.state_no_data)
-                        } else {
-                            top.forEach { TopEventRow(it, state.compare, state.comparison.aggregates?.topEvents?.firstOrNull { prior -> prior.eventName == it.eventName }?.count) }
-                        }
-                    }
-                }
-                Card(modifier = Modifier.fillSlot()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            stringResource(Res.string.card_top_values),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        val topValues = agg?.topValues ?: emptyList()
-                        if (state.isLoading(DataSection.Aggregates) && agg == null) {
-                            SkeletonBox(Modifier.fillMaxWidth().height(80.dp))
-                        } else if (topValues.isEmpty()) {
-                            EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
-                        } else {
-                            topValues.forEach { TopValueRow(it, state.compare, state.comparison.aggregates?.topValues?.firstOrNull { prior -> prior.name == it.name }?.totalMinorUnits) }
-                        }
-                    }
-                }
-            }
 
                 ScreensPlatformsCountriesSection(
                     agg = agg,
@@ -356,21 +323,21 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 )
 
                 if (layoutFlowFor(sizeClass) == LayoutFlow.Row) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
                         WorthALookSection(
                             agg = agg,
                             dismissedIds = state.dismissedWorthALookIds,
                             loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                             onDismiss = { viewModel.hideWorthALook(it, snooze = false) },
                             onSnooze = { viewModel.hideWorthALook(it, snooze = true) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(2f),
                         )
                         KeyCard(
                             project = state.projects.firstOrNull { it.id == state.currentProjectId },
                             isReceivingData = (agg?.totals?.events ?: 0L) > 0L,
                             serverUnreachable = state.serverUnreachableError != null,
                             onManageKey = { viewModel.navigateTo(AppTab.Projects) },
-                            modifier = Modifier.width(320.dp),
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 } else {
@@ -446,9 +413,9 @@ private fun formatDwell(ms: Long): String {
  * problem itself, so this branch only avoids claiming a fresh AI summary it can't produce right
  * now, rather than duplicating that message.
  *
- * [agg]/[sess] feed [computeHeroNumbers] for the Normal headline's numbers; see that function's
- * KDoc for the honest proxy-data caveat (no real distinct-people/previous-period metric exists
- * server-side yet).
+ * [agg]/[sess] feed [computeHeroNumbers] for the Normal headline's numbers. People and its
+ * previous-period comparison come from exact backend measures; unavailable measures use neutral
+ * copy rather than proxying sessions or daily event totals.
  */
 @Composable
 internal fun OverviewHero(
@@ -456,19 +423,20 @@ internal fun OverviewHero(
     range: TimeRange,
     agg: AggregatesResponse?,
     sess: SessionsResponse?,
+    previous: AggregatesResponse? = null,
     loading: Boolean,
     serverUnreachable: Boolean,
     onTellMeMore: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val hero = computeHeroNumbers(agg, sess)
-    val isEmpty = hero == null || (hero.sessionCount == 0L && (agg?.totals?.events ?: 0L) == 0L)
+    val hero = computeHeroNumbers(agg, sess, previous)
+    val isEmpty = hero == null || !hero.hasActivity
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         when {
             serverUnreachable -> OverviewHeroError(projectName, range)
             loading && sess == null -> OverviewHeroLoading()
-            sess == null && agg != null -> OverviewHeroError(projectName, range)
+            sess == null && agg != null && hero == null -> OverviewHeroError(projectName, range)
             else -> when (contentStateFor(loading, isEmpty)) {
                 ContentState.Loading -> OverviewHeroLoading()
                 ContentState.Empty -> OverviewHeroEmpty(projectName)
@@ -480,77 +448,96 @@ internal fun OverviewHero(
 
 /** Normal-state hero content: greeting, computed headline and source attribution. */
 @Composable
+private fun OverviewGreeting(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        EmojiVector("👋", Modifier.size(22.dp))
+        Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun OverviewHeroNormal(hero: HeroNumbers, projectName: String, range: TimeRange, onTellMeMore: () -> Unit) {
+    val ai = com.quietmetrix.dashboard.ui.components.LocalAiAccess.current
+    val clipboard = LocalClipboardManager.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var copied by remember { mutableStateOf(false) }
     val extended = LocalExtendedColors.current
     val lime = SpanStyle(background = extended.lime, color = extended.onLime)
 
-    Text(
-        stringResource(Res.string.overview_hero_greeting, projectName, stringResource(range.labelRes)),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    OverviewGreeting(stringResource(Res.string.overview_hero_greeting, projectName, stringResource(range.labelRes)))
 
-    val sessionsLabel = stringResource(Res.string.overview_hero_sessions, formatCount(hero.sessionCount))
     val openedPhrase = stringResource(Res.string.overview_hero_opened, projectName)
-    // Trend DIRECTION only, never the numeric magnitude — see HeroNumbers.momentumIsIncrease's
-    // KDoc: this isn't a real period-over-period comparison, so it must not read like one.
-    val trendPhrase = hero.momentumChange?.let { _ ->
-        stringResource(if (hero.momentumIsIncrease) Res.string.overview_hero_trend_up else Res.string.overview_hero_trend_down)
+    val peopleCount = hero.peopleCount
+    val peopleText = peopleCount?.let { stringResource(Res.string.overview_hero_people, formatCount(it)) }
+    val currentPeriod = stringResource(Res.string.overview_hero_current_period)
+    val comparison = hero.changePercent?.let { change ->
+        when {
+            change > 0 -> stringResource(Res.string.overview_hero_change_more, "${change}%")
+            change < 0 -> stringResource(Res.string.overview_hero_change_less, "${-change}%")
+            else -> stringResource(Res.string.overview_hero_change_same)
+        }
     }
-    val tail = hero.standoutEvent?.let { stringResource(Res.string.overview_hero_tail_standout, it) }
-        ?: stringResource(Res.string.overview_hero_tail_generic)
-
-    val sentence = buildAnnotatedString {
-        withStyle(lime) { append(sessionsLabel) }
+    val eventTail = hero.standoutEvent?.let { stringResource(Res.string.overview_hero_tail_standout, it) }
+    val sentence = if (peopleCount == null) {
+        androidx.compose.ui.text.AnnotatedString(stringResource(Res.string.overview_hero_unavailable))
+    } else buildAnnotatedString {
+        withStyle(lime) { append(peopleText.orEmpty()) }
         append(" ")
         append(openedPhrase)
-        if (trendPhrase != null) {
-            append(", ")
-            withStyle(lime) { append(trendPhrase) }
-            append(".")
-        } else {
-            append(".")
+        append(if (comparison == null) " $currentPeriod" else ", ")
+        if (comparison != null) withStyle(lime) { append(comparison) }
+        if (eventTail != null) {
+            append(" ")
+            append(eventTail)
         }
-        append(" ")
-        append(tail)
     }
-    Text(sentence, style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onBackground)
+    BoxWithConstraints {
+        val headline = responsiveDisplayStyle(maxWidth)
+        Text(sentence, style = headline, color = MaterialTheme.colorScheme.onBackground)
+    }
 
     val aiChip = stringResource(Res.string.overview_hero_ai_chip)
     val tellMeMore = stringResource(Res.string.overview_hero_tell_me_more)
-    val copyLabel = stringResource(Res.string.overview_hero_copy)
+    val copyLabel = stringResource(if (copied) Res.string.overview_hero_copied else Res.string.overview_hero_copy)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Surface(color = extended.chipFill, shape = QmShapeTokens.pill) {
-            Text(
-                aiChip,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Icon(painterResource(Res.drawable.ic_ask), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
+                Text(aiChip, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Text(
+        if (ai.enabled) Text(
             tellMeMore,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.handCursor().clickable(onClick = onTellMeMore),
+            modifier = Modifier.handCursor().clickable(enabled = ai.available, onClick = onTellMeMore),
         )
-        Text(
-            copyLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.handCursor(),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier
+            .handCursor()
+            .clickable {
+                clipboard.setText(AnnotatedString(sentence.toString()))
+                copied = true
+                scope.launch { delay(2_000); copied = false }
+            }
+            .semantics { contentDescription = copyLabel }) {
+            Icon(painterResource(Res.drawable.ic_copy), contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(18.dp))
+            Text(copyLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onBackground)
+        }
     }
 }
 
 /** Loading-state hero content: just the contextual loading line (`_source/02-overview-loading.png`). */
 @Composable
 private fun OverviewHeroLoading() {
-    Text(
-        stringResource(Res.string.overview_hero_loading),
-        style = MaterialTheme.typography.headlineSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(painterResource(Res.drawable.ic_events), contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Text(stringResource(Res.string.overview_hero_loading), style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /** First-run hero content: a welcome line + a headline prompting SDK setup (the numbered
@@ -558,11 +545,7 @@ private fun OverviewHeroLoading() {
 @Composable
 private fun OverviewHeroEmpty(projectName: String) {
     val extended = LocalExtendedColors.current
-    Text(
-        stringResource(Res.string.overview_empty_greeting, projectName),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    OverviewGreeting(stringResource(Res.string.overview_empty_greeting, projectName))
     val lead = stringResource(Res.string.overview_empty_headline_lead)
     val highlight = stringResource(Res.string.overview_empty_headline_highlight)
     val tail = stringResource(Res.string.overview_empty_headline_tail)
@@ -573,7 +556,10 @@ private fun OverviewHeroEmpty(projectName: String) {
         append(" ")
         append(tail)
     }
-    Text(sentence, style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onBackground)
+    BoxWithConstraints {
+        val headline = responsiveDisplayStyle(maxWidth)
+        Text(sentence, style = headline, color = MaterialTheme.colorScheme.onBackground)
+    }
 }
 
 /** Errors-state hero content: the usual greeting + a plain (non-AI, no lime highlights) headline,
@@ -583,27 +569,22 @@ private fun OverviewHeroEmpty(projectName: String) {
 private fun OverviewHeroError(projectName: String, range: TimeRange) {
     val extended = LocalExtendedColors.current
     val rangeLabel = stringResource(range.labelRes)
-    Text(
-        stringResource(Res.string.overview_hero_greeting, projectName, rangeLabel),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-        stringResource(Res.string.overview_error_headline, rangeLabel),
-        style = MaterialTheme.typography.displayLarge,
-        color = MaterialTheme.colorScheme.onBackground,
-    )
+    OverviewGreeting(stringResource(Res.string.overview_hero_greeting, projectName, rangeLabel))
+    BoxWithConstraints {
+        val headline = responsiveDisplayStyle(maxWidth)
+        Text(
+            stringResource(Res.string.overview_error_headline, rangeLabel),
+            style = headline,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+    }
     Surface(
         color = extended.coral.copy(alpha = 0.12f),
         border = BorderStroke(1.dp, extended.coral.copy(alpha = 0.4f)),
         shape = QmShapeTokens.chip,
     ) {
         Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(
-                stringResource(Res.string.overview_error_ai_nap_emoji),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            EmojiVector("💤", Modifier.size(28.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     stringResource(Res.string.overview_error_ai_nap_title),
@@ -644,20 +625,13 @@ internal fun PrivacyCard(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    stringResource(Res.string.overview_privacy_lock_emoji),
-                    style = MaterialTheme.typography.headlineMedium,
-                )
+                Icon(painterResource(Res.drawable.ic_lock), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 val infoCd = stringResource(Res.string.overview_privacy_info_cd)
                 Surface(color = extended.chipFill, shape = QmShapeTokens.pill) {
-                    Text(
-                        stringResource(Res.string.overview_privacy_info_glyph),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                            .semantics { contentDescription = infoCd },
-                    )
+                    Icon(painterResource(Res.drawable.ic_info), contentDescription = infoCd,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp).size(14.dp).semantics { contentDescription = infoCd })
                 }
             }
             Text(stringResource(Res.string.overview_privacy_title), style = MaterialTheme.typography.headlineSmall)
@@ -667,7 +641,8 @@ internal fun PrivacyCard(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Pill(stringResource(Res.string.overview_privacy_gdpr_chip), PillVariant.Neutral)
+                Pill(stringResource(Res.string.overview_privacy_gdpr_chip), PillVariant.Neutral,
+                    leadingIcon = Res.drawable.ic_lock)
                 Pill(stringResource(Res.string.overview_privacy_no_banner_chip), PillVariant.Neutral)
             }
         }
@@ -679,18 +654,14 @@ internal fun PrivacyCard(modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------
 
 /**
- * The redesigned Overview vitals grid: 4 [KpiCard]s — Sessions, Time per visit, Came back next
- * day, Errors — laid out via [ResponsiveRowOrColumn], preceded by an optional lavender "Showing
+ * The redesigned Overview vitals grid: 4 [KpiCard]s — People, Time per visit, Came back next
+ * day, Crashes — laid out via [ResponsiveRowOrColumn], preceded by an optional lavender "Showing
  * only {X} ✕" filter chip (design_handoff_dashboard_redesign/README.md > Overview: "Clicking any
  * of these three [screens/platforms/countries, a later task's 3-card row] shows a lavender
- * 'Showing only {X} ✕' filter chip above the vitals grid"). See [VitalsNumbers]'s KDoc for why 2
- * of the 4 cards are labeled "Sessions"/"Errors" rather than the design handoff's "People"/
- * "Crashes" — the same data-honesty standard Task 18 established for the hero.
- *
- * Only Sessions gets a delta pill: it's the only one of the 4 with a daily historical series
- * ([SessionsResponse.dailySessions]) to honestly compute a trend from (see [VitalsNumbers]'s
- * KDoc). When Compare is enabled, cards use the separately loaded previous UTC window.
- * Unknown or privacy-suppressed previous values stay unavailable.
+ * 'Showing only {X} ✕' filter chip above the vitals grid"). People is read only from the exact
+ * fixed-window API field; session duration is explicitly marked approximate; crash-only data is
+ * unavailable until the backend reports it separately. Compare notes use separately loaded
+ * previous UTC windows and disappear when those values are unavailable.
  */
 @Composable
 internal fun VitalsSection(
@@ -706,7 +677,7 @@ internal fun VitalsSection(
     compare: Boolean = false,
     previous: ComparisonData = ComparisonData(),
 ) {
-    val vitals = computeVitalsNumbers(agg, sess, retention)
+    val vitals = computeVitalsNumbers(retention)
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (activeFilter != null) {
@@ -714,6 +685,7 @@ internal fun VitalsSection(
                 text = stringResource(Res.string.overview_vital_filter_chip, activeFilter),
                 variant = PillVariant.Lavender,
                 onClick = onClearFilter,
+                trailingIcon = Res.drawable.ic_close,
             )
         }
         ResponsiveRowOrColumn(sizeClass) {
@@ -725,40 +697,41 @@ internal fun VitalsSection(
                     KpiSkeleton(Modifier.fillSlot())
                 }
                 else -> {
-                    val v = vitals ?: VitalsNumbers(
-                        sessionCount = 0L,
-                        sessionTrendChange = null,
-                        sessionTrendIsIncrease = true,
-                        avgDurationSec = 0,
-                        retentionDay1 = null,
-                        errorsCount = 0L,
-                    )
-                    val sessionDelta = v.sessionTrendChange?.let { change ->
-                        stringResource(
-                            if (v.sessionTrendIsIncrease) Res.string.overview_vital_trend_up else Res.string.overview_vital_trend_down,
-                            "$change%",
-                        )
+                    val reportedPeople = agg?.people
+                    val peopleMetricAvailable = reportedPeople != null
+                    val peopleCaption = when {
+                        agg?.peopleState == "suppressed" -> Res.string.overview_vital_people_suppressed
+                        peopleMetricAvailable -> Res.string.overview_vital_people_caption
+                        else -> Res.string.overview_vital_people_unavailable
                     }
                     KpiCard(
-                        label = stringResource(Res.string.overview_vital_sessions_label),
-                        value = sess?.totalSessions?.toLong()?.let(::formatCount) ?: stringResource(Res.string.value_none),
-                        sub = stringResource(Res.string.overview_vital_sessions_caption),
-                        delta = sessionDelta,
-                        deltaPositive = v.sessionTrendIsIncrease,
-                        onClick = { onDrillDown("sessions", "sessions") },
-                        compareNote = if (compare) comparisonNoteText(previous.sessions?.totalSessions?.toLong()?.let(::formatCount)) else null,
+                        label = stringResource(Res.string.overview_vital_people_label),
+                        value = reportedPeople?.let(::formatCount) ?: stringResource(Res.string.value_none),
+                        sub = stringResource(peopleCaption),
+                        leadingIcon = Res.drawable.ic_twemoji_1f465,
+                        onClick = { onDrillDown("people", "people") },
+                        compareNote = if (!compare) null else if (agg?.peopleSource == "v2") {
+                            comparisonNoteText(agg.peopleComparison?.let(::formatCount))
+                        } else comparisonNoteText(previous.aggregates?.people?.let(::formatCount)),
                         modifier = Modifier.fillSlot(),
                     )
                     KpiCard(
                         label = stringResource(Res.string.overview_vital_duration_label),
-                        value = sess?.avgDurationSec?.let(::formatDuration) ?: stringResource(Res.string.value_none),
-                        sub = stringResource(Res.string.overview_vital_duration_caption),
+                        value = resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec)
+                            .seconds?.let(::formatDuration) ?: stringResource(Res.string.value_none),
+                        sub = stringResource(when (resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec).source) {
+                            OverviewMeasureSource.ReportedV2 -> Res.string.overview_vital_duration_reported_caption
+                            OverviewMeasureSource.Suppressed -> Res.string.overview_vital_duration_suppressed_caption
+                            else -> Res.string.overview_vital_duration_approximate_caption
+                        }),
+                        leadingIcon = Res.drawable.ic_events,
                         onClick = { onDrillDown("duration", "duration") },
                         compareNote = if (compare) comparisonNoteText(previous.sessions?.avgDurationSec?.let(::formatDuration)) else null,
                         modifier = Modifier.fillSlot(),
                     )
-                    val retentionValue = v.retentionDay1?.let { formatPercent(it) } ?: stringResource(Res.string.value_none)
-                    val retentionCaption = if (v.retentionDay1 != null) {
+                    val retentionDay1 = vitals?.retentionDay1
+                    val retentionValue = retentionDay1?.let { formatPercent(it) } ?: stringResource(Res.string.value_none)
+                    val retentionCaption = if (retentionDay1 != null) {
                         stringResource(Res.string.overview_vital_retention_caption)
                     } else {
                         stringResource(Res.string.overview_vital_retention_not_tracked)
@@ -767,16 +740,23 @@ internal fun VitalsSection(
                         label = stringResource(Res.string.overview_vital_retention_label),
                         value = retentionValue,
                         sub = retentionCaption,
+                        leadingIcon = Res.drawable.ic_twemoji_1f501,
                         onClick = { onDrillDown("retention", "day1") },
                         compareNote = if (compare) comparisonNoteText(computeRetentionVitals(previous.retention).day1?.let(::formatPercent)) else null,
                         modifier = Modifier.fillSlot(),
                     )
                     KpiCard(
-                        label = stringResource(Res.string.kpi_errors),
-                        value = agg?.totals?.errors?.let(::formatCount) ?: stringResource(Res.string.value_none),
-                        sub = stringResource(Res.string.overview_vital_errors_caption),
-                        onClick = { onDrillDown("errors", "errors") },
-                        compareNote = if (compare) comparisonNoteText(previous.aggregates?.totals?.errors?.let(::formatCount)) else null,
+                        label = stringResource(Res.string.overview_vital_crashes_label),
+                        value = resolveOverviewCrashes(agg?.v2Crashes, agg?.v2CrashesState).count
+                            ?.let(::formatCount) ?: stringResource(Res.string.value_none),
+                        sub = stringResource(when (resolveOverviewCrashes(agg?.v2Crashes, agg?.v2CrashesState).source) {
+                            OverviewMeasureSource.ReportedV2 -> Res.string.overview_vital_crashes_reported_caption
+                            OverviewMeasureSource.Suppressed -> Res.string.overview_vital_crashes_suppressed_caption
+                            OverviewMeasureSource.LegacyApproximate -> Res.string.overview_vital_crashes_unavailable
+                            OverviewMeasureSource.Unavailable -> Res.string.overview_vital_crashes_unavailable
+                        }),
+                        leadingIcon = Res.drawable.ic_twemoji_26a0,
+                        onClick = { onDrillDown("crashes", "crashes") },
                         modifier = Modifier.fillSlot(),
                     )
                 }
@@ -791,26 +771,15 @@ internal fun VitalsSection(
 
 /**
  * The redesigned Overview daily-volume chart card: a title that reflects the active
- * [TimeRange]'s bucket granularity, a Visits/Actions segmented control, and a [BarChartCanvas] of
+ * [TimeRange]'s bucket granularity, a People/Visits/Actions segmented control, and a [BarChartCanvas] of
  * the selected series with the real "record day" highlighted in lime. Replaces the two
  * pre-redesign cards ("Daily volume" and "Daily sessions") that stood side by side in
  * `OverviewScreen` — the design handoff describes one card with a metric toggle, not two
  * permanently-stacked charts (design_handoff_dashboard_redesign/README.md > Overview).
  *
- * **Segmented control — "Visits"/"Actions" only, not "People/Visits/Actions":** see
- * [DailyVolumeMetric]'s KDoc. "People" (a distinct-device/WAU count) is not tracked anywhere in
- * this backend — the same gap Tasks 18/19 already found for the hero and vitals grid — and unlike
- * those two tasks there is no honest relabel available here (this control's "Visits" option
- * already *is* the sessions proxy those tasks used for "People"), so the segment is omitted
- * entirely rather than duplicated under a second name.
- *
- * **Title — 2 variants, not 3:** the design handoff's title changes "('Who showed up each day' /
- * '…each hour' / '…each week')" for 3 bucket granularities. [TimeRange] only distinguishes
- * `hourly` vs. not (`TimeRange.kt`) — there is no weekly bucketing anywhere in the backend (every
- * non-hourly range, including [TimeRange.Day90], buckets by day) — so a literal 3rd "each week"
- * title would describe a granularity that never actually renders. Only 2 variants are shown. The
- * wording itself is also changed from "who showed up" (a people/attendance framing) to "what
- * happened", since neither Visits nor Actions is a distinct-person count.
+ * The three-way segmented control matches the handoff. People uses the report endpoint's
+ * privacy-gated distinct-installation bins; the other tabs use session and event totals. On
+ * compact phones the title and tabs stack so all three choices remain visible without clipping.
  *
  * **Record-day callout — real highlight, no fabricated caption:** the design handoff calls out the
  * record day with "a floating '🚀 v2.3 shipped' label and a lime bar"
@@ -836,6 +805,7 @@ internal fun DailyVolumeSection(
     agg: AggregatesResponse?,
     sess: SessionsResponse?,
     range: TimeRange,
+    sizeClass: WindowSizeClass = WindowSizeClass.Expanded,
     modifier: Modifier = Modifier,
     compare: Boolean = false,
     previous: ComparisonData = ComparisonData(),
@@ -843,28 +813,44 @@ internal fun DailyVolumeSection(
     onDayClick: (String, String) -> Unit = { _, _ -> },
     loading: Boolean = false,
 ) {
-    var metric by remember { mutableStateOf(DailyVolumeMetric.Actions) }
+    var metric by remember { mutableStateOf(DailyVolumeMetric.People) }
 
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            val chartTitle: @Composable () -> Unit = {
                 Text(
-                    text = stringResource(
-                        if (range == TimeRange.Day90) Res.string.overview_chart_title_weekly else Res.string.overview_chart_title_daily,
-                    ),
+                    text = stringResource(when {
+                        range == TimeRange.Day90 -> Res.string.overview_chart_title_weekly
+                        range.hourly -> Res.string.overview_chart_title_hourly
+                        else -> Res.string.overview_chart_title_daily
+                    }),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
                 )
-                MetricSegmentedControl(selected = metric, onSelect = { metric = it })
+            }
+            if (sizeClass == WindowSizeClass.Compact) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    chartTitle()
+                    MetricSegmentedControl(selected = metric, onSelect = { metric = it }, modifier = Modifier.align(Alignment.End))
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Box(Modifier.weight(1f)) { chartTitle() }
+                    MetricSegmentedControl(selected = metric, onSelect = { metric = it })
+                }
             }
             Spacer(Modifier.height(8.dp))
 
-            val currentPoints = if (metric == DailyVolumeMetric.Visits) sess?.dailySessions.orEmpty() else agg?.daily.orEmpty()
-            val previousPoints = if (metric == DailyVolumeMetric.Visits) previous.sessions?.dailySessions.orEmpty() else previous.aggregates?.daily.orEmpty()
+            val currentPoints = when (metric) {
+                DailyVolumeMetric.People -> agg?.dailyPeople.orEmpty()
+                DailyVolumeMetric.Visits -> agg?.dailyVisitsV2?.takeIf { it.isNotEmpty() } ?: sess?.dailySessions.orEmpty()
+                DailyVolumeMetric.Actions -> agg?.dailyActionsV2?.takeIf { it.isNotEmpty() } ?: agg?.daily.orEmpty()
+            }
+            val previousPoints = when (metric) {
+                DailyVolumeMetric.People -> agg?.dailyPeoplePrevious.orEmpty()
+                DailyVolumeMetric.Visits -> agg?.dailyVisitsV2Previous?.takeIf { it.isNotEmpty() } ?: previous.sessions?.dailySessions.orEmpty()
+                DailyVolumeMetric.Actions -> agg?.dailyActionsV2Previous?.takeIf { it.isNotEmpty() } ?: previous.aggregates?.daily.orEmpty()
+            }
             val points = analyticsChartPoints(currentPoints, range, anchor)
             val priorPoints = analyticsChartPoints(previousPoints, range, anchor, previous = true)
             val bars = points.map { DailyVolumeBar(formatBucketLabel(it.day, false), it.total) }
@@ -883,7 +869,14 @@ internal fun DailyVolumeSection(
                     bars = bars.map { BarData(it.label, it.value.toFloat()) },
                     highlightIndex = recordIndex,
                     previousValues = if (compare) comparisonDailyValues(points, priorPoints, ((range.seconds + 86399) / 86400).toInt()) else emptyList(),
-                    onBarClick = { index -> onDayClick(if (metric == DailyVolumeMetric.Visits) "day-visits" else "day-actions", points[index].day) },
+                    onBarClick = { index ->
+                        val kind = when (metric) {
+                            DailyVolumeMetric.People -> "day-people"
+                            DailyVolumeMetric.Visits -> "day-visits"
+                            DailyVolumeMetric.Actions -> "day-actions"
+                        }
+                        onDayClick(kind, points[index].day)
+                    },
                 )
                 if (recordIndex != null) {
                     Spacer(Modifier.height(8.dp))
@@ -914,6 +907,7 @@ private fun MetricSegmentedControl(
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         DailyVolumeMetric.entries.forEach { option ->
             val label = when (option) {
+                DailyVolumeMetric.People -> stringResource(Res.string.overview_chart_metric_people)
                 DailyVolumeMetric.Visits -> stringResource(Res.string.overview_chart_metric_visits)
                 DailyVolumeMetric.Actions -> stringResource(Res.string.overview_chart_metric_actions)
             }
@@ -969,16 +963,19 @@ internal fun ScreensPlatformsCountriesSection(
             TopListSkeletonCard(Modifier.fillSlot())
             TopListSkeletonCard(Modifier.fillSlot())
         } else {
-            Card(modifier = Modifier.fillSlot()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.overview_card_screens_title),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+            DashboardCard(modifier = Modifier.fillSlot()) {
+                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EmojiVector("📍", Modifier.size(22.dp))
+                        Text(stringResource(Res.string.overview_card_screens_title), style = MaterialTheme.typography.headlineMedium)
+                    }
                     Spacer(Modifier.height(8.dp))
                     val rows = computeScreenUsage(agg)
                     if (rows.isEmpty()) {
-                        EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EmojiVector("📱", Modifier.size(24.dp))
+                            Text(stringResource(Res.string.state_no_data), style = MaterialTheme.typography.bodyMedium)
+                        }
                     } else {
                         rows.forEach { row ->
                             ScreenUsageRowItem(row, selected = row.screen == activeFilter, onClick = { onSelectFilter(row.screen) })
@@ -987,37 +984,43 @@ internal fun ScreensPlatformsCountriesSection(
                     }
                 }
             }
-            Card(modifier = Modifier.fillSlot()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.overview_card_platforms_title),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+            DashboardCard(modifier = Modifier.fillSlot()) {
+                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EmojiVector("📱", Modifier.size(22.dp))
+                        Text(stringResource(Res.string.overview_card_platforms_title), style = MaterialTheme.typography.headlineMedium)
+                    }
                     Spacer(Modifier.height(8.dp))
                     val rows = computeBreakdownRows(agg?.platforms.orEmpty())
                     if (rows.isEmpty()) {
-                        EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EmojiVector("📱", Modifier.size(24.dp))
+                            Text(stringResource(Res.string.state_no_data), style = MaterialTheme.typography.bodyMedium)
+                        }
                     } else {
                         rows.forEach { row ->
-                            BreakdownRowItem(row, selected = row.name == activeFilter, onClick = { onSelectFilter(row.name) })
+                            BreakdownRowItem(row, selected = row.name == activeFilter, icon = breakdownGlyph(row.name), onClick = { onSelectFilter(row.name) })
                             if (compare) ComparisonNote(previous?.platforms?.firstOrNull { it.displayName == row.name }?.count?.let(::formatCount))
                         }
                     }
                 }
             }
-            Card(modifier = Modifier.fillSlot()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(Res.string.overview_card_countries_title),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+            DashboardCard(modifier = Modifier.fillSlot()) {
+                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EmojiVector("🌍", Modifier.size(22.dp))
+                        Text(stringResource(Res.string.overview_card_countries_title), style = MaterialTheme.typography.headlineMedium)
+                    }
                     Spacer(Modifier.height(8.dp))
                     val rows = computeBreakdownRows(agg?.countries.orEmpty())
                     if (rows.isEmpty()) {
-                        EmptyState(Res.drawable.ic_overview, Res.string.state_no_data)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EmojiVector("🌍", Modifier.size(24.dp))
+                            Text(stringResource(Res.string.state_no_data), style = MaterialTheme.typography.bodyMedium)
+                        }
                     } else {
                         rows.forEach { row ->
-                            BreakdownRowItem(row, selected = row.name == activeFilter, onClick = { onSelectFilter(row.name) })
+                            BreakdownRowItem(row, selected = row.name == activeFilter, icon = "🌍", onClick = { onSelectFilter(row.name) })
                             if (compare) ComparisonNote(previous?.countries?.firstOrNull { it.displayName == row.name }?.count?.let(::formatCount))
                         }
                     }
@@ -1045,7 +1048,10 @@ private fun ScreenUsageRowItem(row: ScreenUsageRow, selected: Boolean, onClick: 
             .semantics { contentDescription = filterCd },
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(row.screen, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.Bold else null)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EmojiVector(screenGlyphFor(row.screen), Modifier.size(20.dp))
+                Text(row.screen, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.Bold else null)
+            }
             Text(formatDwell(row.avgDwellMs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(4.dp))
@@ -1063,7 +1069,16 @@ private fun ScreenUsageRowItem(row: ScreenUsageRow, selected: Boolean, onClick: 
  *  percent, and a [UsageBar] sized by [BreakdownRow.barFraction]. See [ScreenUsageRowItem]'s KDoc
  *  for the [selected] highlight. */
 @Composable
-private fun BreakdownRowItem(row: BreakdownRow, selected: Boolean, onClick: () -> Unit) {
+private fun breakdownGlyph(name: String): String = when (name.lowercase()) {
+    "android" -> "🤖"
+    "ios" -> "🍎"
+    "web" -> "🌐"
+    "desktop", "computer" -> "🖥️"
+    else -> "🌍"
+}
+
+@Composable
+private fun BreakdownRowItem(row: BreakdownRow, selected: Boolean, icon: String, onClick: () -> Unit) {
     val extended = LocalExtendedColors.current
     val filterCd = stringResource(Res.string.overview_breakdown_filter_cd, row.name)
     Column(
@@ -1076,7 +1091,10 @@ private fun BreakdownRowItem(row: BreakdownRow, selected: Boolean, onClick: () -
             .semantics { contentDescription = filterCd },
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.Bold else null)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EmojiVector(icon, Modifier.size(20.dp))
+                Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.Bold else null)
+            }
             Text(formatPercent(row.shareOfTotal), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(4.dp))
@@ -1105,7 +1123,7 @@ private fun UsageBar(fraction: Float, modifier: Modifier = Modifier) {
  *  same flat tonal-fill idiom as [KpiSkeleton], sized taller to approximate a short ranked list. */
 @Composable
 private fun TopListSkeletonCard(modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SkeletonBox(Modifier.width(100.dp).height(16.dp))
             SkeletonBox(Modifier.fillMaxWidth().height(40.dp))
@@ -1149,9 +1167,12 @@ internal fun WorthALookSection(
     onSnooze: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(stringResource(Res.string.overview_worth_a_look_title), style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EmojiVector("👀", Modifier.size(22.dp))
+                Text(stringResource(Res.string.overview_worth_a_look_title), style = MaterialTheme.typography.titleSmall)
+            }
             Spacer(Modifier.height(8.dp))
             if (loading) {
                 SkeletonBox(Modifier.fillMaxWidth().height(40.dp))
@@ -1159,6 +1180,7 @@ internal fun WorthALookSection(
                 val observations = computeWorthALookObservations(agg).filter { it.id !in dismissedIds }
                 if (observations.isEmpty()) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                        EmojiVector("🎈", Modifier.size(24.dp))
                         Text(stringResource(Res.string.overview_worth_a_look_empty_title), style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -1214,28 +1236,31 @@ private fun WorthALookRow(observation: WorthALookObservation, onDismiss: () -> U
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(emoji, style = MaterialTheme.typography.headlineSmall)
+        EmojiVector(emoji, Modifier.size(26.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(
+        EmojiVector(
             "💤",
             modifier = Modifier
                 .clickable(onClick = onSnooze)
                 .handCursor()
                 .padding(6.dp)
+                .size(28.dp)
                 .semantics { contentDescription = snoozeCd },
         )
-        Text(
-            "✕",
-            modifier = Modifier
-                .clickable(onClick = onDismiss)
-                .handCursor()
-                .padding(6.dp)
-                .semantics { contentDescription = dismissCd },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.handCursor().semantics { contentDescription = dismissCd },
+        ) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_close),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
@@ -1281,9 +1306,9 @@ internal fun KeyCard(
 ) {
     val extended = LocalExtendedColors.current
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = extended.lime,
+        contentColor = extended.onLime,
         shape = QmShapeTokens.card,
-        border = BorderStroke(1.dp, extended.lime),
         modifier = modifier,
     ) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1291,11 +1316,11 @@ internal fun KeyCard(
                 SkeletonBox(Modifier.width(140.dp).height(20.dp))
                 SkeletonBox(Modifier.fillMaxWidth().height(32.dp))
             } else {
-                Text(
-                    stringResource(Res.string.overview_key_card_title, project.name),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EmojiVector("🔑", Modifier.size(22.dp))
+                    Text(stringResource(Res.string.overview_key_card_title, project.name), style = MaterialTheme.typography.titleSmall)
+                }
+                Surface(color = extended.onLime.copy(alpha = 0.08f), contentColor = extended.onLime, shape = RoundedCornerShape(6.dp)) {
                     Text(
                         text = "•".repeat(16) + (project.apiKeyLast4 ?: stringResource(Res.string.value_none)),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp).fillMaxWidth(),
@@ -1304,21 +1329,30 @@ internal fun KeyCard(
                         maxLines = 1,
                     )
                 }
-                Text(
-                    text = when {
-                        serverUnreachable -> stringResource(Res.string.overview_key_card_status_unknown)
-                        isReceivingData -> stringResource(Res.string.overview_key_card_status_receiving)
-                        else -> stringResource(Res.string.overview_key_card_status_waiting)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    stringResource(Res.string.overview_key_card_manage),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    EmojiVector(when { serverUnreachable -> "⚠"; isReceivingData -> "🟢"; else -> "⚪" }, Modifier.size(16.dp))
+                    Text(
+                        text = when {
+                            serverUnreachable -> stringResource(Res.string.overview_key_card_status_unknown)
+                            isReceivingData -> stringResource(Res.string.overview_key_card_status_receiving)
+                            else -> stringResource(Res.string.overview_key_card_status_waiting)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = extended.onLime.copy(alpha = 0.78f),
+                    )
+                }
+                Surface(
+                    color = extended.onLime,
+                    contentColor = extended.lime,
+                    shape = RoundedCornerShape(999.dp),
                     modifier = Modifier.clickable(onClick = onManageKey).handCursor(),
-                )
+                ) {
+                    Text(
+                        stringResource(Res.string.overview_key_card_manage),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
             }
         }
     }
@@ -1328,12 +1362,8 @@ internal fun KeyCard(
 // Empty-state setup instructions (Task 21)
 // ---------------------------------------------------------------------------
 
-/** Which language's install/init snippets [SetupInstructionsSection] shows — the design handoff's
- *  "shared Kotlin(KMP)/Swift/JavaScript language switch" (design_handoff_dashboard_redesign/
- *  README.md > Interactions & Behavior > "Empty state"). `internal` (not `private`) so Task 28's
- *  "＋ New funnel" instructional panel (`FunnelsScreen.kt`'s `NewFunnelGuideModal`) can reuse the
- *  exact same language switch rather than declaring a parallel enum. */
-internal enum class SetupLanguage { Kotlin, Swift, JavaScript }
+/** Which language's install/init snippets [SetupInstructionsSection] shows. */
+private enum class SetupLanguage { Kotlin, Swift, JavaScript }
 
 /**
  * Numbered first-run setup instructions shown instead of the 3-card row/"Worth a look"/key card
@@ -1356,7 +1386,7 @@ internal enum class SetupLanguage { Kotlin, Swift, JavaScript }
 internal fun SetupInstructionsSection(modifier: Modifier = Modifier) {
     var language by remember { mutableStateOf(SetupLanguage.Kotlin) }
 
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(stringResource(Res.string.overview_empty_setup_title), style = MaterialTheme.typography.titleMedium)
 
@@ -1415,12 +1445,9 @@ internal fun SetupInstructionsSection(modifier: Modifier = Modifier) {
     }
 }
 
-/** Monospace code block for [SetupInstructionsSection] — same "tonal surface + padded monospace
- *  text" idiom `ExperimentsGuide.kt`'s private `CodeBlock` already establishes. `internal` (not
- *  `private`) so Task 28's `NewFunnelGuideModal` (`FunnelsScreen.kt`) genuinely reuses this
- *  exact composable for its own code snippets instead of a third, parallel duplicate. */
+/** Monospace code block for [SetupInstructionsSection], using a tonal surface and padded code text. */
 @Composable
-internal fun SetupCodeBlock(code: String) {
+private fun SetupCodeBlock(code: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()

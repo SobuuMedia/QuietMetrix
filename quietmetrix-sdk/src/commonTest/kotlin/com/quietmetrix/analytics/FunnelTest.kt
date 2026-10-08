@@ -1,7 +1,6 @@
 package com.quietmetrix.analytics
 
 import com.quietmetrix.analytics.internal.ConfigHolder
-import com.quietmetrix.analytics.internal.InMemoryStore
 import com.quietmetrix.analytics.internal.ScreenTracker
 import com.quietmetrix.analytics.internal.counters.MetricGateway
 import com.quietmetrix.analytics.internal.counters.MetricRecorder
@@ -28,7 +27,7 @@ class FunnelTest {
     @BeforeTest
     fun setUp() = runTest {
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "test_", trackingAllowedByDefault = true))
         ScreenTracker.reset()
         MetricGateway.reset()
@@ -43,7 +42,7 @@ class FunnelTest {
         SessionTracker.reset()
         QuietMetrix.stop()
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
         MetricGateway.reset()
     }
 

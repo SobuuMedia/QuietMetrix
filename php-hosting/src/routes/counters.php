@@ -45,9 +45,28 @@ function handleCountersRequest(): void {
     $platform = is_array($body['sdk'] ?? null) ? (string)($body['sdk']['platform'] ?? '') : '';
     $app = is_array($body['app'] ?? null) ? $body['app'] : [];
     $appVersion = (string)($app['version'] ?? '');
-    $country = strtoupper(substr((string)($app['country'] ?? ''), 0, 2));
+    $countryInput = strtoupper(trim((string)($app['country'] ?? '')));
+    $country = preg_match('/^[A-Z]{2}$/', $countryInput) === 1 ? $countryInput : '';
 
     $cap = defined('COUNTERS_MAX_DISTINCT_CELLS_PER_METRIC') ? (int)COUNTERS_MAX_DISTINCT_CELLS_PER_METRIC : 500;
+
+    if (array_key_exists('batch_id', $body)) {
+        $batchId = $body['batch_id'];
+        if (!is_string($batchId) || !preg_match('/^[A-Za-z0-9_-]{16,64}$/', $batchId)) {
+            errorResponse(400, 'invalid_batch_id', 'batch_id must contain 16-64 URL-safe characters');
+            return;
+        }
+        $result = counterApplyBatchOnce(
+            $projectId, $batchId, counterBatchPayloadHash($body), bin2hex(random_bytes(16)),
+            $day, $platform, $appVersion, $country, $counters, $cap
+        );
+        if ($result['conflict']) {
+            errorResponse(409, 'batch_id_conflict', 'batch_id was already used with a different payload');
+            return;
+        }
+        jsonResponse(202, ['ok' => true, 'accepted' => $result['accepted'], 'quarantined' => $result['quarantined']]);
+        return;
+    }
 
     $accepted = 0;
     $quarantined = 0;

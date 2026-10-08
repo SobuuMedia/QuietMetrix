@@ -19,6 +19,7 @@ dependencyResolutionManagement {
 rootProject.name = "QuietMetrix"
 include(":quietmetrix-sdk")
 include(":quietmetrix-sdk-debug")
+include(":quietmetrix-sdk-compose")
 include(":quietmetrix-cli")
 include(":quietmetrix-mcp")
 include(":dashboard")

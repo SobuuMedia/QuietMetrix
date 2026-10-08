@@ -14,9 +14,9 @@ internal const val NONE_VARIANT = "none"
  */
 internal object VariantAssigner {
 
-    fun assign(spec: ExperimentSpec, bucketingId: String, deviceCountry: String?): String {
+    fun assign(spec: ExperimentSpec, bucketingId: String, countryCode: String?): String {
         val countries = spec.countries
-        if (countries != null && (deviceCountry == null || deviceCountry !in countries)) {
+        if (countries != null && (countryCode == null || countryCode !in countries)) {
             return NONE_VARIANT
         }
         if (bucketOf("${spec.key}:enroll:$bucketingId") >= spec.trafficPercent) {

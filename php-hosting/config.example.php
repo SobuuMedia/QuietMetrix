@@ -74,27 +74,37 @@ define('BASE_PATH', '');
 //             endpoints. Always deploy with DEBUG=false in production.
 define('DEBUG', false);
 
-// Rate limiting on the public ingest endpoints (/api/v1/track*).
+// Shared minute budgets on aggregate ingest endpoints (/api/v1/counters, /api/v2/counters).
 // Turned ON by default — production deployments need this.
 define('RATE_LIMIT_ENABLED', true);
-define('RATE_LIMIT_RPS',     10);   // requests per second per API key
-define('RATE_LIMIT_BURST',   60);   // burst tokens
+define('RATE_LIMIT_RPS',     10);   // per-second configuration, converted to a minute budget
+define('RATE_LIMIT_BURST',   60);   // maximum requests per minute
 
 // Per-IP ingest throttling — abuse defense Stage 1 for the publishable (write-only,
 // project-scoped) API key. Bounded blast radius: a single host cannot saturate a
 // project's shared bucket. See docs/security/publishable-api-key.md.
 define('INGEST_IP_ENABLED', true);
 define('INGEST_IP_RPS',     5);   // requests per second per source IP
-define('INGEST_IP_BURST',   60);  // burst tokens per source IP
+define('INGEST_IP_BURST',   60);  // maximum requests per minute per source IP
 
-// Per-install (anonymousId) ingest throttling + ramp-up detector — abuse defense Stage 2.
-// The SDK's anonymousId is salt-hashed before storage; the raw id is never stored.
-define('INGEST_INSTALL_ENABLED', true);
-define('INGEST_INSTALL_RPS',       1);    // requests per second per install
-define('INGEST_INSTALL_BURST',     30);    // burst tokens per install
-define('INGEST_INSTALL_RAMP_EVENTS', 500); // auto-revoke threshold (events)
-define('INGEST_INSTALL_RAMP_MINUTES', 10); // ramp-up window (minutes)
+// Aggregate ingestion contains no install identifier; source-IP and project budgets
+// provide server-side abuse protection.
 
 // Trusted proxy IPs — only these IPs' X-Forwarded-For headers are trusted.
 // Set to your load balancer or CDN edge IPs. Empty = trust nobody.
 define('TRUSTED_PROXIES', serialize([]));
+
+// Optional AI. Set environment variables or equivalent QM_* constants here.
+// QM_PROFILE defaults to selfhost. Explicit QM_AI_MODEL is always required.
+// Hosted mode also needs exact model pricing and an operator-assigned account plan.
+// See ../docs/ai.md for provider URLs, pricing units and operator endpoints.
+// define('QM_PROFILE', 'selfhost');
+// define('QM_AI_PROVIDER', 'openai');
+// define('QM_AI_MODEL', '');
+// define('QM_AI_BASE_URL', '');
+// define('QM_AI_API_KEY', '');
+// define('QM_AI_LOCAL', 'false');
+// define('QM_OPERATOR_API_KEY', '');
+// define('QM_AI_INPUT_MICRO_USD_PER_MILLION', '');
+// define('QM_AI_OUTPUT_MICRO_USD_PER_MILLION', '');
+// define('QM_AI_CACHE_MICRO_USD_PER_MILLION', '');

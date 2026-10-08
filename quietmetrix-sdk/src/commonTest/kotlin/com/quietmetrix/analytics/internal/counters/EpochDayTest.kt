@@ -23,7 +23,7 @@ class EpochDayTest {
     }
 
     @Test
-    fun `a negative epoch day (before 1970) converts correctly`() {
+    fun `a negative epoch day before 1970 converts correctly`() {
         assertEquals(Triple(1969, 12, 31), civilDateFromEpochDay(-1))
     }
 

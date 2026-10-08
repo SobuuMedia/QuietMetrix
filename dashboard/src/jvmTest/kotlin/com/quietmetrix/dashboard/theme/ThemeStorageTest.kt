@@ -18,8 +18,10 @@ class ThemeStorageTest {
     }
 
     @Test
-    fun defaultsToDarkWhenNothingSaved() {
-        saveThemeMode(ThemeMode.Dark) // reset to a known value first
-        assertEquals(ThemeMode.Dark, getThemeMode())
+    fun defaultsToSystemWhenMissingOrInvalid() {
+        assertEquals(ThemeMode.System, parseThemeMode(null))
+        assertEquals(ThemeMode.System, parseThemeMode("invalid"))
+        assertEquals(ThemeMode.Light, parseThemeMode("Light"))
+        assertEquals(ThemeMode.Dark, parseThemeMode("Dark"))
     }
 }

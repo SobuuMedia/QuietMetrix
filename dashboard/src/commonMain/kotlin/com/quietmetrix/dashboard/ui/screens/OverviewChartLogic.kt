@@ -1,30 +1,25 @@
 package com.quietmetrix.dashboard.ui.screens
 
 import com.quietmetrix.dashboard.api.AggregatesResponse
+import com.quietmetrix.dashboard.api.ReportBinDto
 import com.quietmetrix.dashboard.api.SessionsResponse
 import com.quietmetrix.dashboard.format.formatBucketLabel
 
 /**
  * Which real data series the Task 20 daily-volume chart card's segmented control can show.
  *
- * The design handoff's control is "People/Visits/Actions"
- * (design_handoff_dashboard_redesign/README.md > Overview), but "People" (a distinct-device/WAU
- * count) is not tracked anywhere in this backend — the exact same gap Tasks 18/19 already found
- * and fixed for the hero and the vitals grid (`AggregatesResponse`/`SessionsResponse` have no
- * distinct-device field). Unlike those two tasks, there is no honest *relabel* available here
- * either: "Visits" (this enum's other option) already means "sessions", which is the only proxy
- * Tasks 18/19 used for "People" — reusing it again under a second label on the same control would
- * just duplicate the same number under two names. So the fix here is to **omit** the segment
- * entirely rather than relabel it, leaving a genuine two-way choice between the two series this
- * dashboard actually tracks per day.
+ * People uses distinct-installation report bins; Visits uses session counts; Actions uses event
+ * counts. The People series is already privacy-gated by the report API, and unavailable or
+ * suppressed bins stay absent instead of becoming invented zeroes.
  */
-enum class DailyVolumeMetric { Visits, Actions }
+enum class DailyVolumeMetric { People, Visits, Actions }
 
 /** One rendered bar: an x-axis label plus its real count for the selected [DailyVolumeMetric]. */
 data class DailyVolumeBar(val label: String, val value: Long)
 
 /**
  * Builds the daily-volume chart's bar series for [metric] from real data only:
+ * [DailyVolumeMetric.People] maps to the privacy-gated `AggregatesResponse.dailyPeople` series,
  * [DailyVolumeMetric.Visits] maps to [SessionsResponse.dailySessions] (session counts per bucket,
  * the same series `OverviewVitalsLogic`'s session trend already reads), and
  * [DailyVolumeMetric.Actions] maps to [AggregatesResponse.daily] (event counts per bucket, the
@@ -37,11 +32,21 @@ fun dailyVolumeBars(
     sess: SessionsResponse?,
     metric: DailyVolumeMetric,
     hourly: Boolean,
+    people: List<com.quietmetrix.dashboard.api.DailyPoint> = agg?.dailyPeople.orEmpty(),
 ): List<DailyVolumeBar> = when (metric) {
+    DailyVolumeMetric.People -> people.map { DailyVolumeBar(formatBucketLabel(it.day, hourly), it.total) }
     DailyVolumeMetric.Visits -> (sess?.dailySessions ?: emptyList())
         .map { DailyVolumeBar(formatBucketLabel(it.day, hourly), it.total) }
     DailyVolumeMetric.Actions -> (agg?.daily ?: emptyList())
         .map { DailyVolumeBar(formatBucketLabel(it.day, hourly), it.total) }
+}
+
+/** Converts report chart bins to points while preserving hourly keys and omitting suppressed bins. */
+fun List<ReportBinDto>.chartMeasurePoints(measureKey: String): List<com.quietmetrix.dashboard.api.DailyPoint> = mapNotNull { bin ->
+    val measure = bin.measures[measureKey] ?: return@mapNotNull null
+    if (measure.state !in setOf("reported", "zero")) return@mapNotNull null
+    val key = bin.hour?.let { "${bin.startDay}T${it.toString().padStart(2, '0')}" } ?: bin.startDay
+    com.quietmetrix.dashboard.api.DailyPoint(day = key, total = measure.value ?: 0L)
 }
 
 /**

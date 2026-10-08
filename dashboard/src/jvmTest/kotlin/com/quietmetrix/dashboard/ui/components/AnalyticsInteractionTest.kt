@@ -5,13 +5,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
 import com.quietmetrix.dashboard.theme.ThemeMode
 import com.quietmetrix.dashboard.ui.components.charts.BarChartCanvas
 import com.quietmetrix.dashboard.ui.components.charts.BarData
-import com.quietmetrix.dashboard.viewmodel.*
+import com.quietmetrix.dashboard.viewmodel.AskDrawerState
+import com.quietmetrix.dashboard.viewmodel.DashboardState
+import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -40,7 +48,7 @@ class AnalyticsInteractionTest {
         val viewModel = DashboardViewModel()
         setContent {
             QuietMetrixTheme(ThemeMode.Dark) {
-                AskDrawer(viewModel, DashboardState(askDrawer = AskDrawerState(open = true)))
+                AskDrawer(viewModel, DashboardState(ai = com.quietmetrix.dashboard.api.AiCapabilities(enabled = true, available = true), askDrawer = AskDrawerState(open = true)))
             }
         }
         onNodeWithText("How many sessions?").performClick()

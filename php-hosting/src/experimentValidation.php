@@ -20,6 +20,8 @@ const EXPERIMENT_MAX_SCREEN_LENGTH = 128;
 /** All violations of $definition, or an empty array when it is valid. */
 function experimentValidate(array $definition): array {
     $errors = [];
+    $mode = (string)($definition['mode'] ?? 'legacy');
+    if (!in_array($mode, ['legacy', 'visibility', 'variants'], true)) $errors[] = 'mode must be legacy, visibility, or variants';
 
     $key = (string)($definition['key'] ?? '');
     if (!preg_match(EXPERIMENT_KEY_REGEX, $key)) {
@@ -58,8 +60,10 @@ function experimentValidate(array $definition): array {
             if ($vName === EXPERIMENT_NONE_VARIANT) {
                 $errors[] = "variant name cannot be '" . EXPERIMENT_NONE_VARIANT . "'";
             }
-            if ($vWeight < 1 || $vWeight > 99) {
-                $errors[] = "variant '$vName' weight must be between 1 and 99";
+            $minWeight = $mode === 'legacy' ? 1 : 0;
+            $maxWeight = $mode === 'legacy' ? 99 : 100;
+            if ($vWeight < $minWeight || $vWeight > $maxWeight) {
+                $errors[] = "variant '$vName' weight must be between $minWeight and $maxWeight";
             }
         }
         if (count($names) === 2 && $names[0] === $names[1]) {
@@ -67,6 +71,22 @@ function experimentValidate(array $definition): array {
         }
         if ($weightSum !== 100) {
             $errors[] = 'variant weights must sum to 100';
+        }
+    }
+
+    if ($mode !== 'legacy') {
+        $bPercent = $definition['b_percent'] ?? null;
+        if (!is_int($bPercent) || $bPercent < 0 || $bPercent > 100) $errors[] = 'b_percent must be between 0 and 100';
+        if (trim((string)($definition['placement_key'] ?? '')) === '') $errors[] = 'placement_key is required for v2 experiments';
+        if (count($variants) === 2 && is_int($bPercent) &&
+            ((int)($variants[0]['weight'] ?? -1) !== 100 - $bPercent || (int)($variants[1]['weight'] ?? -1) !== $bPercent)) {
+            $errors[] = 'variant weights must match b_percent (A = 100 - B, B = b_percent)';
+        }
+        if (!in_array((string)($definition['match_mode'] ?? 'all'), ['all', 'any'], true)) $errors[] = 'match_mode must be all or any';
+        $goalEvent = $definition['goal_event'] ?? null;
+        if ($goalEvent !== null && !preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/', (string)$goalEvent)) $errors[] = 'goal_event must be a valid event key';
+        foreach (($definition['languages'] ?? []) as $language) {
+            if (!preg_match('/^[a-z]{2,3}$/', (string)$language)) $errors[] = 'languages must contain normalized primary language codes';
         }
     }
 

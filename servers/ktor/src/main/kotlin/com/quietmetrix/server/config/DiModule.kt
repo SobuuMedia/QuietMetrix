@@ -3,9 +3,11 @@ package com.quietmetrix.server.config
 import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
+import com.quietmetrix.server.persistence.CounterV2Repository
 import com.quietmetrix.server.persistence.ExperimentRepository
 import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
+import com.quietmetrix.server.persistence.ProjectReportRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.ratelimit.IpRateLimiter
@@ -15,13 +17,15 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
 import org.koin.dsl.module
 import javax.sql.DataSource
 
 fun appModule(config: AppConfig) = module {
 
     single { config }
+    single { com.quietmetrix.server.ai.AiAccounting(get(), config.ai, config.isCloud, requireProject = true) }
+    single { com.quietmetrix.server.ai.AiService(config.ai, get()) }
 
     single<DataSource> {
         HikariDataSource(HikariConfig().apply {
@@ -30,6 +34,8 @@ fun appModule(config: AppConfig) = module {
             password = config.db.password
             driverClassName = config.db.driver
             maximumPoolSize = config.db.poolSize
+            connectionTimeout = 3_000
+            validationTimeout = 1_000
         })
     }
 
@@ -43,6 +49,8 @@ fun appModule(config: AppConfig) = module {
     single { FunnelRegistrationService(get()) }
     single { ExperimentRepository(get()) }
     single { CounterRepository(get(), config.counters.kThreshold, config.counters.maxDistinctCellsPerMetric) }
+    single { CounterV2Repository(get(), config.counters.maxDistinctCellsPerMetric) }
+    single { ProjectReportRepository(get()) }
 
     single { RateLimiter(config.rateLimit, kotlinx.coroutines.CoroutineScope(Dispatchers.Default + SupervisorJob())) }
 

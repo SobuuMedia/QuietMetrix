@@ -10,7 +10,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +49,8 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /** Maps this [ErrorKind] to its localized, user-facing sentence — never the raw exception text. */
 @Composable
@@ -123,7 +124,7 @@ fun InlineErrorNotice(error: UiError, onRetry: (() -> Unit)? = null) {
             )
             if (onRetry != null) {
                 TextButton(onClick = onRetry, modifier = Modifier.handCursor()) {
-                    Text(stringResource(Res.string.action_retry))
+                    MaterialText(stringResource(Res.string.action_retry))
                 }
             }
             CopyErrorButton(error, tint = MaterialTheme.colorScheme.onSurfaceVariant)

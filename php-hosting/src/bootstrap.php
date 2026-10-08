@@ -33,6 +33,27 @@ function ensureInstalled(): void {
         }
     }
 
+    if (!tableExists($db, 'ai_summary_cache')) {
+        foreach (explode(';', file_get_contents(__DIR__ . '/../ai-schema.sql')) as $statement) {
+            if (trim($statement) !== '') $db->exec($statement);
+        }
+    }
+
+    require_once __DIR__ . '/ai.php';
+    try { aiCleanup($db); } catch (Throwable $ignored) { }
+
+    createTableIfMissing($db, 'auth_sessions', "CREATE TABLE auth_sessions (
+        id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(36) NOT NULL,
+        refresh_hash CHAR(64) NOT NULL, expires_at BIGINT NOT NULL,
+        INDEX auth_sessions_expiry (expires_at),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    createTableIfMissing($db, 'request_rate_buckets', "CREATE TABLE request_rate_buckets (
+        bucket_key CHAR(64) PRIMARY KEY, attempts INT NOT NULL DEFAULT 0, expires_at BIGINT NOT NULL,
+        INDEX request_rate_buckets_expiry (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // 1b. Additive column migrations for installs created before these columns
     // existed. MySQL has no portable `ADD COLUMN IF NOT EXISTS`, so guard each
     // ALTER with an information_schema check. Cheap: a handful of indexed reads.
@@ -40,6 +61,8 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'users', 'invite_token', 'CHAR(64) NULL');
     addColumnIfMissing($db, 'users', 'invite_expires', 'VARCHAR(32) NULL');
     addColumnIfMissing($db, 'projects', 'description', 'VARCHAR(1000) NULL');
+    addColumnIfMissing($db, 'projects', 'icon_key', "VARCHAR(32) NOT NULL DEFAULT 'book'");
+    addColumnIfMissing($db, 'projects', 'declared_platforms', 'JSON NULL');
     addColumnIfMissing($db, 'projects', 'api_key_last4', 'CHAR(4) NULL');
     createTableIfMissing($db, 'funnels', "
         CREATE TABLE funnels (
@@ -55,6 +78,7 @@ function ensureInstalled(): void {
             count_mode      VARCHAR(16)   NOT NULL DEFAULT 'actor',
             identity_scope  VARCHAR(32)   NOT NULL DEFAULT 'install_or_session',
             correlation_property VARCHAR(128) NULL,
+            revision       INT           NOT NULL DEFAULT 0,
             archived_at     VARCHAR(32)   NULL,
             created_at      VARCHAR(32)   NOT NULL,
             updated_at      VARCHAR(32)   NOT NULL,
@@ -66,6 +90,7 @@ function ensureInstalled(): void {
     addColumnIfMissing($db, 'funnels', 'count_mode', "VARCHAR(16) NOT NULL DEFAULT 'actor'");
     addColumnIfMissing($db, 'funnels', 'identity_scope', "VARCHAR(32) NOT NULL DEFAULT 'install_or_session'");
     addColumnIfMissing($db, 'funnels', 'correlation_property', 'VARCHAR(128) NULL');
+    addColumnIfMissing($db, 'funnels', 'revision', 'INT NOT NULL DEFAULT 0');
     createTableIfMissing($db, 'funnel_manifests', "
         CREATE TABLE funnel_manifests (
             project_id VARCHAR(36) NOT NULL,
@@ -76,6 +101,23 @@ function ensureInstalled(): void {
             CONSTRAINT fk_funnel_manifests_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    createTableIfMissing($db, 'funnel_definition_revisions', "
+        CREATE TABLE funnel_definition_revisions (
+            project_id VARCHAR(36) NOT NULL,
+            funnel_key VARCHAR(64) NOT NULL,
+            revision INT NOT NULL,
+            steps JSON NOT NULL,
+            window_seconds BIGINT NOT NULL,
+            count_mode VARCHAR(16) NOT NULL,
+            identity_scope VARCHAR(32) NOT NULL,
+            correlation_property VARCHAR(128) NULL,
+            created_at VARCHAR(32) NOT NULL,
+            PRIMARY KEY (project_id, funnel_key, revision),
+            CONSTRAINT fk_funnel_revisions_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $db->exec("UPDATE funnels SET revision=1 WHERE source='dashboard' AND revision=0");
+    $db->exec('INSERT IGNORE INTO funnel_definition_revisions (project_id,funnel_key,revision,steps,window_seconds,count_mode,identity_scope,correlation_property,created_at) SELECT project_id,funnel_key,revision,steps,window_seconds,count_mode,identity_scope,correlation_property,created_at FROM funnels');
     // A/B testing experiment definitions -- see docs/sdk/experiments.md.
     createTableIfMissing($db, 'experiments', "
         CREATE TABLE experiments (
@@ -98,6 +140,14 @@ function ensureInstalled(): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     addColumnIfMissing($db, 'experiments', 'selected_variant', 'VARCHAR(32) NULL');
+    addColumnIfMissing($db, 'experiments', 'mode', "VARCHAR(16) NOT NULL DEFAULT 'legacy'");
+    addColumnIfMissing($db, 'experiments', 'placement_key', 'VARCHAR(64) NULL');
+    addColumnIfMissing($db, 'experiments', 'revision', 'INT NOT NULL DEFAULT 0');
+    addColumnIfMissing($db, 'experiments', 'b_percent', 'INT NULL');
+    addColumnIfMissing($db, 'experiments', 'languages', 'JSON NULL');
+    addColumnIfMissing($db, 'experiments', 'match_mode', "VARCHAR(8) NOT NULL DEFAULT 'all'");
+    addColumnIfMissing($db, 'experiments', 'goal_event', 'VARCHAR(64) NULL');
+    addColumnIfMissing($db, 'experiments', 'icon_key', 'VARCHAR(32) NULL');
     // Personal access tokens (agents/CLIs) — see docs/agents/setup.md.
     createTableIfMissing($db, 'access_tokens', "
         CREATE TABLE access_tokens (
@@ -158,6 +208,60 @@ function ensureInstalled(): void {
             CONSTRAINT fk_counters_q_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    createTableIfMissing($db, 'counter_batch_receipts', "
+        CREATE TABLE counter_batch_receipts (
+            project_id   VARCHAR(36) NOT NULL,
+            batch_id     VARCHAR(64) NOT NULL,
+            payload_hash CHAR(64) NOT NULL,
+            claim_token  CHAR(32) NOT NULL,
+            accepted     INT NOT NULL DEFAULT 0,
+            quarantined  INT NOT NULL DEFAULT 0,
+            created_at   VARCHAR(32) NOT NULL,
+            PRIMARY KEY (project_id, batch_id),
+            KEY idx_counter_batch_receipts_created (created_at),
+            CONSTRAINT fk_counter_batch_receipt_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    createTableIfMissing($db, 'counter_cells_v2', "
+        CREATE TABLE counter_cells_v2 (
+            project_id VARCHAR(36) NOT NULL, day VARCHAR(10) NOT NULL, hour SMALLINT NOT NULL DEFAULT -1,
+            metric VARCHAR(64) NOT NULL, platform VARCHAR(20) NOT NULL DEFAULT 'unknown',
+            sdk_version VARCHAR(32) NOT NULL DEFAULT 'unknown',
+            app_version VARCHAR(32) NOT NULL DEFAULT '', country CHAR(2) NOT NULL DEFAULT '  ',
+            segment_kind VARCHAR(20) NOT NULL DEFAULT 'global', segment_value VARCHAR(128) NOT NULL DEFAULT 'all',
+            dims_hash CHAR(64) NOT NULL, cardinality_hash CHAR(64) NULL, dims TEXT NOT NULL, n BIGINT NOT NULL DEFAULT 0,
+            contributors BIGINT NOT NULL DEFAULT 0, updated_at VARCHAR(32) NOT NULL,
+            PRIMARY KEY (project_id, day, hour, metric, platform, app_version, country, dims_hash, segment_kind, segment_value),
+            KEY idx_counter_cells_v2_project_metric_time (project_id, metric, day, hour),
+            KEY idx_counter_cells_v2_segment_time (project_id, metric, segment_kind, segment_value, day, hour),
+            CONSTRAINT fk_counter_cells_v2_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    addColumnIfMissing($db, 'counter_cells_v2', 'sdk_version', "VARCHAR(32) NOT NULL DEFAULT 'unknown'");
+    addColumnIfMissing($db, 'counter_cells_v2', 'segment_kind', "VARCHAR(20) NOT NULL DEFAULT 'global'");
+    addColumnIfMissing($db, 'counter_cells_v2', 'segment_value', "VARCHAR(128) NOT NULL DEFAULT 'all'");
+    addColumnIfMissing($db, 'counter_cells_v2', 'cardinality_hash', 'CHAR(64) NULL');
+    if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+        $primary = $db->query("SELECT COLUMN_NAME FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='counter_cells_v2' AND index_name='PRIMARY' ORDER BY seq_in_index")->fetchAll(PDO::FETCH_COLUMN);
+        $expectedPrimary = ['project_id','day','hour','metric','platform','app_version','country','dims_hash','segment_kind','segment_value'];
+        if ($primary !== $expectedPrimary) {
+            $db->exec('ALTER TABLE counter_cells_v2 DROP PRIMARY KEY, ADD PRIMARY KEY (project_id,day,hour,metric,platform,app_version,country,dims_hash,segment_kind,segment_value)');
+        }
+        addIndexIfMissing($db, 'counter_cells_v2', 'idx_counter_cells_v2_segment_time', 'KEY idx_counter_cells_v2_segment_time (project_id,metric,segment_kind,segment_value,day,hour)');
+        addIndexIfMissing($db, 'counter_cells_v2', 'idx_counter_cells_v2_cardinality', 'KEY idx_counter_cells_v2_cardinality (project_id,metric,cardinality_hash)');
+    }
+    createTableIfMissing($db, 'counter_batch_receipts_v2', "
+        CREATE TABLE counter_batch_receipts_v2 (
+            project_id VARCHAR(36) NOT NULL, batch_id VARCHAR(64) NOT NULL,
+            payload_hash CHAR(64) NOT NULL, claim_token CHAR(32) NOT NULL,
+            accepted INT NOT NULL DEFAULT 0, created_at VARCHAR(32) NOT NULL, expires_at VARCHAR(32) NOT NULL,
+            PRIMARY KEY (project_id, batch_id), KEY idx_counter_batch_receipts_v2_created (created_at),
+            KEY idx_counter_batch_receipts_v2_expires (expires_at),
+            CONSTRAINT fk_counter_batch_receipt_v2_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    addColumnIfMissing($db, 'counter_batch_receipts_v2', 'expires_at', "VARCHAR(32) NOT NULL DEFAULT '9999-12-31T23:59:59Z'");
+    addIndexIfMissing($db, 'counter_batch_receipts_v2', 'idx_counter_batch_receipts_v2_expires', 'KEY idx_counter_batch_receipts_v2_expires (expires_at)');
 
     // 1d. Drop the raw event-stream ingest path (see the Ktor V19__drop_events.sql
     // migration): /track is gone, so nothing writes to these tables or reads these columns
@@ -174,6 +278,10 @@ function ensureInstalled(): void {
     dropColumnIfExists($db, 'projects', 'strict_schema');
     dropColumnIfExists($db, 'projects', 'allowed_events');
 
+    addColumnIfMissing($db, 'users', 'plan_id', 'VARCHAR(50) NULL');
+    addColumnIfMissing($db, 'users', 'tenant_id', "VARCHAR(64) NOT NULL DEFAULT 'legacy'");
+    addColumnIfMissing($db, 'users', 'platform_operator', 'TINYINT(1) NOT NULL DEFAULT 0');
+
     // 2. First admin user
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([ADMIN_EMAIL]);
@@ -188,6 +296,7 @@ function ensureInstalled(): void {
             now(),
         ]);
     }
+    $db->prepare('UPDATE users SET platform_operator=1 WHERE email=?')->execute([ADMIN_EMAIL]);
 }
 
 /**

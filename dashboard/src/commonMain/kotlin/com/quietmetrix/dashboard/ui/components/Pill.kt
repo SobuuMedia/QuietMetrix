@@ -1,14 +1,21 @@
 package com.quietmetrix.dashboard.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Visual treatment for [Pill] — the four rounded-capsule variants the
@@ -65,6 +72,10 @@ fun Pill(
     variant: PillVariant,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    leadingIcon: DrawableResource? = null,
+    trailingIcon: DrawableResource? = null,
+    colorfulIcon: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val extended = LocalExtendedColors.current
     val (background, foreground) = when (variant) {
@@ -75,16 +86,23 @@ fun Pill(
     }
 
     val label: @Composable () -> Unit = {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = foreground,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-        )
+        ) {
+            if (leadingIcon != null) Icon(painterResource(leadingIcon), contentDescription = null,
+                tint = if (colorfulIcon) androidx.compose.ui.graphics.Color.Unspecified else foreground,
+                modifier = Modifier.size(18.dp))
+            Text(text = text, style = MaterialTheme.typography.labelLarge, color = foreground)
+            if (trailingIcon != null) Icon(painterResource(trailingIcon), contentDescription = null,
+                tint = foreground, modifier = Modifier.size(14.dp))
+        }
     }
 
     if (onClick != null) {
-        Surface(onClick = onClick, color = background, shape = QmShapeTokens.pill, modifier = modifier) {
+        Surface(onClick = onClick, enabled = enabled, color = background, shape = QmShapeTokens.pill,
+            modifier = modifier.then(if (enabled) Modifier.handCursor() else Modifier)) {
             label()
         }
     } else {

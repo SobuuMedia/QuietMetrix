@@ -99,6 +99,6 @@ class OverviewSetupInstructionsScreenshotTest {
             }
         }
         waitForIdle()
-        onNodeWithText("⏳ Waiting for your first event…").assertExists()
+        onNodeWithText("Waiting for your first event…").assertExists()
     }
 }

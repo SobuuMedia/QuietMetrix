@@ -27,6 +27,9 @@ function counterMetricRegistry(): array {
         'search_zero_result' => ['screen'],
         'friction'           => ['screen', 'kind'],
         'experiment'         => ['exp', 'variant', 'action'],
+        'experiment_exposure_v2' => ['exp', 'rev', 'variant'],
+        'experiment_goal_v2' => ['exp', 'rev', 'variant'],
+        'unique_window_v2' => ['scope_kind', 'scope_key', 'days', 'end_day'],
     ];
 }
 
@@ -57,6 +60,20 @@ function counterValidate(string $metric, array $dims): array {
         }
         if (!is_string($value) || !preg_match(COUNTER_VALUE_REGEX, $value)) {
             return ['valid' => false, 'reason' => 'dim_value_invalid'];
+        }
+    }
+    if ($metric === 'unique_window_v2') {
+        $days = filter_var($dims['days'], FILTER_VALIDATE_INT);
+        $scopeKind = $dims['scope_kind'];
+        $scopeKey = $dims['scope_key'];
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dims['end_day']);
+        $validDate = $date !== false && $date->format('Y-m-d') === $dims['end_day'];
+        if (!(($days >= 1 && $days <= 7) || $days === 30 || $days === 90) ||
+            !in_array($scopeKind, ['project', 'screen'], true) ||
+            ($scopeKind === 'project' && $scopeKey !== 'all') ||
+            ($scopeKind === 'screen' && $scopeKey === 'all') ||
+            !$validDate) {
+            return ['valid' => false, 'reason' => 'unique_window_invalid'];
         }
     }
     $canonical = counterCanonicalize($dims);

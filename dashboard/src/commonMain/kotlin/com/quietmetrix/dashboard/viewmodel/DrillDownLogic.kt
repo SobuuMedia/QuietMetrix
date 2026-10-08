@@ -1,13 +1,40 @@
 package com.quietmetrix.dashboard.viewmodel
 
-import com.quietmetrix.dashboard.api.*
-import com.quietmetrix.dashboard.format.*
-import com.quietmetrix.dashboard.resources.*
+import com.quietmetrix.dashboard.api.TimeRange
+import com.quietmetrix.dashboard.format.formatCount
+import com.quietmetrix.dashboard.format.formatDuration
+import com.quietmetrix.dashboard.format.formatPercent
+import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.drill_breakdown
+import com.quietmetrix.dashboard.resources.drill_breakdown_detail
+import com.quietmetrix.dashboard.resources.drill_cohort_detail
+import com.quietmetrix.dashboard.resources.drill_daily
+import com.quietmetrix.dashboard.resources.drill_day_detail
+import com.quietmetrix.dashboard.resources.drill_duration_detail
+import com.quietmetrix.dashboard.resources.drill_errors_detail
+import com.quietmetrix.dashboard.resources.drill_flow_detail
+import com.quietmetrix.dashboard.resources.drill_funnel_detail
+import com.quietmetrix.dashboard.resources.drill_people_detail
+import com.quietmetrix.dashboard.resources.drill_retention_detail
+import com.quietmetrix.dashboard.resources.drill_screen_detail
+import com.quietmetrix.dashboard.resources.drill_sessions_detail
+import com.quietmetrix.dashboard.resources.drill_unavailable
+import com.quietmetrix.dashboard.resources.drill_week_detail
+import com.quietmetrix.dashboard.resources.funnel_kpi_completed
+import com.quietmetrix.dashboard.resources.funnel_kpi_started
+import com.quietmetrix.dashboard.resources.funnel_kpi_success_rate
+import com.quietmetrix.dashboard.resources.kpi_errors
+import com.quietmetrix.dashboard.resources.overview_vital_duration_label
+import com.quietmetrix.dashboard.resources.overview_vital_people_label
+import com.quietmetrix.dashboard.resources.overview_vital_sessions_label
+import com.quietmetrix.dashboard.resources.retention_card_day1_label
+import com.quietmetrix.dashboard.resources.retention_card_day30_label
+import com.quietmetrix.dashboard.resources.retention_card_day7_label
+import com.quietmetrix.dashboard.ui.components.CohortGrouping
+import com.quietmetrix.dashboard.ui.components.buildCohortHeatmapRows
 import com.quietmetrix.dashboard.ui.screens.analyticsChartPoints
 import com.quietmetrix.dashboard.ui.screens.computeRetentionVitals
 import com.quietmetrix.dashboard.ui.screens.epochDayFromIsoOrNull
-import com.quietmetrix.dashboard.ui.components.CohortGrouping
-import com.quietmetrix.dashboard.ui.components.buildCohortHeatmapRows
 import org.jetbrains.compose.resources.StringResource
 
 /** A stable dataset key; values are resolved again whenever dashboard data changes. */
@@ -73,6 +100,12 @@ private fun resolveDrillDown(state: DashboardState, kind: String, key: String, p
             val items = when (kind) { "platform" -> state.aggregates?.platforms; "country" -> state.aggregates?.countries; else -> state.aggregates?.deviceClasses }
             rows = items.orEmpty().map { DrillDownRow(it.displayName, formatCount(it.count), it.count.toFloat()) }
             items?.firstOrNull { it.displayName == key }?.count
+        }
+        "people" -> {
+            title = Res.string.overview_vital_people_label
+            explanation = Res.string.drill_people_detail
+            breakdownTitle = Res.string.drill_daily
+            state.aggregates?.people
         }
         "sessions", "duration" -> {
             title = if (kind == "sessions") Res.string.overview_vital_sessions_label else Res.string.overview_vital_duration_label

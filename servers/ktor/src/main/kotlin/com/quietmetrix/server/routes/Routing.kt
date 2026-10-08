@@ -4,7 +4,7 @@ import com.quietmetrix.server.config.AppConfig
 import io.ktor.server.routing.Routing
 
 fun Routing.configureAllRoutes(config: AppConfig) {
-    configureMetaRoutes()
+    configureMetaRoutes(config.ai.enabled(config.isCloud), !config.isCloud)
     configureCounterRoutes()
     configureAuthRoutes(config)
     configureUserRoutes(config)
@@ -13,6 +13,7 @@ fun Routing.configureAllRoutes(config: AppConfig) {
     configureFunnelRoutes()
     configureExperimentRoutes()
     configureDashboardRoutes()
+    configureProjectReportRoutes()
     configureAskRoutes()
     configureStaticDashboardRoutes()
 }

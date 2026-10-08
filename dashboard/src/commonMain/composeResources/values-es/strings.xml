@@ -4,6 +4,9 @@
     <string name="brand">QuietMetrix</string>
 
     <!-- Login screen -->
+    <string name="login_tagline">Analítica, con un poco más de calma.</string>
+    <string name="login_intro">Te damos la bienvenida. Inicia sesión en tu espacio de trabajo.</string>
+    <string name="login_access_hint">¿Necesitas acceso? Contacta con el administrador de tu espacio de trabajo.</string>
     <string name="login_title">Iniciar sesión</string>
     <string name="login_email_label">Correo electrónico</string>
     <string name="login_password_label">Contraseña</string>
@@ -43,6 +46,7 @@
     <string name="nav_funnels">Embudos</string>
     <string name="nav_experiments">Experimentos</string>
     <string name="nav_users">Usuarios</string>
+    <string name="nav_team">Equipo</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_menu_cd">Abrir menú de navegación</string>
     <string name="nav_badge_new">NUEVO</string>
@@ -89,7 +93,7 @@
 
     <!-- Time-range options -->
     <string name="range_1h">Última hora</string>
-    <string name="range_1d">Último día</string>
+    <string name="range_1d">Hoy</string>
     <string name="range_7d">Últimos 7 días</string>
     <string name="range_30d">Últimos 30 días</string>
     <string name="range_90d">Últimos 90 días</string>
@@ -175,9 +179,23 @@
     <!-- Projects -->
     <string name="projects_your">Tus proyectos</string>
     <string name="projects_delete">Eliminar</string>
+    <string name="projects_edit">Editar</string>
+    <string name="projects_edit_title">Editar nombre del proyecto</string>
+    <string name="projects_edit_save">Guardar cambios</string>
     <string name="projects_delete_confirm_title">Eliminar proyecto</string>
     <string name="projects_delete_confirm_body">¿Eliminar "%1$s"? Esto no se puede deshacer.</string>
     <string name="projects_created">Creado %1$s</string>
+    <string name="projects_open_dashboard">Abrir panel</string>
+    <string name="project_activity_receiving">Recibiendo datos</string>
+    <string name="project_activity_stale">Sin datos recientes</string>
+    <string name="project_activity_waiting">Esperando los primeros datos</string>
+    <string name="project_last_received">Último dato recibido %1$s UTC</string>
+    <string name="project_platforms_observed">Observadas: %1$s</string>
+    <string name="project_sdk_versions">SDK %1$s</string>
+    <string name="project_platform_coverage_private">Los detalles de plataforma y SDK aparecen cuando contribuyen al menos cinco instalaciones.</string>
+    <string name="project_icon_label">Icono de la aplicación</string>
+    <string name="project_declared_platforms_label">Plataformas configuradas</string>
+    <string name="project_platforms_configured">Configuradas: %1$s</string>
 
     <!-- Settings -->
     <string name="settings_title">Ajustes</string>
@@ -194,6 +212,7 @@
     <string name="settings_refresh">Actualizar datos</string>
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_about_body">QuietMetrix: un panel de analítica autoalojable y orientado a la privacidad.</string>
+    <string name="settings_twemoji_attribution">Iconos emoji: Twemoji 17.0.3 de jdecked, con licencia CC BY 4.0</string>
 
     <!-- Settings: tokens de acceso (agentes/CLI) -->
     <string name="tokens_title">Tokens de acceso</string>
@@ -229,14 +248,20 @@
     <string name="regenerated_key_title">Nueva clave API</string>
 
     <!-- Gestión de usuarios -->
-    <string name="tab_info_users">Gestiona quién puede acceder a QuietMetrix. Los administradores gestionan todo; los desarrolladores ven los proyectos asignados y pueden rotar claves API; los revisores tienen acceso de solo lectura a sus proyectos asignados.</string>
-    <string name="users_title">Usuarios</string>
+    <string name="tab_info_users">Gestiona quién puede acceder a QuietMetrix. Los administradores gestionan todo; los editores ven los proyectos asignados y pueden rotar claves API; los lectores tienen acceso de solo lectura a sus proyectos asignados.</string>
+    <string name="users_title">Equipo</string>
+    <string name="team_hero_title">Tu equipo, sin complicaciones</string>
+    <string name="team_hero_before">%1$d personas pueden ver tus datos. </string>
+    <string name="team_hero_before_one">1 persona puede ver tus datos. </string>
+    <string name="team_hero_highlight">Tú decides</string>
+    <string name="team_hero_after"> quién ve qué.</string>
+    <string name="team_you">Tú</string>
     <string name="users_invite_action">Invitar usuario</string>
     <string name="users_email_label">Correo</string>
     <string name="users_role_label">Rol</string>
     <string name="role_admin">Administrador</string>
-    <string name="role_developer">Desarrollador</string>
-    <string name="role_reviewer">Revisor</string>
+    <string name="role_developer">Editor</string>
+    <string name="role_reviewer">Lector</string>
     <string name="status_invited">Invitado</string>
     <string name="status_active">Activo</string>
     <string name="users_invite_send">Enviar invitación</string>
@@ -255,8 +280,9 @@
     <string name="access_add_user">Añadir usuario</string>
     <string name="access_remove">Quitar</string>
     <string name="access_empty">Ningún usuario asignado a este proyecto.</string>
-    <string name="access_hint">Asigna desarrolladores y revisores a los proyectos que deben ver.</string>
-    <string name="team_role_explainer">Los administradores gestionan el equipo y los proyectos. Los desarrolladores pueden cambiar la configuración. Los revisores tienen acceso de solo lectura.</string>
+    <string name="access_hint">Asigna editores y lectores a los proyectos que deben ver.</string>
+    <string name="team_role_explainer">Los administradores gestionan el equipo y los proyectos. Los editores pueden cambiar la configuración. Los lectores tienen acceso de solo lectura.</string>
+    <string name="team_project_access">Acceso a proyectos</string>
     <string name="ask_drawer_title">Pregunta a tus datos</string>
     <string name="ask_drawer_scope">Sobre %1$s · %2$s. Las respuestas usan datos agregados y privados.</string>
     <string name="ask_drawer_input">Pregunta sobre tus analíticas</string>
@@ -267,49 +293,56 @@
     <string name="ask_drawer_suggestion_retention">¿Cuál es la retención del día 1?</string>
     <string name="ask_drawer_suggestion_screen">¿Qué pantalla se visita más?</string>
     <string name="ask_drawer_retry">Volver a preguntar</string>
+    <string name="ask_drawer_unavailable">Ask aún no está configurado para este servidor. Tus analíticas siguen disponibles sin respuestas de IA.</string>
+    <string name="ask_drawer_exhausted">El proyecto ha agotado su cuota de IA de este mes. Se restablece el %1$s.</string>
 
     <!-- Embudos -->
     <string name="funnels_title">Embudos</string>
     <string name="funnel_empty">Aún no hay embudos: declara uno en la configuración del SDK de tu app y aparecerá aquí.</string>
-    <string name="funnel_tutorial_title">Cómo funcionan los embudos</string>
-    <string name="funnel_tutorial_intro">Un embudo muestra cuántas personas completan una secuencia de pasos —como ver tu pantalla de registro y luego enviarla— y exactamente dónde abandona el resto.</string>
-    <string name="funnel_tutorial_step1">Los pasos referencian eventos que ya registras (p. ej. screen_view, button_click). Declara el embudo una vez en la configuración del SDK de tu app como un FunnelManifest: sin configuración en el panel.</string>
-    <string name="funnel_tutorial_step2">Cada dispositivo evalúa su propio avance frente a los pasos del embudo en tiempo real y solo informa hasta dónde llegó. El embudo aparece aquí automáticamente cuando tu app lo registra.</string>
+    <string name="funnel_empty_title">Descubre cómo avanzan las personas por tu app</string>
+    <string name="funnel_empty_intro">Crea un embudo con eventos que tu app ya registra. Las versiones actuales del SDK evalúan definiciones declaradas en la app; los embudos creados en el panel necesitan la próxima configuración remota antes de recopilar resultados.</string>
     <string name="funnel_none_selected">Selecciona un embudo para ver sus resultados.</string>
     <string name="funnel_pick_funnel">Selecciona un embudo</string>
     <string name="funnel_badge_sdk">Desde la app</string>
     <string name="funnel_delete">Eliminar</string>
-    <string name="funnel_kpi_started">🚪 Entraron</string>
-    <string name="funnel_kpi_completed">🏁 Llegaron al final</string>
-    <string name="funnel_kpi_success_rate">🎯 Tasa de éxito</string>
+    <string name="funnel_kpi_started">Entraron</string>
+    <string name="funnel_kpi_completed">Llegaron al final</string>
+    <string name="funnel_kpi_success_rate">Tasa de éxito</string>
     <string name="funnel_card_steps">Pasos</string>
     <string name="funnel_no_entrants">No hay entradas en este rango.</string>
     <string name="funnel_delete_confirm_title">Eliminar embudo</string>
     <string name="funnel_delete_confirm_body">¿Eliminar "%1$s"? Esto no se puede deshacer.</string>
     <string name="funnel_editor_cancel">Cancelar</string>
-    <string name="funnel_eyebrow_emoji">🪜</string>
+    <string name="funnel_eyebrow_emoji"></string>
     <string name="funnel_headline_lead">De cada 10 personas que empezaron “%1$s”, </string>
     <string name="funnel_headline_highlight">%1$d</string>
     <string name="funnel_headline_tail"> llegan hasta el final.</string>
     <string name="funnel_new_action">Nuevo embudo</string>
-    <string name="funnel_dropoff_message">😢 %1$s personas se fueron aquí (%2$s)</string>
-    <string name="funnel_dropoff_why">✨ ¿Por qué se fueron?</string>
-    <string name="funnel_expert_toggle">🤓 Experto</string>
-    <string name="funnel_expert_table_title">🤓 Tabla de pasos</string>
-    <string name="funnel_copy_csv">⧉ Copiar como CSV</string>
-    <string name="funnel_copy_csv_copied">✓ Copiado</string>
-    <string name="funnel_new_guide_title">🪜 Declara un embudo</string>
-    <string name="funnel_new_guide_intro">Los embudos se declaran en la configuración del SDK de tu app, no aquí: añade uno y aparecerá en esta pantalla automáticamente.</string>
-    <string name="funnel_new_guide_step1_title">1. Añádelo a la configuración del SDK</string>
-    <string name="funnel_new_guide_code_kotlin">val signupFunnel = Funnel(\n    key = "signup",\n    name = "Signup",\n    steps = listOf(\n        FunnelStep(key = "view", event = "screen_view", screen = "signup"),\n        FunnelStep(key = "submit", event = "signup_submitted"),\n    ),\n)\n\nQuietMetrix.init(QuietMetrixConfig(\n    apiKey = "qm_ak_your_api_key",\n    funnels = listOf(signupFunnel),\n))</string>
-    <string name="funnel_new_guide_code_swift">let signupFunnel = Funnel(\n    key: "signup",\n    name: "Signup",\n    steps: [\n        FunnelStep(key: "view", event: "screen_view", screen: "signup"),\n        FunnelStep(key: "submit", event: "signup_submitted"),\n    ]\n)\n\nlet config = QuietMetrixConfig(\n    apiKey: "qm_ak_your_api_key",\n    funnels: [signupFunnel]\n)\nQuietMetrix.shared.initialize(config: config)</string>
-    <string name="funnel_new_guide_code_js">init({\n    apiKey: "qm_ak_your_api_key",\n    funnels: [\n        {\n            key: "signup",\n            name: "Signup",\n            steps: [\n                { key: "view", event: "screen_view", screen: "signup" },\n                { key: "submit", event: "signup_submitted" },\n            ],\n        },\n    ],\n});</string>
-    <string name="funnel_new_guide_step2_title">2. Ya está</string>
-    <string name="funnel_new_guide_step2_body">En cuanto tu app registre el embudo, aparecerá en esta pantalla automáticamente: no hace falta configurar nada aquí. Edita los pasos en el código y publica una actualización para cambiarlos.</string>
-    <string name="funnel_new_guide_done">Listo</string>
-
+    <string name="funnel_builder_title">Crear un embudo</string>
+    <string name="funnel_builder_intro">Define los eventos de la app en orden. Las versiones actuales del SDK solo evalúan embudos declarados previamente en el código de la app.</string>
+    <string name="funnel_builder_key">Clave del embudo</string>
+    <string name="funnel_builder_name">Nombre</string>
+    <string name="funnel_builder_description">Descripción (opcional)</string>
+    <string name="funnel_builder_window_days">Ventana de conversión (días, 1–90)</string>
+    <string name="funnel_builder_steps">Pasos ordenados (2–10)</string>
+    <string name="funnel_builder_step_number">Paso %1$d</string>
+    <string name="funnel_builder_step_key">Clave del paso</string>
+    <string name="funnel_builder_event">Nombre del evento</string>
+    <string name="funnel_builder_step_name">Nombre visible (opcional)</string>
+    <string name="funnel_builder_screen_optional">Pantalla (opcional)</string>
+    <string name="funnel_builder_remove_step">Eliminar paso</string>
+    <string name="funnel_builder_add_step">Añadir paso</string>
+    <string name="funnel_builder_create">Crear embudo</string>
+    <string name="funnel_dropoff_message">%1$s personas se fueron aquí (%2$s)</string>
+    <string name="funnel_dropoff_why">¿Por qué se fueron?</string>
+    <string name="funnel_expert_toggle">Experto</string>
+    <string name="funnel_expert_table_title">Tabla de pasos</string>
+    <string name="funnel_copy_csv">Copiar como CSV</string>
+    <string name="funnel_copy_csv_copied">Copiado</string>
     <!-- Experimentos (pruebas A/B) -->
     <string name="experiments_title">Experimentos</string>
+    <string name="experiment_hero_prefix">Muestra dos versiones de un elemento de la app y deja que tus usuarios </string>
+    <string name="experiment_hero_highlight">elijan la ganadora</string>
     <string name="experiment_empty">Aún no hay experimentos: crea uno para empezar una prueba A/B.</string>
     <string name="experiment_none_selected">Selecciona un experimento para ver sus resultados.</string>
     <string name="experiment_pick_experiment">Selecciona un experimento</string>
@@ -321,7 +354,7 @@
     <string name="experiment_status_active">Activo</string>
     <string name="experiment_status_paused">Pausado</string>
     <string name="experiment_status_ended">Finalizado</string>
-    <string name="experiment_card_emoji">🧪</string>
+    <string name="experiment_card_emoji">Experimento</string>
     <string name="experiment_status_running">En curso</string>
     <string name="experiment_status_finished">Finalizado</string>
     <string name="experiment_action_start">Iniciar</string>
@@ -340,13 +373,35 @@
     <string name="experiment_editor_variant_a_label">Nombre de la variante A</string>
     <string name="experiment_editor_variant_b_label">Nombre de la variante B</string>
     <string name="experiment_editor_split_label">Reparto (% para A)</string>
+    <string name="experiment_mode_label">Modo del experimento</string>
+    <string name="experiment_mode_visibility">Mostrar un elemento</string>
+    <string name="experiment_mode_variants">Comparar dos variantes</string>
+    <string name="experiment_b_percent_label">Asignación de la variante B (%)</string>
+    <string name="experiment_visibility_allocation_label">Elemento: %1$s</string>
+    <string name="experiment_variant_allocation_label">Asignación B: %1$s</string>
+    <string name="experiment_languages_label">Idiomas (opcional)</string>
+    <string name="experiment_languages_hint">Códigos de idioma, por ejemplo fr, en</string>
+    <string name="experiment_languages_invalid">Usa códigos de idioma principales de 2 o 3 letras</string>
+    <string name="experiment_match_mode_label">Si se configuran ambos filtros</string>
+    <string name="experiment_match_all">Coincidir con todos</string>
+    <string name="experiment_match_any">Coincidir con cualquiera</string>
+    <string name="experiment_audience_help">El país y el idioma son filtros independientes. Quienes queden fuera verán el control.</string>
+    <string name="experiment_audience_everyone">todas las personas</string>
+    <string name="experiment_review_allocation">%1$d%% ven B; %2$d%% ven el control dentro de la audiencia.</string>
+    <string name="experiment_review_audience">Audiencia: %1$s. El resto ve el control.</string>
+    <string name="experiment_review_languages">Idiomas: %1$s</string>
+    <string name="experiment_goal_event_label">Clave del evento objetivo (opcional)</string>
+    <string name="experiment_goal_event_hint">login_success</string>
+    <string name="experiment_goal_event_invalid">Usa hasta 64 letras, números, guiones bajos, puntos o guiones; empieza con una letra.</string>
+    <string name="experiment_goal_exposure_only">Solo exposición: no se recopilan conversiones.</string>
+    <string name="experiment_review_goal">Objetivo de conversión: %1$s</string>
     <string name="experiment_editor_traffic_label">Tráfico %</string>
     <string name="experiment_editor_countries_label">Países (opcional)</string>
     <string name="experiment_editor_countries_hint">Déjalo vacío para todos los países. Ejemplo: ES, FR, MX</string>
     <string name="experiment_editor_countries_invalid">Algunos códigos no son códigos de país válidos de 2 letras</string>
     <string name="experiment_editor_submit">Crear</string>
-    <string name="experiment_wizard_next">Siguiente →</string>
-    <string name="experiment_wizard_back">← Atrás</string>
+    <string name="experiment_wizard_next">Siguiente</string>
+    <string name="experiment_wizard_back">Atrás</string>
     <string name="experiment_wizard_step">Paso %1$d de 3</string>
     <string name="experiment_wizard_screen_summary">Pantalla: %1$s</string>
     <string name="experiment_wizard_countries_summary">Países: %1$s</string>
@@ -357,6 +412,12 @@
     <string name="experiment_traffic_label">Tráfico: %1$s</string>
     <string name="experiment_results_title">Resultados</string>
     <string name="experiment_results_unit_note">Se cuenta por sesión. Solo se almacenan recuentos agregados: QuietMetrix nunca sabe qué usuario vio qué variante.</string>
+    <string name="experiment_installation_unit_note">Son instalaciones activas distintas, deduplicadas localmente por revisión. Solo se envían recuentos agregados; ningún identificador ni asignación sale de la app.</string>
+    <string name="experiment_exposures_label">Instalaciones expuestas</string>
+    <string name="experiment_conversions_label">Instalaciones con objetivo</string>
+    <string name="experiment_goal_rate_label">Conversión del objetivo</string>
+    <string name="experiment_revision_cumulative_note">Resultados acumulados desde que comenzó esta revisión. El rango de fechas compartido no cambia estos totales.</string>
+    <string name="experiment_installation_evidence_collecting">Recopilando datos publicables. La evidencia requiere 100 instalaciones por variante y 5 instalaciones con y sin objetivo en cada una.</string>
     <string name="experiment_results_not_enough_data">Aún no hay suficientes datos</string>
     <string name="experiment_results_baseline_badge">Base</string>
     <string name="experiment_impressions_label">Sesiones mostradas</string>
@@ -420,18 +481,21 @@
     <string name="action_try_again">Intentar de nuevo</string>
 
     <!-- Overview hero + privacy card (Task 18) -->
-    <string name="overview_hero_greeting">👋 Hola, equipo de %1$s. Aquí tienes tu resumen de %2$s.</string>
-    <string name="overview_hero_sessions">%1$s sesiones</string>
+    <string name="overview_hero_greeting">Hola, equipo de %1$s. Aquí tienes tu resumen de %2$s.</string>
+    <string name="overview_hero_people">%1$s personas</string>
     <string name="overview_hero_opened">abrieron %1$s</string>
-    <string name="overview_hero_trend_up">con tendencia al alza este período</string>
-    <string name="overview_hero_trend_down">con tendencia a la baja este período</string>
-    <string name="overview_hero_tail_standout">Gran parte fue %1$s.</string>
-    <string name="overview_hero_tail_generic">Atento a lo que venga a continuación.</string>
-    <string name="overview_hero_ai_chip">✨ A partir de tus datos registrados</string>
+    <string name="overview_hero_current_period">durante este período.</string>
+    <string name="overview_hero_change_more">%1$s más que en el período anterior</string>
+    <string name="overview_hero_change_less">%1$s menos que en el período anterior</string>
+    <string name="overview_hero_change_same">casi igual que en el período anterior</string>
+    <string name="overview_hero_unavailable">La actividad de tu app, de un vistazo.</string>
+    <string name="overview_hero_tail_standout">La actividad registrada con más frecuencia fue %1$s.</string>
+    <string name="overview_hero_ai_chip">A partir de tus datos registrados</string>
     <string name="overview_hero_tell_me_more">Cuéntame más</string>
-    <string name="overview_hero_copy">⧉ Copiar</string>
-    <string name="overview_hero_loading">🧮 Contando a tus usuarios…</string>
-    <string name="overview_empty_greeting">👋 Bienvenido a %1$s</string>
+    <string name="overview_hero_copy">Copiar</string>
+    <string name="overview_hero_copied">Copiado</string>
+    <string name="overview_hero_loading">Contando a tus usuarios…</string>
+    <string name="overview_empty_greeting">Bienvenido a %1$s</string>
     <string name="overview_empty_headline_lead">Aún no hay datos. Vamos a registrar tu</string>
     <string name="overview_empty_headline_highlight">primer evento</string>
     <string name="overview_empty_headline_tail">en unos 5 minutos.</string>
@@ -440,39 +504,45 @@
     <string name="overview_error_ai_nap_body">No se pudieron cargar los datos actuales. Los valores cargados anteriormente pueden estar desactualizados. Inténtalo de nuevo.</string>
     <string name="overview_privacy_title">Revisión de privacidad: todo en orden</string>
     <string name="overview_privacy_body">0 datos personales almacenados. Sin cookies, sin IDs de publicidad, sin huellas digitales. Tus usuarios permanecen anónimos.</string>
-    <string name="overview_privacy_gdpr_chip">RGPD ✓</string>
+    <string name="overview_privacy_gdpr_chip">RGPD</string>
     <string name="overview_privacy_no_banner_chip">No necesita aviso de cookies</string>
     <string name="overview_privacy_info_cd">¿Qué significa esta revisión de privacidad?</string>
-    <string name="overview_privacy_lock_emoji">🔒</string>
-    <string name="overview_privacy_info_glyph">ⓘ</string>
-    <string name="overview_error_ai_nap_emoji">😴</string>
+    <string name="overview_privacy_lock_emoji"></string>
+    <string name="overview_error_ai_nap_emoji"></string>
 
+    <string name="overview_vital_people_label">Personas</string>
+    <string name="overview_vital_people_caption">Instalaciones activas notificadas; una persona puede usar varios dispositivos.</string>
+    <string name="overview_vital_people_unavailable">No disponible para esta fuente o período.</string>
+    <string name="overview_vital_people_suppressed">Oculto porque menos de cinco instalaciones contribuyeron a este grupo.</string>
     <string name="overview_vital_sessions_label">Sesiones</string>
-    <string name="overview_vital_sessions_caption">Con qué frecuencia abren tu app.</string>
-    <string name="overview_vital_trend_up">▲ %1$s</string>
-    <string name="overview_vital_trend_down">▼ %1$s</string>
     <string name="overview_vital_duration_label">Tiempo por visita</string>
-    <string name="overview_vital_duration_caption">Tiempo medio por visita.</string>
+    <string name="overview_vital_duration_approximate_caption">Promedio aproximado de intervalos heredados.</string>
+    <string name="overview_vital_duration_reported_caption">Promedio de visitas completadas que informa el SDK v2.</string>
+    <string name="overview_vital_duration_suppressed_caption">Oculto porque se informaron menos de cinco visitas.</string>
     <string name="overview_vital_retention_label">Volvieron al día siguiente</string>
     <string name="overview_vital_retention_caption">Porcentaje de usuarios nuevos activos al día siguiente.</string>
     <string name="overview_vital_retention_not_tracked">Aún no se registra — consulta Retención para ver las cohortes.</string>
-    <string name="overview_vital_errors_caption">Incluye fallos, errores y excepciones.</string>
-    <string name="overview_vital_filter_chip">Segmento seleccionado: %1$s ✕</string>
+    <string name="overview_vital_crashes_label">Fallos</string>
+    <string name="overview_vital_crashes_unavailable">Aún no hay informes explícitos solo de fallos.</string>
+    <string name="overview_vital_crashes_reported_caption">Fallos explícitos informados por el SDK v2.</string>
+    <string name="overview_vital_crashes_suppressed_caption">Oculto porque contribuyeron menos de cinco instalaciones.</string>
+    <string name="overview_vital_filter_chip">Segmento seleccionado: %1$s</string>
 
-    <string name="overview_chart_title_hourly">Qué pasó cada hora</string>
-    <string name="overview_chart_title_daily">Qué pasó cada día</string>
+    <string name="overview_chart_title_hourly">Quién vino cada hora</string>
+    <string name="overview_chart_title_daily">Quién vino cada día</string>
+    <string name="overview_chart_metric_people">Personas</string>
     <string name="overview_chart_metric_visits">Visitas</string>
     <string name="overview_chart_metric_actions">Acciones</string>
-    <string name="overview_chart_record_day">🔥 Día con más actividad: %1$s</string>
+    <string name="overview_chart_record_day">Día con más actividad: %1$s</string>
 
-    <string name="overview_card_screens_title">📍 Dónde pasa el tiempo la gente</string>
-    <string name="overview_card_platforms_title">📱 Qué usan</string>
-    <string name="overview_card_countries_title">🌍 Dónde están</string>
+    <string name="overview_card_screens_title">Dónde pasa el tiempo la gente</string>
+    <string name="overview_card_platforms_title">Qué usan</string>
+    <string name="overview_card_countries_title">Dónde están</string>
     <string name="overview_screen_row_visits">%1$s visitas</string>
     <string name="overview_breakdown_filter_cd">Mostrar solo %1$s</string>
 
-    <string name="overview_worth_a_look_title">👀 Vale la pena mirar</string>
-    <string name="overview_worth_a_look_empty_title">🎈 ¡Todo al día!</string>
+    <string name="overview_worth_a_look_title">Vale la pena mirar</string>
+    <string name="overview_worth_a_look_empty_title">¡Todo al día!</string>
     <string name="overview_worth_a_look_empty_body">Te avisaremos cuando haya algo nuevo que valga la pena mirar.</string>
     <string name="overview_worth_a_look_snooze_cd">Posponer hasta mañana</string>
     <string name="overview_worth_a_look_offline_title">%1$s acciones llegaron sin conexión</string>
@@ -482,11 +552,11 @@
     <string name="overview_worth_a_look_dominant_platform_title">%1$s es de donde viene la mayoría de tu tráfico</string>
     <string name="overview_worth_a_look_dominant_platform_body">%1$s de las sesiones este periodo.</string>
 
-    <string name="overview_key_card_title">🔑 Tu clave de %1$s</string>
-    <string name="overview_key_card_manage">Gestionar clave →</string>
-    <string name="overview_key_card_status_receiving">🟢 Recibiendo datos</string>
-    <string name="overview_key_card_status_waiting">⚪ Sin eventos todavía este periodo</string>
-    <string name="overview_key_card_status_unknown">⚠️ Estado desconocido — no se puede conectar con el servidor</string>
+    <string name="overview_key_card_title">Tu clave de %1$s</string>
+    <string name="overview_key_card_manage">Gestionar clave</string>
+    <string name="overview_key_card_status_receiving">Recibiendo datos</string>
+    <string name="overview_key_card_status_waiting">Sin eventos todavía este periodo</string>
+    <string name="overview_key_card_status_unknown">Estado desconocido — no se puede conectar con el servidor</string>
 
     <string name="overview_empty_setup_title">Consigamos tu primer evento</string>
     <string name="overview_empty_setup_lang_kotlin">Kotlin (Android/KMP)</string>
@@ -496,7 +566,7 @@
     <string name="overview_empty_setup_step2_title">2. Inicialízalo</string>
     <string name="overview_empty_setup_step3_title">3. Abre tu app</string>
     <string name="overview_empty_setup_step3_body">Abre tu app en un dispositivo, simulador o navegador — QuietMetrix empieza a registrar automáticamente.</string>
-    <string name="overview_empty_setup_waiting">⏳ Esperando tu primer evento…</string>
+    <string name="overview_empty_setup_waiting">Esperando tu primer evento…</string>
     <string name="overview_empty_setup_code_install_kotlin">implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")</string>
     <string name="overview_empty_setup_code_init_kotlin">QuietMetrix.init(QuietMetrixConfig(\n    trackingEndpoint = "https://your-server.com/api/v1",\n    apiKey = "qm_ak_your_api_key",\n))</string>
     <string name="overview_empty_setup_code_install_swift">.package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.4.0")</string>
@@ -509,21 +579,26 @@
     <string name="flow_h1_highlight">a dónde van después</string>
     <string name="flow_h1_tail">.</string>
     <string name="flow_platform_label">Plataforma</string>
-    <string name="flow_platform_all">🌈 Todas</string>
+    <string name="flow_platform_all">Todas</string>
+    <string name="flow_platform_android">Android</string>
+    <string name="flow_platform_ios">iOS</string>
+    <string name="flow_platform_web">Web</string>
     <string name="flow_platform_unavailable_caption">El filtrado por plataforma aún no está disponible.</string>
     <string name="flow_start_from_label">Empezar desde</string>
     <string name="flow_path_label">Ruta:</string>
-    <string name="flow_path_arrow">→</string>
-    <string name="flow_exit_label">👋 Salió de la app</string>
+    <string name="flow_copy_path">Copiar ruta</string>
+    <string name="flow_path_copied">Copiada</string>
+    <string name="flow_copy_scope">Proyecto: %1$s · Periodo: %2$s · Plataforma: %3$s</string>
+    <string name="flow_exit_label">Salió de la app</string>
     <string name="flow_after_screen">Después de %1$s · %2$s transiciones vistas</string>
-    <string name="flow_caption">💡 Haz clic en una pantalla para seguir el rastro. 👋 significa que salieron de la app.</string>
+    <string name="flow_caption">Haz clic en una pantalla para seguir el rastro. «Salió de la app» marca una salida.</string>
     <string name="flow_state_empty_path">Elige una pantalla arriba para ver a dónde van después.</string>
 
     <!-- Flow screen (Task 23): Countries/Platforms/Device types 3-card row -->
     <string name="flow_os_versions_caption">El desglose por versión de SO aún no se registra.</string>
 
     <!-- Retention screen (Task 24): H1 + 3 vital cards with a 10-dot "people" grid -->
-    <string name="retention_eyebrow_emoji">🔁</string>
+    <string name="retention_eyebrow_emoji">Retención</string>
     <string name="retention_h1_lead">De cada 10 personas nuevas, </string>
     <string name="retention_h1_day1_highlight">%1$d vuelven</string>
     <string name="retention_h1_mid">al día siguiente y </string>
@@ -532,20 +607,20 @@
     <string name="retention_h1_day7_only_lead">De cada 10 personas nuevas, </string>
     <string name="retention_h1_tail"> una semana después.</string>
     <string name="retention_h1_not_enough_data">Todavía no hay datos suficientes para contar tu historia de retención — vuelve cuando la gente haya tenido tiempo de regresar.</string>
-    <string name="retention_card_day1_label">🌅 Al día siguiente</string>
-    <string name="retention_card_day7_label">📅 Después de una semana</string>
-    <string name="retention_card_day30_label">🗓️ Después de un mes</string>
+    <string name="retention_card_day1_label">Al día siguiente</string>
+    <string name="retention_card_day7_label">Después de una semana</string>
+    <string name="retention_card_day30_label">Después de un mes</string>
     <string name="retention_card_caption_day1">%1$d de cada 10 la abrieron de nuevo al día siguiente de instalarla.</string>
     <string name="retention_card_caption_day7">%1$d de cada 10 siguen ahí 7 días después.</string>
     <string name="retention_card_caption_day30">%1$d de cada 10 siguen ahí 30 días después.</string>
     <string name="retention_card_too_early">Este porcentaje no está disponible para los datos seleccionados.</string>
-    <string name="retention_dot_filled_emoji">🙂</string>
+    <string name="retention_dot_filled_emoji">Volvió</string>
     <string name="retention_dot_filled_content_description">Volvió</string>
     <string name="retention_dot_empty_content_description">No volvió (todavía)</string>
 
     <!-- Cohort heatmap (Task 25) -->
-    <string name="cohort_heatmap_title_by_week">🗓️ Semana a semana</string>
-    <string name="cohort_heatmap_title_by_day">📆 Día a día</string>
+    <string name="cohort_heatmap_title_by_week">Semana a semana</string>
+    <string name="cohort_heatmap_title_by_day">Día a día</string>
     <string name="cohort_heatmap_desc_by_week">Cada fila es el grupo de personas que instalaron esa semana. Más brillante = volvieron más. Marca A y B en dos filas para compararlas.</string>
     <string name="cohort_heatmap_desc_by_day">Cada fila es el grupo de personas que instalaron ese día. Más brillante = volvieron más. Marca A y B en dos filas para compararlas.</string>
     <string name="cohort_heatmap_toggle_by_week">Por semana</string>
@@ -558,22 +633,22 @@
     <string name="cohort_heatmap_checkbox_content_description_unselected">Seleccionar %1$s para comparar</string>
     <string name="cohort_heatmap_checkbox_content_description_selected">%1$s está seleccionada como %2$s para comparar</string>
     <string name="cohort_heatmap_tooltip_known">De las %1$s personas que instalaron %2$s, %3$s (%4$s) abrieron la app de nuevo el %5$s.</string>
-    <string name="cohort_heatmap_tooltip_unknown">Aún es pronto. Vuelve después de %1$s para ver esto ⏳</string>
+    <string name="cohort_heatmap_tooltip_unknown">Aún es pronto. Vuelve después de %1$s para ver esto.</string>
     <string name="cohort_heatmap_tooltip_unavailable">Este porcentaje no está disponible para los datos seleccionados.</string>
 
     <!-- Retención: panel "⚖️ Comparando A y B" + tarjeta de conclusión (Tarea 26) -->
-    <string name="retention_comparison_eyebrow_emoji">⚖️</string>
+    <string name="retention_comparison_eyebrow_emoji">Comparación</string>
     <string name="retention_comparison_heading">Comparando</string>
     <string name="retention_comparison_chip_a">A · %1$s</string>
     <string name="retention_comparison_chip_b">B · %1$s</string>
     <string name="retention_comparison_vs">vs</string>
     <string name="retention_comparison_not_enough_data">Todavía no hay suficientes datos para comparar estos dos.</string>
     <string name="retention_comparison_same">El %1$s, ambos grupos volvieron igual (%2$s).</string>
-    <string name="retention_comparison_higher">El %1$s, la gente de %2$s volvió %3$d puntos más que la gente de %4$s. 📈</string>
-    <string name="retention_comparison_lower">El %1$s, la gente de %2$s volvió %3$d puntos menos que la gente de %4$s. 📉</string>
+    <string name="retention_comparison_higher">El %1$s, la gente de %2$s volvió %3$d puntos más que la gente de %4$s.</string>
+    <string name="retention_comparison_lower">El %1$s, la gente de %2$s volvió %3$d puntos menos que la gente de %4$s.</string>
     <string name="retention_comparison_column_values">%1$s · %2$s</string>
-    <string name="retention_comparison_column_unknown">⏳ Aún no hay datos para este día.</string>
-    <string name="retention_insight_eyebrow_emoji">✨</string>
+    <string name="retention_comparison_column_unknown">Aún no hay datos para este día.</string>
+    <string name="retention_insight_eyebrow_emoji">Conclusión</string>
     <string name="retention_insight_not_enough_data">Todavía no hay suficiente historial de cohortes para ver una tendencia — vuelve cuando tengas dos cohortes con la edad suficiente para comparar.</string>
     <string name="retention_insight_ask_why">Preguntar por qué</string>
     <string name="retention_insight_scope_note">Comparando tus 2 cohortes más recientes — no la agrupación que tenga el mapa de calor arriba.</string>
@@ -584,11 +659,11 @@
     <string name="experiment_action_close">Cerrar sin publicar</string>
     <string name="experiment_preview_unavailable">Vista previa no disponible: el SDK no proporciona capturas.</string>
     <string name="experiment_variant_letter">Variante %1$s · %2$s</string>
-    <string name="experiment_confidence_title">🎲 ¿Cuánta certeza tenemos?</string>
+    <string name="experiment_confidence_title">¿Cuánta certeza tenemos?</string>
     <string name="experiment_confidence_value">%1$s de confianza</string>
     <string name="experiment_plain_winner">%1$s va ganando en el período seleccionado.</string>
     <string name="experiment_plain_tie">Todavía no hay una diferencia clara; sigue recopilando datos.</string>
-    <string name="experiment_confidence_note">Puntuación = (1 − valor p) × 100; el umbral de significación es 95.</string>
+    <string name="experiment_confidence_note">Puntuación = (1 - valor p) x 100; el umbral de significación es 95.</string>
     <string name="experiment_rollout_note">Publicación completa: %1$s. Los resultados siguen actualizándose para el período seleccionado y pueden incluir tráfico posterior a la publicación.</string>
     <string name="experiment_original_split">Distribución original de la prueba</string>
     <string name="experiment_confirm_title">¿%1$s: %2$s?</string>
@@ -596,9 +671,9 @@
     <string name="experiment_confirm_stop">Detener la asignación tras una actualización correcta de la configuración del SDK y una sesión posterior de la aplicación. Las sesiones existentes conservan su asignación guardada.</string>
     <string name="experiment_raw_stats">Estadísticas avanzadas</string>
     <string name="experiment_raw_comparison">z = %1$s · p = %2$s</string>
-    <string name="experiment_winner_medal">🏆</string>
+    <string name="experiment_winner_medal">Ganador</string>
     <string name="experiment_meter_min">0</string>
-    <string name="experiment_meter_max">95 │ 100</string>
+    <string name="experiment_meter_max">95 / 100</string>
     <string name="comparison_was">Antes: %1$s (periodo anterior)</string>
     <string name="comparison_unavailable">Periodo anterior no disponible</string>
     <string name="comparison_scope">Totales diarios UTC · hoy sigue acumulando datos. Retención usa cohortes iniciadas en cada periodo.</string>
@@ -611,6 +686,7 @@
     <string name="drill_copied">Cifras copiadas</string>
     <string name="drill_unavailable">No hay un valor visible para esta selección.</string>
     <string name="drill_sessions_detail">Sesiones registradas en este periodo. Son visitas, no personas únicas.</string>
+    <string name="drill_people_detail">Instalaciones activas notificadas y distintas en este período exacto. Una persona puede contarse más de una vez si usa varios dispositivos o reinstala; por privacidad se ocultan los grupos pequeños.</string>
     <string name="drill_duration_detail">Duración media de sesión estimada a partir de los intervalos enviados.</string>
     <string name="drill_errors_detail">Eventos llamados error, crash o exception combinados en este periodo.</string>
     <string name="drill_retention_detail">Cohorte más reciente con un valor visible para esta antigüedad. Los valores ausentes u ocultos por privacidad no están disponibles.</string>
@@ -624,7 +700,7 @@
     <string name="drill_daily">Volumen diario</string>
     <string name="drill_raw">Estadísticas sin procesar</string>
     <string name="drill_cohort">Cohorte %1$s</string>
-    <string name="drill_delta">%1$s → %2$s</string>
+    <string name="drill_delta">%1$s a %2$s</string>
     <string name="analytics_loading">Calculando los datos seleccionados…</string>
     <string name="flow_details">Detalles de la pantalla</string>
     <string name="cohort_reported_toggle">Por cohorte</string>
@@ -640,5 +716,40 @@
     <string name="team_invite_hint">Invita a alguien para compartir el acceso a tus proyectos.</string>
     <string name="drill_week_detail">Suma de los recuentos diarios visibles en este bloque de siete días. Los días ausentes o protegidos por privacidad no se consideran cero.</string>
     <string name="analytics_daily_scope">Los contadores tienen resolución diaria UTC. Las selecciones de 1 h y 1 d muestran hoy; el día aún sigue acumulando datos.</string>
+    <string name="analytics_resolution_title">Resolución de fechas y datos</string>
+    <string name="analytics_resolution_help">Las fechas usan UTC. Los contadores de hoy siguen acumulándose. Las versiones anteriores del SDK pueden informar solo totales diarios, por lo que quizá no haya datos por hora.</string>
     <string name="ask_retention_why_question">¿Por qué cambió la retención entre las últimas cohortes?</string>
+
+    <!-- Management redesign completion. -->
+    <string name="management_mcp_title">Conexión MCP</string>
+    <string name="management_mcp_hint">Añade esta configuración a tu cliente MCP. Sustituye el marcador por un token de acceso con los permisos que necesita tu agente. El proceso MCP se ejecuta en tu equipo; este panel solo comprueba la conexión con la API.</string>
+    <string name="management_api_online">API disponible</string>
+    <string name="management_api_offline">La API no responde</string>
+    <string name="management_api_checking">Comprobando conexión…</string>
+    <string name="management_api_unknown">Conexión sin comprobar</string>
+    <string name="management_check_connection">Comprobar conexión</string>
+    <string name="management_server_url">URL del servidor</string>
+    <string name="management_version">Versión %1$s</string>
+    <string name="management_invite_title">Invitar a alguien</string>
+    <string name="management_invite_invalid">Introduce una dirección de correo válida.</string>
+    <string name="management_invite_send">Enviar invitación</string>
+    <string name="management_invite_sending">Enviando…</string>
+    <string name="management_invite_link">Compartir el enlace de invitación</string>
+    <string name="management_invite_link_hint">Envía una invitación para generar un enlace para esa persona.</string>
+    <string name="management_expiry">Caduca después de</string>
+    <string name="management_expiry_never">Sin caducidad</string>
+    <string name="management_expiry_30">30 días</string>
+    <string name="management_expiry_90">90 días</string>
+    <string name="management_token_create">Crear token</string>
+    <string name="management_key_hint">Solo se guardan los últimos cuatro caracteres. Regenera la clave para obtener una nueva.</string>
+    <string name="brand_mark">QuietMetrix</string>
+    <string name="ai_allowance_reached">Has alcanzado el límite de IA de tu plan. Se restablece el %1$s.</string>
+    <string name="ai_selfhost_instructions">IA opcional: configura QM_AI_PROVIDER, QM_AI_MODEL y QM_AI_API_KEY en el servidor. Usa QM_AI_BASE_URL para una URL personalizada y QM_AI_LOCAL=true para un servidor local sin clave. La IA autoalojada no tiene límites de suscripción.</string>
+    <string name="funnel_builder_key_format">Usa letras minúsculas, números, guiones bajos y guiones.</string>
+    <string name="funnel_builder_move_up">Subir</string>
+    <string name="funnel_builder_move_down">Bajar</string>
+    <string name="retention_data_source_v2">Cohortes basadas en instalaciones (v2)</string>
+    <string name="retention_data_source_legacy">Datos de cohortes heredados</string>
+    <string name="team_new_organization">Crear una organización de cliente independiente (administrador)</string>
+    <string name="team_recover_account">Crear enlace de recuperación de contraseña</string>
 </resources>

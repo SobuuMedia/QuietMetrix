@@ -2,6 +2,10 @@ package com.quietmetrix.dashboard.viewmodel
 
 import com.quietmetrix.dashboard.api.AccessTokenDto
 import com.quietmetrix.dashboard.api.AggregatesResponse
+import com.quietmetrix.dashboard.api.AiCapabilities
+import com.quietmetrix.dashboard.api.AiHistory
+import com.quietmetrix.dashboard.api.AiInsight
+import com.quietmetrix.dashboard.api.AiRequest
 import com.quietmetrix.dashboard.api.ApiClient
 import com.quietmetrix.dashboard.api.ApiException
 import com.quietmetrix.dashboard.api.ApiManagedUser
@@ -9,14 +13,17 @@ import com.quietmetrix.dashboard.api.ApiMember
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.ApiUser
 import com.quietmetrix.dashboard.api.CreateExperimentRequest
+import com.quietmetrix.dashboard.api.CreateFunnelRequest
 import com.quietmetrix.dashboard.api.CreateProjectResponse
 import com.quietmetrix.dashboard.api.ErrorKind
 import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.api.ExperimentResultsResponse
-import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FrictionResponse
+import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
+import com.quietmetrix.dashboard.api.ProjectReportDto
 import com.quietmetrix.dashboard.api.RegenerateKeyResponse
+import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.api.RetentionResponse
 import com.quietmetrix.dashboard.api.SearchResponse
 import com.quietmetrix.dashboard.api.SessionsResponse
@@ -28,19 +35,19 @@ import com.quietmetrix.dashboard.api.UserRole
 import com.quietmetrix.dashboard.api.decodeUserFromJwt
 import com.quietmetrix.dashboard.api.toUiError
 import com.quietmetrix.dashboard.nav.NavDestination
-import com.quietmetrix.dashboard.resources.ask_error_project
-import com.quietmetrix.dashboard.resources.ask_error_fetch
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.ask_error_fetch
+import com.quietmetrix.dashboard.resources.ask_error_project
 import com.quietmetrix.dashboard.resources.login_error_invalid_credentials
 import com.quietmetrix.dashboard.resources.login_error_misconfigured
 import com.quietmetrix.dashboard.resources.login_error_network
 import com.quietmetrix.dashboard.resources.login_error_server
 import com.quietmetrix.dashboard.resources.login_error_unknown
 import com.quietmetrix.dashboard.storage.TokenStorage
+import com.quietmetrix.dashboard.ui.screens.EXPERIMENTS_GUIDE_STEP_COUNT
+import com.quietmetrix.dashboard.ui.screens.chartMeasurePoints
 import com.quietmetrix.dashboard.ui.screens.guideStepAfter
 import com.quietmetrix.dashboard.ui.screens.guideStepBefore
-import com.quietmetrix.dashboard.ui.screens.shouldAutoOpenGuide
-import com.quietmetrix.dashboard.ui.screens.EXPERIMENTS_GUIDE_STEP_COUNT
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,6 +61,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.StringResource
 import kotlin.concurrent.Volatile
+
+/** Last observed API connection status; local stdio MCP status is not remotely observable. */
+enum class ServerConnection { Unknown, Checking, Online, Offline }
 
 data class DashboardState(
     /** Shared header preference controlling detailed statistics. */
@@ -72,11 +82,20 @@ data class DashboardState(
     val sectionErrors: Map<DataSection, UiError> = emptyMap(),
     val loginErrorRes: StringResource? = null,
     val serverDebug: Boolean = false,
+    val serverSelfhost: Boolean = false,
+    /** Server base URL used by this dashboard and the MCP client configuration. */
+    val serverBaseUrl: String = "",
+    /** Last server metadata version, never a hardcoded dashboard version. */
+    val serverVersion: String? = null,
+    val serverConnection: ServerConnection = ServerConnection.Unknown,
+    /** Prevents duplicate invitation requests and keeps the form visible while sending. */
+    val invitationPending: Boolean = false,
     val demoMode: Boolean = false,
     val activeDestination: NavDestination = NavDestination.Overview,
     val newProjectKeys: CreateProjectResponse? = null,
     val showInfo: NavDestination? = null,
     val transitions: TransitionsResponse? = null,
+    val flowPlatform: String = "all",
     val sessions: SessionsResponse? = null,
     val retention: RetentionResponse? = null,
     val search: SearchResponse? = null,
@@ -114,6 +133,8 @@ data class DashboardState(
     val toast: Toast? = null,
     /** Question, messages and in-flight state for the global Ask drawer. */
     val askDrawer: AskDrawerState = AskDrawerState(),
+    val ai: AiCapabilities = AiCapabilities(),
+    val aiInsight: AiInsight? = null,
     /** Whether the global previous-period comparison is enabled. */
     val compare: Boolean = false,
     /** UTC counter date shared by all requests in the current selection. */
@@ -145,6 +166,30 @@ data class DashboardState(
     val canWriteExperiments: Boolean get() = role == UserRole.ADMIN || role == UserRole.DEVELOPER
     /** Reviewers see everything read-only. */
     val isReadOnly: Boolean get() = role == UserRole.REVIEWER
+}
+
+/** Adapts the typed v2 daily cohorts without inventing counts for suppressed/missing measures. */
+private fun ProjectReportDto.toRetentionResponse(): RetentionResponse? {
+    return retentionResponseFrom(retentionCohorts)
+}
+
+private fun ProjectReportDto.toPreviousRetentionResponse(): RetentionResponse? =
+    retentionResponseFrom(comparisonRetentionCohorts)
+
+private fun ProjectReportDto.retentionResponseFrom(rows: List<com.quietmetrix.dashboard.api.ReportRetentionCohortDto>): RetentionResponse? {
+    if (rows.isEmpty()) return null
+    val cohorts = rows.map { cohort ->
+        val states = cohort.days.mapKeys { "day_${it.key}" }.mapValues { it.value.state }
+        fun rate(age: String): Double? = cohort.days[age]?.takeIf { it.state == "reported" || it.state == "zero" }?.rate
+        RetentionCohort(
+            cohortDate = cohort.entryDay,
+            size = cohort.size.value?.toInt() ?: 0,
+            day1 = rate("1"), day3 = rate("3"), day7 = rate("7"), day14 = rate("14"), day30 = rate("30"),
+            dayStates = states,
+            sizeState = cohort.size.state,
+        )
+    }
+    return RetentionResponse(cohorts, source = "v2")
 }
 
 
@@ -242,7 +287,10 @@ class DashboardViewModel(
 
     private lateinit var api: ApiClient
     private val json = Json { ignoreUnknownKeys = true }
+    private val connectionRequest = MutableStateFlow<Any?>(null)
     private val askRequest = MutableStateFlow<Any?>(null)
+    private val aiCapabilityRequest = MutableStateFlow<Any?>(null)
+    private var aiRetryRequest: AiRequest? = null
     private val analyticsRequests = MutableStateFlow<Map<DataSection, Any>>(emptyMap())
 
     /** Persists the signed-in user so role/email survive a page reload. */
@@ -252,11 +300,24 @@ class DashboardViewModel(
 
     suspend fun init(apiBaseUrl: String) {
         api = ApiClient(apiBaseUrl)
+        _state.update { it.copy(serverBaseUrl = apiBaseUrl.trimEnd('/')) }
+        checkServerConnectionOnce()
+    }
+
+    /** Refreshes the public API metadata; this does not probe a local MCP process. */
+    fun checkServerConnection() { scope.launch { checkServerConnectionOnce() } }
+
+    /** Only the latest metadata response can update the connection indicator. */
+    private suspend fun checkServerConnectionOnce() {
+        val request = Any()
+        connectionRequest.value = request
+        _state.update { it.copy(serverConnection = ServerConnection.Checking) }
         try {
-            val meta = api.meta()
-            _state.update { it.copy(serverDebug = meta.debug) }
-        } catch (_: Throwable) {
-            _state.update { it.copy(serverDebug = false) }
+            val meta = kotlinx.coroutines.withTimeout(10_000) { api.meta() }
+            _state.update { if (connectionRequest.value === request) it.copy(serverDebug = meta.debug, serverSelfhost = meta.selfhost, serverVersion = meta.version, serverConnection = ServerConnection.Online) else it }
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException && e !is kotlinx.coroutines.TimeoutCancellationException) throw e
+            _state.update { if (connectionRequest.value === request) it.copy(serverConnection = ServerConnection.Offline) else it }
         }
     }
 
@@ -328,13 +389,17 @@ class DashboardViewModel(
     }
 
     fun logout() {
+        api.refreshToken?.let { refresh -> scope.launch { api.revokeSession(refresh) } }
+        aiRetryRequest = null
+        askRequest.value = null
+        aiCapabilityRequest.value = null
         api.token = null
         api.refreshToken = null
         TokenStorage.clear()
         TokenStorage.clearRefresh()
         TokenStorage.clearLastProjectId()
         TokenStorage.clearUser()
-        _state.value = DashboardState(serverDebug = _state.value.serverDebug)
+        _state.value = DashboardState(serverDebug = _state.value.serverDebug, serverSelfhost = _state.value.serverSelfhost, serverBaseUrl = _state.value.serverBaseUrl, serverVersion = _state.value.serverVersion, serverConnection = _state.value.serverConnection)
     }
 
     fun restoreSession(token: String) {
@@ -440,18 +505,17 @@ class DashboardViewModel(
             NavDestination.Funnels   -> loadFunnelsOnce()
             NavDestination.Experiments -> {
                 loadExperimentsOnce()
-                if (shouldAutoOpenGuide(TokenStorage.isExperimentsGuideSeen())) {
-                    _state.update { it.copy(experimentsGuideOpen = true, experimentsGuideStep = 0) }
-                }
             }
             NavDestination.Settings  -> loadTokensOnce()
         }
     }
 
     fun selectProject(projectId: String) {
+        aiRetryRequest = null
+        askRequest.value = null
         _state.update {
             it.copy(
-                currentProjectId = projectId, askDrawer = AskDrawerState(open = it.askDrawer.open), aggregates = null, sessions = null, retention = null, transitions = null,
+                currentProjectId = projectId, askDrawer = AskDrawerState(), ai = AiCapabilities(), aiInsight = null, aggregates = null, sessions = null, retention = null, transitions = null,
                 search = null, friction = null, comparison = ComparisonData(), comparisonErrors = emptyMap(),
                 sectionErrors = emptyMap(), analyticsRevision = it.analyticsRevision + 1, drillDown = null, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null,
                 experiments = emptyList(), experimentLimit = null, selectedExperimentKey = null, experimentResults = null,
@@ -462,7 +526,7 @@ class DashboardViewModel(
     }
 
     fun selectRange(range: TimeRange) {
-        _state.update { it.copy(range = range, askDrawer = AskDrawerState(open = it.askDrawer.open), aggregates = null, transitions = null, sessions = null, retention = null,
+        _state.update { it.copy(range = range, aiInsight = null, askDrawer = AskDrawerState(open = it.askDrawer.open), aggregates = null, transitions = null, sessions = null, retention = null,
             search = null, friction = null, funnelResults = null, experimentResults = null, experimentResultsRange = null,
             comparison = ComparisonData(), comparisonErrors = emptyMap(), sectionErrors = emptyMap(),
             analyticsAnchor = analyticsAnchorToday(), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
@@ -474,7 +538,7 @@ class DashboardViewModel(
 
     /** Toggles the dashboard-wide previous-period comparison preference. */
     fun toggleCompare() {
-        _state.update { it.copy(compare = !it.compare, comparison = ComparisonData(), comparisonErrors = emptyMap(),
+        _state.update { it.copy(compare = !it.compare, aiInsight = null, askDrawer = AskDrawerState(), comparison = ComparisonData(), comparisonErrors = emptyMap(),
             analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch { loadActive(_state.value.activeDestination) }
     }
@@ -489,18 +553,30 @@ class DashboardViewModel(
 
     fun setDemoMode(enabled: Boolean) {
         if (!_state.value.serverDebug) return
-        _state.update { it.copy(demoMode = enabled, aggregates = null, comparison = ComparisonData(), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
+        _state.update { it.copy(demoMode = enabled, ai = AiCapabilities(), aiInsight = null, askDrawer = AskDrawerState(), aggregates = null, comparison = ComparisonData(), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch { loadAggregates() }
     }
 
-    fun createProject(name: String, description: String? = null) {
+    fun createProject(name: String, description: String? = null, iconKey: String = "book", declaredPlatforms: List<String> = emptyList()) {
         scope.launch {
             try {
-                val out = api.createProject(name, description)
+                val out = api.createProject(name, description, iconKey, declaredPlatforms)
                 _state.update { it.copy(newProjectKeys = out) }
                 loadProjects()
             } catch (e: Throwable) {
                 _state.update { it.copy(error = e.toUiError("POST /projects")) }
+            }
+        }
+    }
+
+    fun updateProject(projectId: String, name: String) {
+        scope.launch {
+            try {
+                api.updateProject(projectId, name.trim())
+                loadProjects()
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _state.update { it.copy(error = e.toUiError("PATCH /projects/{id}")) }
             }
         }
     }
@@ -564,15 +640,52 @@ class DashboardViewModel(
         }
     }
 
-    fun inviteUser(email: String, role: String) {
+    /** Sends one validated invitation at a time and preserves the resulting shareable link. */
+    fun inviteUser(email: String, role: String, projectIds: List<String> = emptyList()) = inviteAccount(email, role, projectIds, false)
+
+    fun inviteOrganization(email: String) {
+        if (_state.value.user?.platformOperator != true || _state.value.serverSelfhost) return
+        inviteAccount(email, UserRole.ADMIN, emptyList(), true)
+    }
+
+    private fun inviteAccount(email: String, role: String, projectIds: List<String>, newOrganization: Boolean) {
+        if (!com.quietmetrix.dashboard.ui.screens.isInvitationEmailValid(email)) return
+        while (true) {
+            val state = _state.value
+            if (!state.isAdmin || state.invitationPending) return
+            if (_state.compareAndSet(state, state.copy(invitationPending = true, error = null, lastInviteLink = null))) break
+        }
+        val session = _state.value.token
         scope.launch {
             try {
-                val res = api.inviteUser(email, role)
-                _state.update { it.copy(lastInviteLink = res.inviteLink) }
-                loadUsers()
+                val res = api.inviteUser(email.trim(), role, newOrganization)
+                _state.update { if (it.token == session) it.copy(lastInviteLink = res.inviteLink) else it }
+                for (projectId in projectIds.distinct()) api.addMember(projectId, email.trim())
+                if (_state.value.token == session) {
+                    loadUsers()
+                    projectIds.distinct().forEach(::loadMembers)
+                }
             } catch (e: Throwable) {
-                _state.update { it.copy(error = e.toUiError("POST /users/invite")) }
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _state.update { if (it.token == session) it.copy(error = e.toUiError("POST /users/invite")) else it }
+            } finally {
+                _state.update { if (it.token == session) it.copy(invitationPending = false) else it }
             }
+        }
+    }
+
+    fun recoverUser(userId: String) {
+        val session = _state.value.token
+        if (!_state.value.isAdmin || _state.value.invitationPending) return
+        _state.update { it.copy(invitationPending = true, lastInviteLink = null) }
+        scope.launch {
+            try {
+                val result = api.recoverUser(userId)
+                _state.update { if (it.token == session) it.copy(lastInviteLink = result.inviteLink) else it }
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _state.update { if (it.token == session) it.copy(error = e.toUiError("POST /users/{id}/recover")) else it }
+            } finally { _state.update { if (it.token == session) it.copy(invitationPending = false) else it } }
         }
     }
 
@@ -610,10 +723,10 @@ class DashboardViewModel(
         loadList(DataSection.Tokens, "GET /tokens", fetch = { api.listTokens().tokens }) { copy(accessTokens = it) }
     }
 
-    fun createToken(name: String, scopes: List<String>? = null) {
+    fun createToken(name: String, scopes: List<String>? = null, expiresInDays: Long? = null) {
         scope.launch {
             try {
-                val res = api.createToken(name, scopes)
+                val res = api.createToken(name, scopes, expiresInDays)
                 _state.update { it.copy(newAccessToken = res.token) }
                 loadTokens()
             } catch (e: Throwable) {
@@ -712,6 +825,19 @@ class DashboardViewModel(
                 loadFunnelsOnce()
             } catch (e: Throwable) {
                 _state.update { it.copy(error = e.toUiError("DELETE /projects/{id}/funnels/{key}")) }
+            }
+        }
+    }
+
+    fun createFunnel(request: CreateFunnelRequest) {
+        val projectId = _state.value.currentProjectId ?: return
+        scope.launch {
+            try {
+                val created = api.createFunnel(projectId, request)
+                _state.update { it.copy(selectedFunnelKey = created.funnelKey, funnelResults = null, error = null) }
+                loadFunnelsOnce()
+            } catch (e: Throwable) {
+                _state.update { it.copy(error = e.toUiError("POST /projects/{id}/funnels")) }
             }
         }
     }
@@ -824,9 +950,8 @@ class DashboardViewModel(
         _state.update { it.copy(experimentsGuideStep = guideStepBefore(it.experimentsGuideStep)) }
     }
 
-    /** Closes the guide, whether finished or skipped, and marks it seen so it won't auto-open again. */
+    /** Closes the guide, whether finished or skipped. */
     fun closeExperimentsGuide() {
-        TokenStorage.saveExperimentsGuideSeen()
         _state.update { it.copy(experimentsGuideOpen = false) }
     }
 
@@ -848,16 +973,44 @@ class DashboardViewModel(
 
     private suspend fun loadProjects() {
         loadList(DataSection.Projects, "GET /projects", fetch = { api.listProjects() }) { res ->
-            copy(projects = res.projects, currentProjectId = currentProjectId?.takeIf { key -> res.projects.any { it.id == key } } ?: res.projects.firstOrNull()?.id)
+            val selected = currentProjectId?.takeIf { key -> res.projects.any { it.id == key } } ?: res.projects.firstOrNull()?.id
+            val changed = selected != currentProjectId
+            copy(projects = res.projects, currentProjectId = selected, ai = if (changed) AiCapabilities() else ai,
+                aiInsight = if (changed) null else aiInsight, askDrawer = if (changed) AskDrawerState() else askDrawer,
+                analyticsRevision = analyticsRevision + if (changed) 1 else 0)
         }
     }
 
     /** Loads aggregates and an optional previous period within one captured selection. */
     private suspend fun loadAggregates() {
+        scope.launch { loadAi() }
         val snapshot = _state.value
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Aggregates, "GET /projects/{id}/aggregates", snapshot,
-            fetch = { previous, anchor -> api.aggregates(snapshot.currentProjectId.orEmpty(), snapshot.range, snapshot.demoMode, previous = previous, anchor = anchor) },
+            fetch = { previous, anchor ->
+                val legacy = api.aggregates(snapshot.currentProjectId.orEmpty(), snapshot.range, snapshot.demoMode, previous = previous, anchor = anchor)
+                if (previous || snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
+                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare) }.getOrNull()
+                    val people = report?.overview?.get("people")
+                    if (people == null) legacy else legacy.copy(
+                        people = people.value,
+                        peopleState = people.state,
+                        peopleSource = people.source,
+                        peopleComparison = report.comparison["people"]?.value,
+                        v2Visits = report.overview["visits"]?.value,
+                        v2VisitDurationMs = report.overview["visit_duration"]?.value,
+                        v2VisitDurationState = report.overview["visit_duration"]?.state,
+                        v2Crashes = report.overview["crashes"]?.value,
+                        v2CrashesState = report.overview["crashes"]?.state,
+                        dailyPeople = report.charts["people"].orEmpty().chartMeasurePoints("people"),
+                        dailyPeoplePrevious = report.comparisonCharts["people"].orEmpty().chartMeasurePoints("people"),
+                        dailyVisitsV2 = report.charts["visits"].orEmpty().chartMeasurePoints("visits"),
+                        dailyVisitsV2Previous = report.comparisonCharts["visits"].orEmpty().chartMeasurePoints("visits"),
+                        dailyActionsV2 = report.charts["events"].orEmpty().chartMeasurePoints("events"),
+                        dailyActionsV2Previous = report.comparisonCharts["events"].orEmpty().chartMeasurePoints("events"),
+                    )
+                }
+            },
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(aggregates = result)) else copy(aggregates = result)
             })
@@ -868,10 +1021,17 @@ class DashboardViewModel(
         val snapshot = _state.value
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Transitions, "GET /projects/{id}/transitions", snapshot,
-            fetch = { previous, anchor -> api.transitions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            fetch = { previous, anchor -> api.transitions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor, platform = snapshot.flowPlatform) },
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(transitions = result)) else copy(transitions = result)
             })
+    }
+
+    fun setFlowPlatform(platform: String) {
+        if (platform !in setOf("all", "android", "ios", "web")) return
+        if (_state.value.flowPlatform == platform) return
+        _state.update { it.copy(flowPlatform = platform, transitions = null) }
+        scope.launch { loadTransitions() }
     }
 
     /** Loads search and an optional previous period within one captured selection. */
@@ -912,7 +1072,13 @@ class DashboardViewModel(
         val snapshot = _state.value
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Retention, "GET /projects/{id}/retention", snapshot,
-            fetch = { previous, anchor -> api.retention(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            fetch = { previous, anchor ->
+                val legacy = api.retention(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor)
+                if (snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
+                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, compare = snapshot.compare) }.getOrNull()
+                    (if (previous) report?.toPreviousRetentionResponse() else report?.toRetentionResponse()) ?: legacy
+                }
+            },
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(retention = result)) else copy(retention = result)
             })
@@ -952,6 +1118,43 @@ class DashboardViewModel(
         }
     }
 
+    /** Captures a bounded prior conversation and the dashboard's current UTC date context. */
+    private fun aiRequest(snapshot: DashboardState, question: String = ""): AiRequest {
+        val history = snapshot.askDrawer.messages.filter { it.role != AskMessageRole.Error }.dropLast(if (question.isNotEmpty()) 1 else 0).takeLast(6)
+            .map { AiHistory(if (it.role == AskMessageRole.User) "user" else "assistant", it.text.take(2000)) }
+        return AiRequest(question = question, language = androidx.compose.ui.text.intl.Locale.current.language, range = snapshot.range.token, anchor = snapshot.analyticsAnchor, compare = snapshot.compare,
+            history = if (question.isEmpty()) emptyList() else history, operation_id = kotlin.random.Random.nextBytes(16).joinToString("") { byte -> (byte.toInt() and 255).toString(16).padStart(2, '0') })
+    }
+
+    /** Capability refresh rejects responses from a previous selection or logged-out session. */
+    private suspend fun loadAiCapabilities(snapshot: DashboardState): AiCapabilities? {
+        val project = snapshot.currentProjectId ?: return null
+        val request = Any()
+        aiCapabilityRequest.value = request
+        return try {
+            val result = api.aiCapabilities(project)
+            _state.update { if (aiCapabilityRequest.value === request && it.currentProjectId == project && it.token == snapshot.token && it.analyticsRevision == snapshot.analyticsRevision)
+                it.copy(ai = result, aiInsight = if (!result.enabled) null else it.aiInsight, askDrawer = if (!result.enabled) AskDrawerState() else if (!result.available) it.askDrawer.copy(loading = false) else it.askDrawer) else it }
+            result
+        } catch (_: Throwable) {
+            _state.update { if (aiCapabilityRequest.value === request && it.currentProjectId == project && it.token == snapshot.token && it.analyticsRevision == snapshot.analyticsRevision) it.copy(ai = AiCapabilities(), aiInsight = null, askDrawer = AskDrawerState()) else it }
+            null
+        }
+    }
+
+    /** Computed summaries render first; optional AI text loads without blocking analytics. */
+    private suspend fun loadAi() {
+        val snapshot = _state.value
+        if (snapshot.token == null || snapshot.demoMode) return
+        val access = loadAiCapabilities(snapshot) ?: return
+        if (!access.enabled) return
+        try {
+            val summary = api.aiInsight(snapshot.currentProjectId!!, aiRequest(snapshot))
+            _state.update { if (it.currentProjectId == snapshot.currentProjectId && it.token == snapshot.token && it.analyticsRevision == snapshot.analyticsRevision && it.ai.enabled) it.copy(aiInsight = summary) else it }
+            loadAiCapabilities(snapshot)
+        } catch (_: Throwable) { }
+    }
+
     // ---- Ask drawer ----
 
     /** Opens the Ask drawer, optionally pre-filling a drill-down or result-specific question. */
@@ -972,7 +1175,7 @@ class DashboardViewModel(
     /** Sends a question to the authenticated, privacy-gated computed analytics endpoint. */
     fun askQuestion(question: String? = null) {
         val current = _state.value
-        if (current.askDrawer.loading) return
+        if (current.askDrawer.loading || !current.ai.available) return
         val q = question ?: current.askDrawer.draft
         val pending = reduceAskDrawer(current.askDrawer, AskDrawerEvent.Submit(q))
         if (pending === current.askDrawer || pending.messages == current.askDrawer.messages) return
@@ -987,10 +1190,15 @@ class DashboardViewModel(
                 return@launch
             }
             try {
-                val answer = api.ask(projectId, pending.retryQuestion.orEmpty(), snapshot.range)
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) else it }
-            } catch (_: Throwable) {
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
+                val submission = aiRequest(snapshot, pending.retryQuestion.orEmpty())
+                aiRetryRequest = submission
+                val answer = api.aiAsk(projectId, submission)
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.ai.available && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.sources.joinToString(" · ")))) else it }
+                loadAiCapabilities(snapshot)
+            } catch (e: Throwable) {
+                if (e is ApiException && e.code in setOf("ai_provider_failed", "ai_operation_expired", "ai_operation_conflict")) aiRetryRequest = null
+                loadAiCapabilities(snapshot)
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
             }
         }
     }
@@ -999,7 +1207,7 @@ class DashboardViewModel(
     fun retryAskQuestion() {
         val state = _state.value.askDrawer
         val question = state.retryQuestion ?: return
-        if (state.loading) return
+        if (state.loading || !_state.value.ai.available) return
         _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Retry)) }
         val snapshot = _state.value
         val request = Any()
@@ -1010,10 +1218,15 @@ class DashboardViewModel(
                 return@launch
             }
             try {
-                val answer = api.ask(projectId, question, snapshot.range)
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.source))) else it }
-            } catch (_: Throwable) {
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
+                val submission = aiRetryRequest?.takeIf { it.question == question && it.range == snapshot.range.token && it.anchor == snapshot.analyticsAnchor && it.compare == snapshot.compare } ?: aiRequest(snapshot, question)
+                aiRetryRequest = submission
+                val answer = api.aiAsk(projectId, submission)
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.ai.available && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.sources.joinToString(" · ")))) else it }
+                loadAiCapabilities(snapshot)
+            } catch (e: Throwable) {
+                if (e is ApiException && e.code in setOf("ai_provider_failed", "ai_operation_expired", "ai_operation_conflict")) aiRetryRequest = null
+                loadAiCapabilities(snapshot)
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
             }
         }
     }

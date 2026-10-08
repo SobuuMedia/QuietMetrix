@@ -47,6 +47,7 @@ internal data class CohortHeatmapRow(
     val id: String,
     val label: String,
     val size: Int,
+    val sizeState: String = "reported",
     val cells: List<CohortHeatmapCell>,
 )
 
@@ -68,14 +69,9 @@ private fun rawDayValue(cohort: RetentionCohort, dayNumber: Int): Double? = when
  * defaults to the real current day, overridable for deterministic tests).
  *
  * [CohortGrouping.ByDay] passes each cohort through untouched (one row per server-side cohort,
- * newest first). [CohortGrouping.ByWeek] buckets cohorts into 7-day windows anchored to the Unix
- * epoch (`epochDay / 7`, integer division) — NOT calendar weeks aligned to a particular weekday. This
- * is a documented judgment call (the brief flagged by-week/by-day reshaping as something to clarify
- * if genuinely unclear; a rolling epoch-anchored bucket is unambiguous, deterministic, dependency-free
- * — matching [epochDayFromIsoOrNull]'s own "no kotlinx-datetime" precedent — and distributes daily
- * cohorts into stable, non-overlapping 7-day groups, which is the one property the spec's "a cohort is
- * everyone who installed in the same week" framing actually requires; it is NOT guaranteed to start on
- * a Monday). A week row's [CohortHeatmapRow.size] is the sum of its member cohorts' sizes; a week
+ * newest first). [CohortGrouping.ByWeek] buckets each actual cohort date into its ISO calendar week,
+ * Monday through Sunday; historical `YYYY-WNN` cohorts stay in their original pre-aggregated buckets.
+ * A week row's [CohortHeatmapRow.size] is the sum of its member cohorts' sizes; a week
  * row's per-day cell is [effectiveDayValue]-weighted-averaged across member cohorts — see
  * [weightedWeekCell]'s KDoc for exactly how. Cohorts whose `cohortDate` fails to parse
  * ([epochDayFromIsoOrNull] returns null) are dropped from [ByWeek] grouping entirely (there is no
@@ -93,6 +89,7 @@ internal fun buildCohortHeatmapRows(
                 id = cohort.cohortDate,
                 label = cohort.cohortDate,
                 size = cohort.size,
+                sizeState = cohort.sizeState,
                 cells = COHORT_HEATMAP_DAY_NUMBERS.map { dayNumber ->
                     resolvedCell(cohort, dayNumber, todayEpochDay)
                 },
@@ -102,24 +99,49 @@ internal fun buildCohortHeatmapRows(
     CohortGrouping.ByWeek -> buildByWeekRows(cohorts, todayEpochDay)
 }
 
-/** [buildCohortHeatmapRows]'s [CohortGrouping.ByWeek] branch — see that function's KDoc for the
- *  epoch-anchored 7-day bucketing rule and why it's a documented judgment call, not a spec mandate. */
+/** [buildCohortHeatmapRows]'s [CohortGrouping.ByWeek] branch, grouped by ISO Monday-start week. */
 private fun buildByWeekRows(cohorts: List<RetentionCohort>, todayEpochDay: Long): List<CohortHeatmapRow> {
+    data class WeekKey(val sortDay: Long, val id: String, val label: String)
     val byWeekBucket = cohorts
-        .mapNotNull { cohort -> epochDayFromIsoOrNull(cohort.cohortDate)?.let { it.floorDiv(7) to cohort } }
+        .mapNotNull { cohort ->
+            val legacyWeek = Regex("\\d{4}-W\\d{2}").matches(cohort.cohortDate)
+            val day = epochDayFromIsoOrNull(cohort.cohortDate) ?: return@mapNotNull null
+            val key = if (legacyWeek) {
+                WeekKey(day, "legacy-${cohort.cohortDate}", cohort.cohortDate)
+            } else {
+                val offset = ((day + 3L) % 7L + 7L) % 7L
+                val monday = day - offset
+                WeekKey(monday, "week-$monday", isoDateFromEpochDay(monday))
+            }
+            key to cohort
+        }
         .groupBy({ it.first }, { it.second })
     return byWeekBucket.entries
-        .sortedByDescending { it.key }
-        .map { (weekBucket, members) ->
+        .sortedByDescending { it.key.sortDay }
+        .map { (week, members) ->
             CohortHeatmapRow(
-                id = "week-$weekBucket",
-                // Earliest install date in the bucket, matching the prototype's own "label the week by
-                // its first day" convention (`weekData`'s `'Aug 11'` entries are each a bucket's Monday).
-                label = members.minOf { it.cohortDate },
+                id = week.id,
+                label = week.label,
                 size = members.sumOf { it.size },
+                sizeState = if (members.any { it.sizeState == "suppressed" }) "suppressed" else "reported",
                 cells = COHORT_HEATMAP_DAY_NUMBERS.map { dayNumber -> weightedWeekCell(members, dayNumber, todayEpochDay) },
             )
         }
+}
+
+/** Inverse of [epochDayFromIsoOrNull], used to label a calendar-week row by its Monday. */
+private fun isoDateFromEpochDay(epochDay: Long): String {
+    val z = epochDay + 719468L
+    val era = (if (z >= 0L) z else z - 146096L).floorDiv(146097L)
+    val doe = z - era * 146097L
+    val yoe = (doe - doe / 1460L + doe / 36524L - doe / 146096L) / 365L
+    var year = yoe + era * 400L
+    val doy = doe - (365L * yoe + yoe / 4L - yoe / 100L)
+    val mp = (5L * doy + 2L) / 153L
+    val day = doy - (153L * mp + 2L) / 5L + 1L
+    val month = mp + if (mp < 10L) 3L else -9L
+    if (month <= 2L) year += 1L
+    return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
 }
 
 /**
@@ -128,7 +150,9 @@ private fun buildByWeekRows(cohorts: List<RetentionCohort>, todayEpochDay: Long)
  * are excluded until they mature; if none contribute yet, the cell is marked Future.
  */
 private fun weightedWeekCell(members: List<RetentionCohort>, dayNumber: Int, todayEpochDay: Long): CohortHeatmapCell {
-    val unavailableMatureMember = members.any { cohort -> rawDayValue(cohort, dayNumber) == null && cohort.size > 0 && !isFuture(cohort, dayNumber, todayEpochDay) }
+    val unavailableMatureMember = members.any { cohort ->
+        cohort.sizeState == "suppressed" || (rawDayValue(cohort, dayNumber) == null && cohort.size > 0 && !isFuture(cohort, dayNumber, todayEpochDay))
+    }
     if (unavailableMatureMember) return CohortHeatmapCell(null, CohortHeatmapCellState.Unavailable)
     val contributions = members.mapNotNull { cohort ->
         effectiveDayValue(cohort, dayNumber, rawDayValue(cohort, dayNumber), todayEpochDay)?.let { value -> cohort.size to value }

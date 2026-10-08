@@ -1,8 +1,11 @@
 package com.quietmetrix.dashboard.api
 
+import com.quietmetrix.dashboard.storage.TokenStorage
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.plugin
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -11,9 +14,13 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
 /**
@@ -37,11 +44,40 @@ class ApiClient(private val baseUrl: String) {
         expectSuccess = false
     }
 
-    var token: String? = null
-    var refreshToken: String? = null
+    private var sessionEpoch = 0L
+    private var accessCredential: String? = null
+    private var refreshCredential: String? = null
+    var token: String?
+        get() = accessCredential
+        set(value) { if (accessCredential != value) sessionEpoch++; accessCredential = value }
+    var refreshToken: String?
+        get() = refreshCredential
+        set(value) { if (refreshCredential != value) sessionEpoch++; refreshCredential = value }
+    private val refreshMutex = Mutex()
+
+    init {
+        client.plugin(HttpSend).intercept { request ->
+            val sentEpoch = sessionEpoch
+            val sentToken = request.headers[HttpHeaders.Authorization]
+            val first = execute(request)
+            if (first.response.status != HttpStatusCode.Unauthorized || sentToken == null ||
+                request.url.build().encodedPath.contains("/auth/")) return@intercept first
+            val renewed = refreshMutex.withLock {
+                if (sentEpoch != sessionEpoch) return@withLock false
+                if (sentToken != "Bearer $token" && token != null) true else refresh()
+            }
+            if (!renewed) return@intercept first
+            request.headers.remove(HttpHeaders.Authorization)
+            request.headers.append(HttpHeaders.Authorization, "Bearer $token")
+            execute(request)
+        }
+    }
 
     private fun url(path: String): String =
         baseUrl.trimEnd('/') + "/api/v1" + path
+
+    private fun urlV2(path: String): String =
+        baseUrl.trimEnd('/') + "/api/v2" + path
 
     private suspend fun ensureSuccess(res: HttpResponse) {
         if (res.status.isSuccess()) return
@@ -71,7 +107,12 @@ class ApiClient(private val baseUrl: String) {
         return body
     }
 
+    suspend fun revokeSession(refresh: String) {
+        runCatching { client.post(url("/auth/logout")) { contentType(ContentType.Application.Json); setBody(RefreshRequest(refresh)) } }
+    }
+
     suspend fun refresh(): Boolean {
+        val epoch = sessionEpoch
         val rt = refreshToken ?: return false
         return try {
             val res = client.post(url("/auth/refresh")) {
@@ -79,9 +120,12 @@ class ApiClient(private val baseUrl: String) {
                 setBody(RefreshRequest(rt))
             }
             ensureSuccess(res)
-            val body: LoginResponse = res.body()
-            token = body.token
-            refreshToken = body.refreshToken
+            val body: RefreshResponse = res.body()
+            if (epoch != sessionEpoch || refreshToken != rt) return false
+            accessCredential = body.token
+            refreshCredential = body.refreshToken
+            TokenStorage.save(body.token)
+            TokenStorage.saveRefresh(body.refreshToken)
             true
         } catch (_: Exception) {
             false
@@ -96,14 +140,23 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun createProject(name: String, description: String? = null): CreateProjectResponse {
+    suspend fun createProject(name: String, description: String? = null, iconKey: String = "book", declaredPlatforms: List<String> = emptyList()): CreateProjectResponse {
         val res = client.post(url("/projects")) {
             contentType(ContentType.Application.Json)
             token?.let { header("Authorization", "Bearer $it") }
-            setBody(CreateProjectRequest(name, description))
+            setBody(CreateProjectRequest(name, description, iconKey, declaredPlatforms))
         }
         ensureSuccess(res)
         return res.body()
+    }
+
+    suspend fun updateProject(projectId: String, name: String) {
+        val res = client.patch(url("/projects/$projectId")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(UpdateProjectRequest(name))
+        }
+        ensureSuccess(res)
     }
 
     suspend fun deleteProject(projectId: String) {
@@ -131,11 +184,11 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun createToken(name: String, scopes: List<String>? = null): CreateTokenResponse {
+    suspend fun createToken(name: String, scopes: List<String>? = null, expiresInDays: Long? = null): CreateTokenResponse {
         val res = client.post(url("/tokens")) {
             contentType(ContentType.Application.Json)
             token?.let { header("Authorization", "Bearer $it") }
-            setBody(CreateTokenRequest(name, scopes))
+            setBody(CreateTokenRequest(name, scopes, expiresInDays))
         }
         ensureSuccess(res)
         return res.body()
@@ -158,11 +211,19 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun inviteUser(email: String, role: String): InviteResponse {
+    suspend fun recoverUser(userId: String): InviteResponse {
+        val res = client.post(url("/users/$userId/recover")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun inviteUser(email: String, role: String, newOrganization: Boolean = false): InviteResponse {
         val res = client.post(url("/users/invite")) {
             contentType(ContentType.Application.Json)
             token?.let { header("Authorization", "Bearer $it") }
-            setBody(InviteUserRequest(email, role))
+            setBody(InviteUserRequest(email, role, newOrganization))
         }
         ensureSuccess(res)
         return res.body()
@@ -239,8 +300,28 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun transitions(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null): TransitionsResponse {
-        val res = client.get(url("/projects/$projectId/transitions?range=${range.token}${analyticsWindowQuery(previous, anchor)}")) {
+    suspend fun projectReport(projectId: String, range: TimeRange, anchor: String? = null, compare: Boolean = false): ProjectReportDto {
+        val reportRange = when (range) {
+            TimeRange.Day1 -> "today"
+            TimeRange.Day7 -> "7d"
+            TimeRange.Day30 -> "30d"
+            TimeRange.Day90 -> "90d"
+            TimeRange.Hour1 -> "1h"
+        }
+        val query = buildString {
+            append("range=").append(reportRange)
+            anchor?.let { append("&anchor=").append(it) }
+            append("&compare=").append(compare)
+        }
+        val res = client.get(urlV2("/projects/$projectId/report?$query")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    suspend fun transitions(projectId: String, range: TimeRange, previous: Boolean = false, anchor: String? = null, platform: String = "all"): TransitionsResponse {
+        val res = client.get(url("/projects/$projectId/transitions?range=${range.token}${analyticsWindowQuery(previous, anchor)}&platform=$platform")) {
             token?.let { header("Authorization", "Bearer $it") }
         }
         ensureSuccess(res)
@@ -285,6 +366,37 @@ class ApiClient(private val baseUrl: String) {
             contentType(ContentType.Application.Json)
             token?.let { header("Authorization", "Bearer $it") }
             setBody(AskDataRequest(question, range.token))
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    /** Loads effective access before showing Ask controls. */
+    suspend fun aiCapabilities(projectId: String): AiCapabilities {
+        val res = client.get(url("/projects/$projectId/ai/capabilities")) {
+            token?.let { header("Authorization", "Bearer $it") }
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    /** Sends bounded client-side history to the optional AI endpoint. */
+    suspend fun aiAsk(projectId: String, request: AiRequest): AiAnswer {
+        val res = client.post(url("/projects/$projectId/ai/ask")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(request)
+        }
+        ensureSuccess(res)
+        return res.body()
+    }
+
+    /** Requests a free cached or computed summary, or one eligible generation. */
+    suspend fun aiInsight(projectId: String, request: AiRequest): AiInsight {
+        val res = client.post(url("/projects/$projectId/ai/insight")) {
+            contentType(ContentType.Application.Json)
+            token?.let { header("Authorization", "Bearer $it") }
+            setBody(request)
         }
         ensureSuccess(res)
         return res.body()

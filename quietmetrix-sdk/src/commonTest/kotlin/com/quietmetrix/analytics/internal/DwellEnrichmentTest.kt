@@ -24,12 +24,14 @@ class DwellEnrichmentTest {
 
     @BeforeTest
     fun setUp() = runTest {
+        grantAnalyticsForTest("dwell_test_")
         ScreenTracker.reset()
     }
 
     @AfterTest
     fun tearDown() = runTest {
         ScreenTracker.reset()
+        resetAnalyticsTestGate()
     }
 
     @Test

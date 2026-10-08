@@ -30,3 +30,11 @@ class QuotaEnforcer(@Suppress("unused") private val projectRepository: ProjectRe
         return if (planId == null || planId == "free") 2 else null
     }
 }
+
+/** Hosted tenant project limits; the default self-host path remains unlimited. */
+fun hostedProjectLimit(planId: String?): Int = when (planId) {
+    "hobby" -> 3
+    "startup" -> 10
+    "business" -> 50
+    else -> 1
+}

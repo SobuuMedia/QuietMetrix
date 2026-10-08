@@ -6,17 +6,10 @@ All production deployments must use HTTPS. QuietMetrix API keys are sent in requ
 
 ### Docker (Caddy)
 
-The included Docker Compose configuration uses Caddy with automatic HTTPS via Let's Encrypt. No additional configuration is needed — Caddy obtains and renews certificates automatically.
-
-To enforce HTTPS, ensure your Caddyfile redirects HTTP to HTTPS:
-
-```
-yourhost.com {
-    redir http:// {
-        https://{host}{uri} permanent
-    }
-}
-```
+Use the production override described in [public hosting](public-hosting.md).
+The base Compose file serves local HTTP on loopback. The production override adds
+Caddy, removes the direct API port, and requires an owned DNS name, TLS email,
+and reachable ports 80/443. Verify certificate issuance before accepting customers.
 
 ### Shared Hosting (Apache)
 
@@ -41,10 +34,10 @@ If an API key is compromised, rotate it immediately:
 
 ```bash
 # Generate a new API key via the admin API
-curl -X POST https://yourhost/api/v1/projects/{projectId} \
+curl -X POST https://yourhost/api/v1/projects/{projectId}/regenerate-key \
   -H "Authorization: Bearer $SESSION_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"action": "rotate_api_key"}'
+  -d '{}'
 ```
 
 The old API key stops working immediately. Update all SDK configurations with the new key.
@@ -57,40 +50,15 @@ The old API key stops working immediately. Update all SDK configurations with th
 
 ## Rate Limiting
 
-See [Rate Limits](rate-limits.md) for configuration details. Enable rate limiting in production to prevent abuse:
-
-**Ktor** (`application.conf`):
-```
-quietmetrix.rateLimit.enabled = true
-quietmetrix.rateLimit.requestsPerSecond = 100
-quietmetrix.rateLimit.burstPerMinute = 600
-```
-
-**PHP** (`.env`):
-```
-QM_RATE_LIMIT_ENABLED=true
-QM_RATE_LIMIT_RPS=100
-QM_RATE_LIMIT_BURST=600
-```
+See [Rate Limits](rate-limits.md) for the implemented shared budgets and local ingest
+limits. Cloud startup rejects disabled limits.
 
 ## CORS
 
-By default, the Ktor backend allows CORS from all origins for tracking endpoints. For admin endpoints, only same-origin requests are allowed.
-
-To restrict CORS origins:
-
-```
-QM_CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
-```
-
-For the PHP backend, configure CORS in your `.htaccess` or web server config:
-
-```apache
-Header set Access-Control-Allow-Origin "https://yourdomain.com"
-Header set Access-Control-Allow-Methods "POST, GET, OPTIONS"
-Header set Access-Control-Allow-Headers "Content-Type, X-QM-Api-Key"
-Header set Access-Control-Max-Age "86400"
-```
+Set `QM_CORS_ALLOWED_ORIGINS` to explicit dashboard origins for Ktor. PHP reads
+`ALLOWED_ORIGIN` and `ALLOWED_ORIGINS` from its protected configuration file.
+Configure the application rather than adding conflicting wildcard web-server headers.
+Browser-origin checks apply to ingestion; native SDKs can send requests without Origin.
 
 ## JWT Secret
 

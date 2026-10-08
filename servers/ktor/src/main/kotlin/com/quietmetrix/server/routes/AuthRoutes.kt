@@ -2,6 +2,8 @@ package com.quietmetrix.server.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.quietmetrix.server.auth.accessToken
+import com.quietmetrix.server.auth.refreshToken
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.domain.ErrorResponse
 import com.quietmetrix.server.domain.LoginRequest
@@ -11,18 +13,12 @@ import com.quietmetrix.server.domain.UserResponse
 import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.util.clientIp
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.inject
-import java.util.Date
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
-
-private val loginAttempts = ConcurrentHashMap<String, AtomicInteger>()
-private val loginLockouts = ConcurrentHashMap<String, Long>()
+import com.quietmetrix.server.util.receiveBounded as receive
 
 fun Routing.configureAuthRoutes(config: AppConfig) {
     val userRepo by inject<UserRepository>()
@@ -31,7 +27,8 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
         post("/login") {
             val request = try {
                 call.receive<LoginRequest>()
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                 call.respond(
                     HttpStatusCode.BadRequest,
                     ErrorResponse("invalid_json", "Request body is not valid JSON")
@@ -48,48 +45,26 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
             }
 
             val ip = call.clientIp(config.trustedProxies)
-            val lockoutUntil = loginLockouts[ip]
-            if (lockoutUntil != null && System.currentTimeMillis() < lockoutUntil) {
-                call.respond(
-                    HttpStatusCode.TooManyRequests,
-                    ErrorResponse("too_many_attempts", "Too many login attempts. Try again in a few minutes.")
-                )
+            if (!userRepo.allowAuthAttempt("${config.auth.jwtSecret}:login-ip:$ip", 20) ||
+                !userRepo.allowAuthAttempt("${config.auth.jwtSecret}:login-account:${request.email.trim().lowercase()}", 5)) {
+                call.response.headers.append("Retry-After", "60")
+                call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("too_many_attempts", "Retry after 60 seconds"))
                 return@post
             }
-
-            val user = userRepo.validatePassword(request.email, request.password)
+            val user = userRepo.validatePassword(request.email.trim().lowercase(), request.password)
             if (user == null) {
-                val attempts = loginAttempts.computeIfAbsent(ip) { AtomicInteger(0) }
-                if (attempts.incrementAndGet() >= 5) {
-                    loginLockouts[ip] = System.currentTimeMillis() + 300_000
-                }
-                call.respond(
-                    HttpStatusCode.Unauthorized,
-                    ErrorResponse("unauthorized", "Invalid email or password")
-                )
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Invalid email or password"))
                 return@post
             }
 
-            loginAttempts.remove(ip)
-            loginLockouts.remove(ip)
-
-            val role = user["role"] as? String ?: "admin"
-            val token = JWT.create()
-                .withAudience(config.auth.jwtAudience)
-                .withIssuer(config.auth.jwtIssuer)
-                .withClaim("userId", user["id"].toString())
-                .withClaim("email", user["email"] as String)
-                .withClaim("role", role)
-                .withExpiresAt(Date(System.currentTimeMillis() + config.auth.sessionTtlHours * 3600_000L))
-                .sign(Algorithm.HMAC256(config.auth.jwtSecret))
-
-            val refreshToken = JWT.create()
-                .withAudience(config.auth.jwtAudience)
-                .withIssuer(config.auth.jwtIssuer)
-                .withClaim("userId", user["id"].toString())
-                .withClaim("type", "refresh")
-                .withExpiresAt(Date(System.currentTimeMillis() + 2L * 24 * 3600_000L))
-                .sign(Algorithm.HMAC256(config.auth.jwtSecret))
+            val role = user["role"] as? String ?: "reviewer"
+            val sessionId = java.util.UUID.randomUUID().toString()
+            val token = accessToken(config, user, sessionId)
+            val refreshToken = refreshToken(config, user["id"].toString(), sessionId)
+            if (!userRepo.createSession((user["id"] as Number).toLong(), sessionId, refreshToken, user["passwordHash"] as? String)) {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Account changed; sign in again"))
+                return@post
+            }
 
             call.respond(LoginResponse(
                 token = token,
@@ -99,14 +74,28 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                     email = user["email"] as String,
                     role = role,
                     createdAt = user["createdAt"].toString(),
+                    platformOperator = user["platformOperator"] == true,
                 )
             ))
+        }
+
+        post("/logout") {
+            val request = call.receive<RefreshRequest>()
+            val decoded = runCatching {
+                JWT.require(Algorithm.HMAC256(config.auth.jwtSecret)).withAudience(config.auth.jwtAudience)
+                    .withIssuer(config.auth.jwtIssuer).build().verify(request.refreshToken)
+            }.getOrNull()
+            if (decoded?.getClaim("type")?.asString() == "refresh") {
+                decoded.getClaim("sessionId").asString()?.let { userRepo.revokeSession(it, request.refreshToken) }
+            }
+            call.respond(HttpStatusCode.NoContent)
         }
 
         post("/refresh") {
             val request = try {
                 call.receive<RefreshRequest>()
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                 call.respond(
                     HttpStatusCode.BadRequest,
                     ErrorResponse("invalid_json", "Request body is not valid JSON")
@@ -121,7 +110,8 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
 
             val decoded = try {
                 verifier.verify(request.refreshToken)
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                 call.respond(
                     HttpStatusCode.Unauthorized,
                     ErrorResponse("unauthorized", "Invalid or expired refresh token")
@@ -137,9 +127,9 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
                 return@post
             }
 
-            val userId = decoded.getClaim("userId").asString()
-            val user = userRepo.findById(userId.toLong())
-            if (user == null) {
+            val userId = decoded.getClaim("userId").asString()?.toLongOrNull()
+            val user = userId?.let(userRepo::findById)
+            if (user == null || user["status"] != "active") {
                 call.respond(
                     HttpStatusCode.Unauthorized,
                     ErrorResponse("unauthorized", "User no longer exists")
@@ -148,32 +138,28 @@ fun Routing.configureAuthRoutes(config: AppConfig) {
             }
 
             // Rotate both tokens
-            val role = user["role"] as? String ?: "admin"
-            val newToken = JWT.create()
-                .withAudience(config.auth.jwtAudience)
-                .withIssuer(config.auth.jwtIssuer)
-                .withClaim("userId", userId)
-                .withClaim("email", user["email"] as String)
-                .withClaim("role", role)
-                .withExpiresAt(Date(System.currentTimeMillis() + config.auth.sessionTtlHours * 3600_000L))
-                .sign(Algorithm.HMAC256(config.auth.jwtSecret))
-
-            val newRefreshToken = JWT.create()
-                .withAudience(config.auth.jwtAudience)
-                .withIssuer(config.auth.jwtIssuer)
-                .withClaim("userId", userId)
-                .withClaim("type", "refresh")
-                .withExpiresAt(Date(System.currentTimeMillis() + 2L * 24 * 3600_000L))
-                .sign(Algorithm.HMAC256(config.auth.jwtSecret))
+            val role = user["role"] as? String ?: "reviewer"
+            val sessionId = decoded.getClaim("sessionId").asString()
+            if (sessionId == null) {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Sign in again"))
+                return@post
+            }
+            val newRefreshToken = refreshToken(config, userId.toString(), sessionId)
+            if (!userRepo.rotateSession(userId!!, sessionId, request.refreshToken, newRefreshToken)) {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Refresh token was revoked or already used"))
+                return@post
+            }
+            val newToken = accessToken(config, user, sessionId)
 
             call.respond(LoginResponse(
                 token = newToken,
                 refreshToken = newRefreshToken,
                 user = UserResponse(
-                    id = userId,
+                    id = userId.toString(),
                     email = user["email"] as String,
                     role = role,
                     createdAt = user["createdAt"].toString(),
+                    platformOperator = user["platformOperator"] == true,
                 )
             ))
         }

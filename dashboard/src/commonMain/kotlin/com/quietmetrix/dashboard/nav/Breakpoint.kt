@@ -6,15 +6,15 @@ import androidx.compose.ui.unit.dp
 enum class WindowSizeClass { Compact, Medium, Expanded }
 
 object Breakpoints {
-    val compactMax: Dp = 599.dp
-    val mediumMax: Dp = 839.dp
+    val compactMax: Dp = 600.dp
+    val mediumMax: Dp = 1024.dp
 }
 
 /**
  * Maps a viewport width (in dp) to a Material-style window size class.
- *  - Compact: phones (below 600dp) -> side drawer + hamburger
- *  - Medium:  small tablets (600-839dp) -> permanent navigation rail
- *  - Expanded: tablets/desktop (840dp+) -> permanent navigation rail
+ *  - Compact: phones (below 600dp)
+ *  - Medium:  tablets and narrow desktop (600-1023dp)
+ *  - Expanded: desktop/tablets (1024dp+)
  *
  * Pure function so it can be unit tested without a Compose host.
  */

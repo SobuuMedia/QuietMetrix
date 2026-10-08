@@ -19,7 +19,7 @@ class IpRateLimiter(private val config: IpRateLimitConfig, private val scope: Co
     init {
         scope.launch {
             while (isActive) {
-                delay(3600_000L)
+                delay(60_000L)
                 evictStaleBuckets()
             }
         }
@@ -32,6 +32,10 @@ class IpRateLimiter(private val config: IpRateLimitConfig, private val scope: Co
 
     fun tryConsume(ip: String): Boolean {
         if (!config.enabled) return true
+        if (!buckets.containsKey(ip) && buckets.size >= 10_000) {
+            evictStaleBuckets()
+            if (buckets.size >= 10_000) return false
+        }
         val entry = buckets.computeIfAbsent(ip) {
             BucketEntry(TokenBucket(config.requestsPerSecond, config.burstPerMinute))
         }
@@ -42,7 +46,7 @@ class IpRateLimiter(private val config: IpRateLimitConfig, private val scope: Co
     fun remaining(ip: String): Int = buckets[ip]?.bucket?.remaining() ?: config.burstPerMinute
 
     private fun evictStaleBuckets() {
-        val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+        val cutoff = System.currentTimeMillis() - 5 * 60 * 1000L
         val iterator = buckets.entries.iterator()
         while (iterator.hasNext()) {
             if (iterator.next().value.lastAccess < cutoff) iterator.remove()

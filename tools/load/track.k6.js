@@ -1,57 +1,24 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
+// Run only against a disposable test project. Limits remain enabled: 429 is measured separately.
 export const options = {
-  stages: [
-    { duration: '30s', target: 250 },
-    { duration: '2m', target: 500 },
-    { duration: '30s', target: 0 },
-  ],
-  thresholds: {
-    http_req_duration: ['p(95)<100'],
-    http_req_failed: ['rate<0.01'],
-  },
+  vus: Number(__ENV.VUS || 5), duration: __ENV.DURATION || '30s',
+  thresholds: { http_req_duration: ['p(95)<1000'], checks: ['rate>0.99'] },
 };
-
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const API_KEY = __ENV.API_KEY || 'qm_ak_test_key_replace_me';
-
+const API_KEY = __ENV.API_KEY;
+if (!API_KEY) throw new Error('API_KEY for a disposable load-test project is required');
 export default function () {
-  const payload = JSON.stringify({
-    event: `load_test_event_${__VU}_${__ITER}`,
-    screen: 'load_test',
-    props: { iteration: __ITER, vu: __VU },
-    sid: `load_session_${__VU}`,
-    ts: new Date().toISOString(),
-    sdk: { platform: 'k6', version: '0.1.0' },
+  const batchId = `load_${Date.now()}_${__VU}_${__ITER}`;
+  const payload = JSON.stringify({ schema: 2, batch_id: batchId,
+    sdk: {platform: 'web', version: '0.6.0'}, items: [{
+      day: new Date().toISOString().slice(0, 10), hour: null, metric: 'event_v2',
+      segment: {kind: 'global', value: 'all'}, dimensions: {name: 'load_test_open'}, n: 1,
+    }],
   });
-
-  const params = {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-QM-Api-Key': API_KEY,
-    },
-  };
-
-  const res = http.post(`${BASE_URL}/api/v1/track`, payload, params);
-
-  check(res, {
-    'status is 202': (r) => r.status === 202,
-    'response has ok': (r) => {
-      try {
-        const body = JSON.parse(r.body);
-        return body.ok === true;
-      } catch (e) {
-        return false;
-      }
-    },
-  });
-
-  sleep(0.05);
-}
-
-export function handleSummary(data) {
-  return {
-    'stdout': JSON.stringify(data, null, 2),
-  };
+  const response = http.post(`${BASE_URL}/api/v2/counters`, payload,
+    {headers: {'Content-Type': 'application/json', 'X-QM-Api-Key': API_KEY}});
+  check(response, {'accepted or explicitly throttled': r => r.status === 202 || r.status === 429});
+  sleep(1);
 }

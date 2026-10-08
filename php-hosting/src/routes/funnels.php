@@ -1,5 +1,29 @@
 <?php
 
+/** Minimal publishable-key configuration for on-device funnel evaluation. */
+function handleFunnelsConfigV2(): void {
+    $projectId = requireApiKey();
+    $ip = clientIp() ?? 'unknown';
+    if (defined('INGEST_IP_ENABLED') && INGEST_IP_ENABLED && $ip !== 'unknown') {
+        enforceLimit("funnels:config:ip:{$ip}", defined('INGEST_IP_RPS') ? (int)INGEST_IP_RPS : 5,
+            defined('INGEST_IP_BURST') ? (int)INGEST_IP_BURST : 60);
+    }
+    header('Cache-Control: private, max-age=300');
+    $stmt = getDb()->prepare("SELECT funnel_key, revision, steps, window_seconds, count_mode, identity_scope, correlation_property
+        FROM funnels WHERE project_id=? AND archived_at IS NULL AND source='dashboard' AND revision>0 ORDER BY created_at");
+    $stmt->execute([$projectId]);
+    $funnels = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $funnels[] = [
+            'funnel_key' => $row['funnel_key'], 'revision' => (int)$row['revision'],
+            'steps' => funnelStepsForWire(json_decode($row['steps'], true) ?? []),
+            'window_seconds' => (int)$row['window_seconds'], 'count_mode' => $row['count_mode'],
+            'identity_scope' => $row['identity_scope'], 'correlation_property' => $row['correlation_property'],
+        ];
+    }
+    jsonResponse(200, ['namespace' => 'dashboard', 'cache_ttl_seconds' => 300, 'funnels' => $funnels]);
+}
+
 require_once __DIR__ . '/../funnelCounterAnalyze.php';
 
 /**
@@ -30,13 +54,17 @@ function handleFunnelResults(string $projectId, string $funnelKey): void {
     $fromDay = $window['from_day'];
     $toDay = $window['to_day'];
 
-    $allCells = counterReadCells($projectId, 'funnel_step', $fromDay, $toDay);
-    $cells = [];
-    foreach ($allCells as $c) {
-        if (($c['dims']['f'] ?? null) !== $funnelKey) continue;
-        $step = (int)($c['dims']['step'] ?? 0);
-        if ($step <= 0) continue;
-        $cells[] = ['step' => $step, 'n' => $c['n']];
+    if (($funnel['source'] ?? '') === 'dashboard' && (int)($funnel['revision'] ?? 0) > 0) {
+        $cells = readDashboardFunnelV2Steps($projectId, $funnelKey, (int)$funnel['revision'], $fromDay, $toDay);
+    } else {
+        $allCells = counterReadCells($projectId, 'funnel_step', $fromDay, $toDay);
+        $cells = [];
+        foreach ($allCells as $c) {
+            if (($c['dims']['f'] ?? null) !== $funnelKey || (string)($c['dims']['rev'] ?? '') !== (string)($funnel['revision'] ?? 0)) continue;
+            $step = (int)($c['dims']['step'] ?? 0);
+            if ($step <= 0) continue;
+            $cells[] = ['step' => $step, 'n' => $c['n']];
+        }
     }
 
     $analyzed = funnelCounterAnalyze($steps, $cells, $funnel['count_mode']);
@@ -44,6 +72,41 @@ function handleFunnelResults(string $projectId, string $funnelKey): void {
     // No row cap under an aggregate read -- counters are already the rolled-up result, not a
     // set of rows that can overflow.
     jsonResponse(200, funnelResultsEnvelope($funnel, $windowSecondsVal, $steps, $fromIso, $toIso, $analyzed, false));
+}
+
+/** Reads dashboard funnel completions by entry cohort and immutable definition revision. */
+function readDashboardFunnelV2Steps(string $projectId, string $funnelKey, int $revision, string $fromDay, string $toDay): array {
+    require_once __DIR__ . '/dashboard.php';
+    $through = (new DateTimeImmutable($toDay, new DateTimeZone('UTC')))->modify('+90 days')->format('Y-m-d');
+    $stmt = getDb()->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2
+        WHERE project_id=? AND metric='funnel_step_v2' AND hour=-1 AND day BETWEEN ? AND ?");
+    $stmt->execute([$projectId, $fromDay, $through]);
+    $rows = selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), 'all'); $groups = [];
+    foreach ($rows as $row) {
+        $dims = json_decode($row['dims'], true) ?? [];
+        if (($dims['namespace'] ?? '') !== 'dashboard' || ($dims['f'] ?? '') !== $funnelKey ||
+            (int)($dims['revision'] ?? 0) !== $revision || !isset($dims['entry_day']) ||
+            $dims['entry_day'] < $fromDay || $dims['entry_day'] > $toDay) continue;
+        $step = (int)($dims['step'] ?? 0);
+        if ($step < 1 || $step > 10) continue;
+        $checked = counterV2Validate('funnel_step_v2', $dims);
+        if (!($checked['valid'] ?? false)) continue;
+        $groups[$step][$checked['hash']]['dims'] = $dims;
+        $groups[$step][$checked['hash']]['rows'][] = $row;
+    }
+    $cells = [];
+    $start = new DateTimeImmutable($fromDay, new DateTimeZone('UTC')); $end = new DateTimeImmutable($toDay, new DateTimeZone('UTC'));
+    foreach ($groups as $step => $cohorts) {
+        $count = 0;
+        foreach ($cohorts as $cohort) {
+            $entry = new DateTimeImmutable($cohort['dims']['entry_day'], new DateTimeZone('UTC'));
+            $eligible = reportMetricWitnessCountV2(getDb(), $projectId, 'funnel_step_v2', $cohort['dims'], $entry, $entry,
+                'all', $cohort['rows'], $entry, 1, $entry, new DateTimeImmutable($through, new DateTimeZone('UTC')));
+            if ($eligible >= 5) $count += array_sum(array_map(static fn($r) => (int)$r['n'], $cohort['rows']));
+        }
+        if ($count > 0) $cells[] = ['step' => (int)$step, 'n' => $count];
+    }
+    return $cells;
 }
 
 function funnelResultsEnvelope(array $funnel, int $windowSeconds, array $steps, string $fromIso, string $toIso, array $analyzed, bool $truncated): array {
@@ -56,6 +119,7 @@ function funnelResultsEnvelope(array $funnel, int $windowSeconds, array $steps, 
             'count_mode' => $funnel['count_mode'],
             'identity_scope' => $funnel['identity_scope'],
             'correlation_property' => $funnel['correlation_property'],
+            'revision' => (int)($funnel['revision'] ?? 0),
         ],
         'range' => ['from' => $fromIso, 'to' => $toIso],
         'counted_by' => $analyzed['counted_by'],
@@ -75,7 +139,7 @@ function handleFunnelsList(string $projectId): void {
     requireAnalyticsAccess($projectId);
 
     $stmt = getDb()->prepare(
-        'SELECT funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, created_at, updated_at
+        'SELECT funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, revision, created_at, updated_at
            FROM funnels WHERE project_id = ? AND archived_at IS NULL ORDER BY created_at'
     );
     $stmt->execute([$projectId]);
@@ -120,15 +184,24 @@ function handleFunnelsCreate(string $projectId): void {
 
     $id = uuid4();
     $now = now();
-    getDb()->prepare(
+    $db = getDb();
+    $db->beginTransaction();
+    try {
+    $db->prepare(
         'INSERT INTO funnels
-            (id, project_id, funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)' 
+            (id, project_id, funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, revision, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )->execute([
         $id, $projectId, $definition['funnel_key'], $definition['name'], $description,
         json_encode(funnelStepsForWire($definition['steps']), JSON_UNESCAPED_UNICODE), $definition['window_seconds'],
-        'dashboard', 0, $definition['count_mode'], $definition['identity_scope'], $definition['correlation_property'], $now, $now,
+        'dashboard', 0, $definition['count_mode'], $definition['identity_scope'], $definition['correlation_property'], 1, $now, $now,
     ]);
+    insertFunnelRevisionSnapshot($projectId, $definition, 1);
+    $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
 
     jsonResponse(201, findFunnelResponse($projectId, $definition['funnel_key']));
 }
@@ -165,13 +238,26 @@ function handleFunnelUpdate(string $projectId, string $funnelKey): void {
         return;
     }
 
-    getDb()->prepare(
-        'UPDATE funnels SET name = ?, description = ?, steps = ?, window_seconds = ?, locked = 1, updated_at = ?
+    $normalizedSteps = funnelStepsForWire($steps);
+    $semanticChanged = funnelSemanticSteps($normalizedSteps) !== funnelSemanticSteps(json_decode($existing['steps'], true) ?? []) ||
+        (int)$windowSeconds !== (int)$existing['window_seconds'];
+    $nextRevision = (int)$existing['revision'] + ($semanticChanged ? 1 : 0);
+    $db = getDb();
+    $db->beginTransaction();
+    try {
+    $db->prepare(
+        'UPDATE funnels SET name = ?, description = ?, steps = ?, window_seconds = ?, revision = ?, locked = 1, updated_at = ?
           WHERE project_id = ? AND funnel_key = ? AND archived_at IS NULL'
     )->execute([
-        $name, $description, json_encode(funnelStepsForWire($steps), JSON_UNESCAPED_UNICODE), $windowSeconds, now(),
+        $name, $description, json_encode($normalizedSteps, JSON_UNESCAPED_UNICODE), $windowSeconds, $nextRevision, now(),
         $projectId, $funnelKey,
     ]);
+    if ($semanticChanged) insertFunnelRevisionSnapshot($projectId, $definition, $nextRevision);
+    $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
 
     jsonResponse(200, findFunnelResponse($projectId, $funnelKey));
 }
@@ -256,26 +342,34 @@ function handleFunnelsRegister(): void {
         if ($existing === null && $archived === null) {
             getDb()->prepare(
                 'INSERT INTO funnels
-                    (id, project_id, funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)' 
+                    (id, project_id, funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, revision, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )->execute([uuid4(), $projectId, $funnelKey, $name, $description, $stepsJson, $windowSeconds, 'sdk', 0,
-                $countMode, $identityScope, $correlationProperty, $now, $now]);
+                $countMode, $identityScope, $correlationProperty, 1, $now, $now]);
+            insertFunnelRevisionSnapshot($projectId, $definition, 1);
         } elseif ($archived !== null) {
             // The unique project/key row remains after deletion. Restore it rather than trying
             // an insert which would otherwise make SDK registration fail forever.
+            $revision = (int)$archived['revision'] + 1;
             getDb()->prepare(
                 'UPDATE funnels SET name = ?, description = ?, steps = ?, window_seconds = ?, source = ?, locked = 0,
-                    count_mode = ?, identity_scope = ?, correlation_property = ?, archived_at = NULL, updated_at = ?
+                    count_mode = ?, identity_scope = ?, correlation_property = ?, revision = ?, archived_at = NULL, updated_at = ?
                   WHERE project_id = ? AND funnel_key = ? AND archived_at IS NOT NULL'
             )->execute([$name, $description, $stepsJson, $windowSeconds, 'sdk', $countMode, $identityScope,
-                $correlationProperty, $now, $projectId, $funnelKey]);
+                $correlationProperty, $revision, $now, $projectId, $funnelKey]);
+            insertFunnelRevisionSnapshot($projectId, $definition, $revision);
         } else {
+            $semanticChanged = funnelSemanticSteps(json_decode($existing['steps'], true) ?? []) !== funnelSemanticSteps(funnelStepsForWire($steps)) ||
+                (int)$existing['window_seconds'] !== (int)$windowSeconds || $existing['count_mode'] !== $countMode ||
+                $existing['identity_scope'] !== $identityScope || $existing['correlation_property'] !== $correlationProperty;
+            $revision = (int)$existing['revision'] + ($semanticChanged ? 1 : 0);
             getDb()->prepare(
                 'UPDATE funnels SET name = ?, description = ?, steps = ?, window_seconds = ?, source = ?, locked = 0,
-                    count_mode = ?, identity_scope = ?, correlation_property = ?, updated_at = ?
+                    count_mode = ?, identity_scope = ?, correlation_property = ?, revision = ?, updated_at = ?
                   WHERE project_id = ? AND funnel_key = ? AND archived_at IS NULL'
             )->execute([$name, $description, $stepsJson, $windowSeconds, 'sdk', $countMode, $identityScope,
-                $correlationProperty, $now, $projectId, $funnelKey]);
+                $correlationProperty, $revision, $now, $projectId, $funnelKey]);
+            if ($semanticChanged) insertFunnelRevisionSnapshot($projectId, $definition, $revision);
         }
         $registered[] = $funnelKey;
     }
@@ -292,7 +386,7 @@ function countActiveFunnels(string $projectId): int {
 
 function findFunnelRow(string $projectId, string $funnelKey): ?array {
     $stmt = getDb()->prepare(
-        'SELECT funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, created_at, updated_at
+        'SELECT funnel_key, name, description, steps, window_seconds, source, locked, count_mode, identity_scope, correlation_property, revision, created_at, updated_at
            FROM funnels WHERE project_id = ? AND funnel_key = ? AND archived_at IS NULL LIMIT 1'
     );
     $stmt->execute([$projectId, $funnelKey]);
@@ -302,11 +396,37 @@ function findFunnelRow(string $projectId, string $funnelKey): ?array {
 
 function findArchivedFunnelRow(string $projectId, string $funnelKey): ?array {
     $stmt = getDb()->prepare(
-        'SELECT funnel_key FROM funnels WHERE project_id = ? AND funnel_key = ? AND archived_at IS NOT NULL LIMIT 1'
+        'SELECT funnel_key, revision FROM funnels WHERE project_id = ? AND funnel_key = ? AND archived_at IS NOT NULL LIMIT 1'
     );
     $stmt->execute([$projectId, $funnelKey]);
     $row = $stmt->fetch();
     return $row === false ? null : $row;
+}
+
+/** Stores only the immutable evaluation semantics; labels/descriptions stay editable metadata. */
+function insertFunnelRevisionSnapshot(string $projectId, array $definition, int $revision): void {
+    getDb()->prepare(
+        'INSERT INTO funnel_definition_revisions (project_id,funnel_key,revision,steps,window_seconds,count_mode,identity_scope,correlation_property,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    )->execute([
+        $projectId, $definition['funnel_key'], $revision,
+        json_encode(funnelStepsForWire($definition['steps']), JSON_UNESCAPED_UNICODE),
+        (int)$definition['window_seconds'], $definition['count_mode'], $definition['identity_scope'],
+        $definition['correlation_property'], now(),
+    ]);
+}
+
+/** Stable semantic comparison: ordered steps, but property-map insertion order is irrelevant. */
+function funnelSemanticSteps(array $steps): string {
+    $normalized = [];
+    foreach (funnelStepsForWire($steps) as $step) {
+        $props = is_array($step['props'] ?? null) ? $step['props'] : [];
+        ksort($props);
+        $normalized[] = [
+            'key' => $step['key'] ?? '', 'event' => $step['event'] ?? '',
+            'name' => $step['name'] ?? null, 'screen' => $step['screen'] ?? null, 'props' => $props,
+        ];
+    }
+    return json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 /** Returns false for equal/older revisions, preventing old app releases from clobbering code-owned funnels. */
@@ -344,6 +464,7 @@ function rowToFunnelResponse(array $row): array {
         'count_mode' => $row['count_mode'],
         'identity_scope' => $row['identity_scope'],
         'correlation_property' => $row['correlation_property'],
+        'revision' => (int)($row['revision'] ?? 0),
         'created_at' => $row['created_at'],
         'updated_at' => $row['updated_at'],
     ];

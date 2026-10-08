@@ -1,6 +1,7 @@
 package com.quietmetrix.dashboard.theme
 
 import kotlinx.browser.window
+import org.w3c.dom.events.Event
 
 private const val KEY = "qm_theme_mode"
 
@@ -14,10 +15,9 @@ actual fun saveThemeMode(mode: ThemeMode) {
 
 actual fun getThemeMode(): ThemeMode {
     return try {
-        val raw = window.localStorage.getItem(KEY) ?: return ThemeMode.Dark
-        runCatching { ThemeMode.valueOf(raw) }.getOrDefault(ThemeMode.Dark)
+        parseThemeMode(window.localStorage.getItem(KEY))
     } catch (_: Throwable) {
-        ThemeMode.Dark
+        ThemeMode.System
     }
 }
 
@@ -28,4 +28,12 @@ actual fun resolveSystemThemeMode(): ThemeMode {
     } catch (_: Throwable) {
         ThemeMode.Dark
     }
+}
+
+actual fun observeSystemThemeMode(onChange: (ThemeMode) -> Unit): () -> Unit {
+    val query = window.matchMedia("(prefers-color-scheme: dark)")
+    val listener: (Event) -> Unit = { onChange(resolveSystemThemeMode()) }
+    query.addEventListener("change", listener)
+    onChange(resolveSystemThemeMode())
+    return { query.removeEventListener("change", listener) }
 }

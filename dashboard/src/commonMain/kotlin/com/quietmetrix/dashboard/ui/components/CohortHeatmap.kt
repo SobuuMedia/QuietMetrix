@@ -15,10 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,9 +41,7 @@ import androidx.compose.ui.window.Popup
 import com.quietmetrix.dashboard.api.RetentionCohort
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatPercent
-import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
-import com.quietmetrix.dashboard.ui.screens.epochDayFromIsoOrNull
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_a
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_b
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_content_description_selected
@@ -60,8 +56,10 @@ import com.quietmetrix.dashboard.resources.cohort_heatmap_title_by_week
 import com.quietmetrix.dashboard.resources.cohort_heatmap_toggle_by_day
 import com.quietmetrix.dashboard.resources.cohort_heatmap_toggle_by_week
 import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_known
-import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_unknown
 import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_unavailable
+import com.quietmetrix.dashboard.resources.cohort_heatmap_tooltip_unknown
+import com.quietmetrix.dashboard.resources.cohort_reported_note
+import com.quietmetrix.dashboard.resources.cohort_reported_toggle
 import com.quietmetrix.dashboard.resources.col_day1
 import com.quietmetrix.dashboard.resources.col_day14
 import com.quietmetrix.dashboard.resources.col_day3
@@ -69,10 +67,12 @@ import com.quietmetrix.dashboard.resources.col_day30
 import com.quietmetrix.dashboard.resources.col_day7
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
+import com.quietmetrix.dashboard.ui.screens.epochDayFromIsoOrNull
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToLong
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 // ---------------------------------------------------------------------------
 // Cohort heatmap (Task 25) — design_handoff_dashboard_redesign/README.md >
@@ -123,7 +123,7 @@ internal fun CohortHeatmap(
     val rows = remember(cohorts, grouping, todayEpochDay) { buildCohortHeatmapRows(cohorts, grouping, todayEpochDay) }
     val previousRows = remember(previousCohorts, grouping, todayEpochDay) { buildCohortHeatmapRows(previousCohorts, grouping, todayEpochDay) }
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    DashboardCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(

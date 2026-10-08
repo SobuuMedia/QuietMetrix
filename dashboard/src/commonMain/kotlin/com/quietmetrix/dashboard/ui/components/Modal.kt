@@ -10,7 +10,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,6 +22,8 @@ import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Visual emphasis a [ModalFooterAction] renders with: [Secondary] is a
@@ -118,6 +119,7 @@ fun modalFooterSlots(
  * @param leading see [modalFooterSlots].
  * @param secondary see [modalFooterSlots].
  * @param primary see [modalFooterSlots].
+ * @param primaryEnabled false keeps an incomplete form from submitting.
  */
 @Composable
 fun ModalFooter(
@@ -125,6 +127,7 @@ fun ModalFooter(
     secondary: ModalFooterAction? = null,
     primary: ModalFooterAction,
     modifier: Modifier = Modifier,
+    primaryEnabled: Boolean = true,
 ) {
     val extended = LocalExtendedColors.current
     Row(
@@ -141,13 +144,14 @@ fun ModalFooter(
                     onClick = slot.action.onClick,
                     colors = ButtonDefaults.textButtonColors(containerColor = extended.chipFill),
                     modifier = Modifier.handCursor(),
-                ) { Text(slot.action.label) }
+                ) { MaterialText(slot.action.label) }
 
                 ModalFooterEmphasis.Primary -> Button(
                     onClick = slot.action.onClick,
+                    enabled = primaryEnabled,
                     colors = ButtonDefaults.buttonColors(containerColor = extended.lime, contentColor = extended.onLime),
                     modifier = Modifier.handCursor(),
-                ) { Text(slot.action.label) }
+                ) { MaterialText(slot.action.label) }
             }
         }
     }

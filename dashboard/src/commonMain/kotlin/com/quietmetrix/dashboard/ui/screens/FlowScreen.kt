@@ -7,29 +7,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import com.quietmetrix.dashboard.viewmodel.isLoading
-import com.quietmetrix.dashboard.viewmodel.DataSection
-import com.quietmetrix.dashboard.ui.components.SectionLoading
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -51,7 +51,6 @@ import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
-import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.card_countries
 import com.quietmetrix.dashboard.resources.card_device_classes
@@ -66,45 +65,59 @@ import com.quietmetrix.dashboard.resources.col_to
 import com.quietmetrix.dashboard.resources.col_zero_result_rate
 import com.quietmetrix.dashboard.resources.flow_after_screen
 import com.quietmetrix.dashboard.resources.flow_caption
+import com.quietmetrix.dashboard.resources.flow_copy_path
+import com.quietmetrix.dashboard.resources.flow_copy_scope
 import com.quietmetrix.dashboard.resources.flow_exit_label
 import com.quietmetrix.dashboard.resources.flow_h1_highlight
 import com.quietmetrix.dashboard.resources.flow_h1_lead
 import com.quietmetrix.dashboard.resources.flow_h1_tail
-import com.quietmetrix.dashboard.resources.flow_path_arrow
+import com.quietmetrix.dashboard.resources.flow_os_versions_caption
+import com.quietmetrix.dashboard.resources.flow_path_copied
 import com.quietmetrix.dashboard.resources.flow_path_label
 import com.quietmetrix.dashboard.resources.flow_platform_all
+import com.quietmetrix.dashboard.resources.flow_platform_android
+import com.quietmetrix.dashboard.resources.flow_platform_ios
 import com.quietmetrix.dashboard.resources.flow_platform_label
-import com.quietmetrix.dashboard.resources.flow_os_versions_caption
-import com.quietmetrix.dashboard.resources.flow_platform_unavailable_caption
+import com.quietmetrix.dashboard.resources.flow_platform_web
 import com.quietmetrix.dashboard.resources.flow_start_from_label
 import com.quietmetrix.dashboard.resources.flow_state_empty_path
+import com.quietmetrix.dashboard.resources.ic_arrow_right
+import com.quietmetrix.dashboard.resources.ic_copy
 import com.quietmetrix.dashboard.resources.ic_flow
-import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_overview
 import com.quietmetrix.dashboard.resources.nav_flow
 import com.quietmetrix.dashboard.resources.state_no_data
 import com.quietmetrix.dashboard.resources.state_no_transitions
-import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
+import com.quietmetrix.dashboard.ui.components.DashboardCard
+import com.quietmetrix.dashboard.ui.components.EmojiVector
 import com.quietmetrix.dashboard.ui.components.EmptyState
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
+import com.quietmetrix.dashboard.ui.components.SectionLoading
 import com.quietmetrix.dashboard.ui.components.SkeletonBox
+import com.quietmetrix.dashboard.ui.components.emojiResourceFor
 import com.quietmetrix.dashboard.ui.components.handCursor
+import com.quietmetrix.dashboard.ui.components.responsiveDisplayStyle
+import com.quietmetrix.dashboard.ui.components.screenGlyphFor
 import com.quietmetrix.dashboard.ui.components.table.Column
 import com.quietmetrix.dashboard.ui.components.table.DataTable
 import com.quietmetrix.dashboard.ui.components.table.SortColumn
 import com.quietmetrix.dashboard.ui.components.table.screenLabel
-import com.quietmetrix.dashboard.ui.components.ComparisonNote
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.viewmodel.isLoading
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import com.quietmetrix.dashboard.nav.NavDestination as AppTab
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 // ---------------------------------------------------------------------------
 // Task 22: Flow screen. Extracted from `DashboardScreen.kt`'s `FlowTab` (see that file's git
@@ -121,29 +134,11 @@ import com.quietmetrix.dashboard.nav.NavDestination as AppTab
 /** The Flow screen itself — see this file's top-of-file KDoc for scope. */
 @Composable
 internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
+    MaxWidthContainer(sizeClass = sizeClass, modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Flow) },
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.tab_info_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
             state.sectionErrors[DataSection.Transitions]?.let {
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
@@ -154,16 +149,29 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
 
-            FlowHero()
-            PlatformFilterRow()
+            FlowHero(modifier = Modifier.widthIn(max = 1050.dp))
+            PlatformFilterRow(state.flowPlatform, viewModel::setFlowPlatform)
 
             val transitions = state.transitions?.transitions ?: emptyList()
             val startScreens = remember(transitions) { topStartScreens(transitions) }
-            var flowPath by remember { mutableStateOf<List<String>>(emptyList()) }
+            // Start at the highest-volume root. Each following node is explicit user intent.
+            var flowPath by remember(transitions) { mutableStateOf(defaultFlowPath(transitions)) }
+            val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }?.name.orEmpty()
+            val rangeLabel = stringResource(state.range.labelRes)
+            val platformResource = when (state.flowPlatform) {
+                "android" -> Res.string.flow_platform_android
+                "ios" -> Res.string.flow_platform_ios
+                "web" -> Res.string.flow_platform_web
+                else -> Res.string.flow_platform_all
+            }
+            val platformLabel = stringResource(platformResource)
+            val copyScope = stringResource(Res.string.flow_copy_scope, projectName, rangeLabel, platformLabel)
 
             StartFromRow(
                 screens = startScreens,
                 selected = flowPath.firstOrNull(),
+                path = flowPath,
+                copyScope = copyScope,
                 onPick = { flowPath = listOf(it) },
             )
             FlowBreadcrumbSection(
@@ -178,11 +186,11 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
             if (state.isLoading(DataSection.Transitions) && transitions.isEmpty()) {
                 SectionLoading()
             } else if (transitions.isEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                DashboardCard(modifier = Modifier.fillMaxWidth()) {
                     EmptyState(Res.drawable.ic_flow, Res.string.state_no_transitions, Modifier.padding(16.dp))
                 }
             } else {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                DashboardCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         val transitionNone = stringResource(Res.string.value_none)
                         DataTable(
@@ -227,7 +235,7 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
             state.sectionErrors[DataSection.Friction]?.let { InlineErrorNotice(it, onRetry = { viewModel.refresh() }) }
             val searchScreens = state.search?.screens ?: emptyList()
             if (searchScreens.isNotEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                DashboardCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             stringResource(Res.string.card_search_zero_result),
@@ -285,7 +293,7 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
 
             val frictionScreens = state.friction?.screens ?: emptyList()
             if (frictionScreens.isNotEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                DashboardCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             stringResource(Res.string.card_friction),
@@ -385,7 +393,7 @@ internal fun FlowBreakdownCardsSection(
  *  section KDoc for why this is empty in every real deployment today. */
 @Composable
 private fun FlowCountriesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier, previous: AggregatesResponse? = null, compare: Boolean = false, onInspect: (String, String) -> Unit = { _, _ -> }) {
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 stringResource(Res.string.card_countries),
@@ -428,7 +436,7 @@ private fun FlowBarListRow(row: BreakdownRow, onClick: () -> Unit = {}) {
  *  the 3 with real content in every real deployment today (platform is a tracked dimension). */
 @Composable
 private fun FlowPlatformsCard(agg: AggregatesResponse?, modifier: Modifier = Modifier, previous: AggregatesResponse? = null, compare: Boolean = false, onInspect: (String, String) -> Unit = { _, _ -> }) {
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 stringResource(Res.string.card_platforms),
@@ -488,7 +496,7 @@ private fun FlowPlatformStatTile(row: BreakdownRow, modifier: Modifier = Modifie
  *  real deployment today — see this file's section KDoc. */
 @Composable
 private fun FlowDeviceTypesCard(agg: AggregatesResponse?, modifier: Modifier = Modifier, previous: AggregatesResponse? = null, compare: Boolean = false, onInspect: (String, String) -> Unit = { _, _ -> }) {
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 stringResource(Res.string.card_device_classes),
@@ -517,7 +525,7 @@ private fun FlowDeviceTypeRow(row: BreakdownRow, onClick: () -> Unit = {}) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(deviceClassEmoji(row.name), style = MaterialTheme.typography.bodyMedium)
+        EmojiVector(deviceClassEmoji(row.name), Modifier.size(20.dp))
         Text(row.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(72.dp))
         FlowBar(
             fraction = row.barFraction.toFloat(),
@@ -554,7 +562,7 @@ private fun FlowBar(fraction: Float, color: androidx.compose.ui.graphics.Color, 
  *  flat tonal-fill idiom as `OverviewScreen.kt`'s own `TopListSkeletonCard` (file-private there). */
 @Composable
 private fun FlowCardSkeleton(modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    DashboardCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SkeletonBox(Modifier.width(100.dp).height(16.dp))
             SkeletonBox(Modifier.fillMaxWidth().height(14.dp))
@@ -576,18 +584,20 @@ internal fun FlowHero(modifier: Modifier = Modifier) {
     val highlight = stringResource(Res.string.flow_h1_highlight)
     val tail = stringResource(Res.string.flow_h1_tail)
     Column(modifier = modifier) {
-        Text(
-            "🧭 " + stringResource(Res.string.nav_flow),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            EmojiVector("🧭", Modifier.size(22.dp))
+            Text(stringResource(Res.string.nav_flow), style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Spacer(Modifier.height(4.dp))
         val sentence = buildAnnotatedString {
             append(lead)
             withStyle(SpanStyle(background = extended.lime, color = extended.onLime)) { append(highlight) }
             append(tail)
         }
-        Text(sentence, style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onBackground)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            Text(sentence, style = responsiveDisplayStyle(maxWidth), color = MaterialTheme.colorScheme.onBackground)
+        }
     }
 }
 
@@ -603,33 +613,37 @@ internal fun FlowHero(modifier: Modifier = Modifier) {
  * The only disclosure was an accessibility-only `contentDescription`, which a sighted user never
  * sees.
  *
- * Fixed per review: only [FlowPlatform.All] is rendered as a pill at all (and it's the only real
- * option there is to pick, so it needs no on/off state of its own); the 3 non-functional options
- * are replaced by a single, always-visible caption instead of an inert-looking row of buttons. See
- * [filterTransitionsByPlatform]'s KDoc (`FlowPathLogic.kt`) for the backend-side finding
- * (`Transition`/`TransitionItem` carry no platform field at all, confirmed down through the SDK's
- * counter declaration) behind why no real per-platform filter exists yet.
  */
 @Composable
-internal fun PlatformFilterRow(modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(Res.string.flow_platform_label),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Pill(text = stringResource(Res.string.flow_platform_all), variant = PillVariant.NavActive)
+@OptIn(ExperimentalLayoutApi::class)
+internal fun PlatformFilterRow(selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+    val label = stringResource(Res.string.flow_platform_label)
+    val platforms = listOf(
+        Triple("all", stringResource(Res.string.flow_platform_all), "🌈"),
+        Triple("android", stringResource(Res.string.flow_platform_android), "🤖"),
+        Triple("ios", stringResource(Res.string.flow_platform_ios), "🍎"),
+        Triple("web", stringResource(Res.string.flow_platform_web), "🌐"),
+    )
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        if (maxWidth < 600.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    platforms.forEach { (key, platformLabel, glyph) ->
+                        Pill(text = platformLabel, variant = if (selected == key) PillVariant.NavActive else PillVariant.Neutral,
+                            onClick = { onSelect(key) }, leadingIcon = emojiResourceFor(glyph), colorfulIcon = true)
+                    }
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                platforms.forEach { (key, platformLabel, glyph) ->
+                    Pill(text = platformLabel, variant = if (selected == key) PillVariant.NavActive else PillVariant.Neutral,
+                        onClick = { onSelect(key) }, leadingIcon = emojiResourceFor(glyph), colorfulIcon = true)
+                }
+            }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            stringResource(Res.string.flow_platform_unavailable_caption),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -643,26 +657,55 @@ internal fun StartFromRow(
     screens: List<String>,
     selected: String?,
     onPick: (String) -> Unit,
+    path: List<String> = emptyList(),
+    copyScope: String = "",
     modifier: Modifier = Modifier,
 ) {
     if (screens.isEmpty()) return
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-    ) {
-        Text(
-            stringResource(Res.string.flow_start_from_label),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        screens.forEach { screen ->
-            Pill(
-                text = screen,
-                variant = if (screen == selected) PillVariant.Lime else PillVariant.Neutral,
-                onClick = { onPick(screen) },
-            )
+    val clipboard = LocalClipboardManager.current
+    var copiedPath by remember(path) { mutableStateOf(false) }
+    val pathLabel = stringResource(Res.string.flow_path_label)
+    val copyPath = {
+        val pathText = path.joinToString(" → ") { screenLabel(it, it) }
+        clipboard.setText(AnnotatedString("$pathLabel $pathText\n$copyScope"))
+        copiedPath = true
+    }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        if (maxWidth < 760.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                StartFromPills(screens, selected, onPick,
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()))
+                if (path.isNotEmpty()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    CopyFlowPathButton(copiedPath, copyPath)
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StartFromPills(screens, selected, onPick,
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()))
+                if (path.isNotEmpty()) CopyFlowPathButton(copiedPath, copyPath)
+            }
         }
+    }
+}
+
+@Composable
+private fun StartFromPills(screens: List<String>, selected: String?, onPick: (String) -> Unit, modifier: Modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
+        Text(stringResource(Res.string.flow_start_from_label), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        screens.forEach { screen ->
+            Pill(text = screenLabel(screen, screen), variant = if (screen == selected) PillVariant.Lime else PillVariant.Neutral,
+                onClick = { onPick(screen) }, leadingIcon = emojiResourceFor(screenGlyphFor(screen)), colorfulIcon = true)
+        }
+    }
+}
+
+@Composable
+private fun CopyFlowPathButton(copied: Boolean, onCopy: () -> Unit) {
+    TextButton(onClick = onCopy, modifier = Modifier.handCursor()) {
+        Icon(painterResource(Res.drawable.ic_copy), contentDescription = null, modifier = Modifier.size(16.dp))
+        MaterialText(stringResource(if (copied) Res.string.flow_path_copied else Res.string.flow_copy_path))
     }
 }
 
@@ -684,7 +727,7 @@ internal fun FlowBreadcrumbSection(
     previousTransitions: List<Transition> = emptyList(),
     compare: Boolean = false,
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    DashboardCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
             if (path.isEmpty()) {
                 Text(
@@ -696,18 +739,25 @@ internal fun FlowBreadcrumbSection(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 ) {
-                    Text(
-                        stringResource(Res.string.flow_path_label),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    val arrow = stringResource(Res.string.flow_path_arrow)
-                    path.forEachIndexed { index, screen ->
-                        Pill(text = screen, variant = PillVariant.Neutral, modifier = Modifier.clickable { onInspect(screen) }.handCursor())
-                        if (index < path.lastIndex) {
-                            Text(arrow, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(Res.string.flow_path_label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        path.forEachIndexed { index, screen ->
+                            Pill(text = screenLabel(screen, screen), variant = PillVariant.Neutral, modifier = Modifier.clickable { onInspect(screen) }.handCursor(),
+                                leadingIcon = emojiResourceFor(screenGlyphFor(screen)), colorfulIcon = true)
+                            if (index < path.lastIndex) {
+                                Icon(
+                                    painter = painterResource(Res.drawable.ic_arrow_right),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -785,7 +835,7 @@ private fun FlowStepOptionRow(
     modifier: Modifier = Modifier,
 ) {
     val extended = LocalExtendedColors.current
-    val label = if (option.isExit) stringResource(Res.string.flow_exit_label) else option.screen!!
+    val label = if (option.isExit) stringResource(Res.string.flow_exit_label) else screenLabel(option.screen, option.screen!!)
     val barColor = if (option.isExit) extended.coral.copy(alpha = 0.22f) else extended.lime.copy(alpha = 0.28f)
     val fraction = (option.percent / 100.0).toFloat().coerceIn(0f, 1f)
 
@@ -799,7 +849,7 @@ private fun FlowStepOptionRow(
                 if (selected) Modifier.border(BorderStroke(2.dp, extended.lime), QmShapeTokens.chip) else Modifier,
             )
             .then(
-                if (!option.isExit) Modifier.clickable(onClick = onClick) else Modifier,
+                if (!option.isExit) Modifier.clickable(onClick = onClick).handCursor() else Modifier,
             ),
     ) {
         Box(
@@ -812,6 +862,8 @@ private fun FlowStepOptionRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
+            EmojiVector(if (option.isExit) "👋" else screenGlyphFor(option.screen!!), Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Text(
                 formatPercent(option.percent / 100.0),

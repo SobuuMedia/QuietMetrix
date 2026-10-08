@@ -101,10 +101,13 @@ class McpServer(private val client: QuietMetrixClient, private val env: Map<Stri
         }
     }
 
-    private fun resolveUrl(arguments: JsonObject): String? =
-        (arguments["url"]?.jsonPrimitive?.contentOrNull ?: env["QUIETMETRIX_URL"])
-            ?.takeIf { it.isNotBlank() }
-            ?.let { normalizeBaseUrl(it) }
+    private fun resolveUrl(arguments: JsonObject): String? {
+        // A tool argument cannot choose where this server's environment credential goes.
+        val configured = env["QUIETMETRIX_URL"]?.takeIf { it.isNotBlank() }?.let(::normalizeBaseUrl) ?: return null
+        val requested = arguments["url"]?.jsonPrimitive?.contentOrNull?.let(::normalizeBaseUrl)
+        if (requested != null && requested != configured) return null
+        return configured.takeIf { it.startsWith("https://") || it.startsWith("http://localhost:") || it.startsWith("http://127.0.0.1:") }
+    }
 
     private fun resolveToken(): String? = env["QUIETMETRIX_TOKEN"]?.takeIf { it.isNotBlank() }
 

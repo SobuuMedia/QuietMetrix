@@ -24,6 +24,13 @@ function check(string $label, $expected, $actual): void {
     echo '    actual:   ' . var_export($actual, true) . "\n";
 }
 
+check('refresh is not a session', false, validAccessClaims(['sub'=>'1','type'=>'refresh']));
+check('refresh with forged role shape is still not a session', false, validAccessClaims(['sub'=>'1','type'=>'refresh','role'=>'admin']));
+check('missing role is rejected', false, validAccessClaims(['sub'=>'1','type'=>'access']));
+check('unknown role is rejected', false, validAccessClaims(['sub'=>'1','type'=>'access','role'=>'superuser']));
+check('explicit access is accepted', true, validAccessClaims(['sub'=>'1','type'=>'access','role'=>'reviewer']));
+check('old role-bearing access remains compatible', true, validAccessClaims(['sub'=>'1','role'=>'reviewer']));
+
 // --- sessionCanReadAnalytics ---------------------------------------------------------------
 
 check('a dashboard session (no scopes key) can always read analytics', true,

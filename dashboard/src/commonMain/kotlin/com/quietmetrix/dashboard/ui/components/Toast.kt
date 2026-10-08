@@ -4,17 +4,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_dismiss
 import com.quietmetrix.dashboard.resources.ic_close
@@ -23,6 +22,7 @@ import com.quietmetrix.dashboard.theme.QmShapeTokens
 import com.quietmetrix.dashboard.viewmodel.Toast
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Renders [toast] as the bottom-center notification card the dashboard-redesign spec describes
@@ -61,7 +61,7 @@ fun Toast(toast: Toast, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(toast.emoji, fontSize = 22.sp)
+            EmojiVector(toast.emoji, Modifier.size(22.dp))
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(toast.title, style = MaterialTheme.typography.titleSmall, color = accentColor)

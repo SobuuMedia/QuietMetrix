@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.Window
 import com.quietmetrix.analytics.internal.ForegroundCounter
-import com.quietmetrix.analytics.internal.ScreenTracker
 import com.quietmetrix.analytics.internal.counters.FrictionCounterBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +32,7 @@ private val frictionScope = CoroutineScope(Dispatchers.Default + SupervisorJob()
  */
 private fun registerForegroundCallbacks(ctx: Context) {
     val app = ctx.applicationContext as? Application ?: return
-    val counter = ForegroundCounter { ScreenTracker.closeOutAsync() }
+    val counter = ForegroundCounter(onForeground = { QuietMetrix.onForeground() }, onBackground = { QuietMetrix.onBackground() })
     try {
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) = counter.onStart()

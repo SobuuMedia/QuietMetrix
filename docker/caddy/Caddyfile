@@ -1,7 +1,8 @@
-:80 {
-    reverse_proxy ktor:8080
+{
+    email {$QM_TLS_EMAIL}
 }
 
-:443 {
+{$QM_DOMAIN} {
+    header Strict-Transport-Security "max-age=31536000"
     reverse_proxy ktor:8080
 }

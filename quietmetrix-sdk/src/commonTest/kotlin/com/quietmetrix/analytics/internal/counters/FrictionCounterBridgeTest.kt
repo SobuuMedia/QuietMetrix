@@ -1,8 +1,11 @@
 package com.quietmetrix.analytics.internal.counters
 
 import com.quietmetrix.analytics.internal.ScreenTracker
+import com.quietmetrix.analytics.internal.grantAnalyticsForTest
+import com.quietmetrix.analytics.internal.resetAnalyticsTestGate
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -12,11 +15,15 @@ import kotlin.time.Instant
 @OptIn(ExperimentalTime::class)
 class FrictionCounterBridgeTest {
 
+    @BeforeTest
+    fun setUp() { grantAnalyticsForTest("friction_test_") }
+
     @AfterTest
     fun tearDown() = runTest {
         FrictionCounterBridge.reset()
         ScreenTracker.reset()
         MetricGateway.reset()
+        resetAnalyticsTestGate()
     }
 
     @Test

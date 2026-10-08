@@ -81,7 +81,22 @@ function getJsonBody(): array {
             errorResponse(413, 'payload_too_large', 'Request body exceeds 1 MB');
             exit;
         }
-        $raw  = file_get_contents('php://input');
+        // Bound the actual read as well as trusting Content-Length: chunked requests and
+        // clients without that header must not bypass the 1 MiB limit.
+        $stream = fopen('php://input', 'rb');
+        $raw = '';
+        if (is_resource($stream)) {
+            while (!feof($stream) && strlen($raw) <= 1048576) {
+                $chunk = fread($stream, min(8192, 1048577 - strlen($raw)));
+                if ($chunk === false || $chunk === '') break;
+                $raw .= $chunk;
+            }
+        }
+        if (is_resource($stream)) fclose($stream);
+        if (is_string($raw) && strlen($raw) > 1048576) {
+            errorResponse(413, 'payload_too_large', 'Request body exceeds 1 MB');
+            exit;
+        }
         $body = json_decode($raw ?: '{}', true) ?? [];
     }
     return $body;
@@ -97,8 +112,10 @@ function clientIp(): ?string {
     if (in_array($remoteAddr, $trusted, true)) {
         $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
         if ($xff !== '') {
-            $first = trim(explode(',', $xff)[0]);
-            if ($first !== '') return $first;
+            $hops = array_map('trim', explode(',', $xff));
+            if (count($hops) > 20) return $remoteAddr;
+            foreach ($hops as $hop) if (!filter_var($hop, FILTER_VALIDATE_IP)) return $remoteAddr;
+            foreach (array_reverse($hops) as $hop) if (!in_array($hop, $trusted, true)) return $hop;
         }
     }
     return $remoteAddr;

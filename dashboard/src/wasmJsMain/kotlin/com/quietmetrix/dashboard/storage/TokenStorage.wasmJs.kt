@@ -51,11 +51,4 @@ actual object TokenStorage {
         window.localStorage.removeItem("qm_last_project_id")
     }
 
-    actual fun saveExperimentsGuideSeen() {
-        window.localStorage.setItem("qm_experiments_guide_seen", "1")
-    }
-
-    actual fun isExperimentsGuideSeen(): Boolean {
-        return window.localStorage.getItem("qm_experiments_guide_seen") == "1"
-    }
 }

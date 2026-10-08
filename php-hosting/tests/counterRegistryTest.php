@@ -83,6 +83,7 @@ $examples = [
     'search_zero_result' => ['screen' => 'Library'],
     'friction'           => ['screen' => 'Checkout', 'kind' => 'rage_tap'],
     'experiment'         => ['exp' => 'checkout_cta', 'variant' => 'b', 'action' => 'impression'],
+    'unique_window_v2'   => ['scope_kind' => 'project', 'scope_key' => 'all', 'days' => '7', 'end_day' => '2026-10-04'],
 ];
 foreach ($examples as $metric => $dims) {
     check("$metric validates a well-formed example", true, counterValidate($metric, $dims)['valid']);

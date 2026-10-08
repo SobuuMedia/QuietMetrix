@@ -14,12 +14,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -30,17 +27,14 @@ import com.quietmetrix.dashboard.resources.action_copy_api_key
 import com.quietmetrix.dashboard.resources.action_got_it
 import com.quietmetrix.dashboard.resources.api_key_label
 import com.quietmetrix.dashboard.resources.ic_copy
-import com.quietmetrix.dashboard.resources.invite_link_body
-import com.quietmetrix.dashboard.resources.invite_link_title
 import com.quietmetrix.dashboard.resources.project_created_api_key_label
 import com.quietmetrix.dashboard.resources.project_created_key_warning
 import com.quietmetrix.dashboard.resources.project_created_title
 import com.quietmetrix.dashboard.resources.regenerated_key_title
 import com.quietmetrix.dashboard.resources.snackbar_api_key_copied
-import com.quietmetrix.dashboard.resources.snackbar_invite_link_copied
 import com.quietmetrix.dashboard.resources.snackbar_token_copied
-import com.quietmetrix.dashboard.resources.tab_info_flow
 import com.quietmetrix.dashboard.resources.tab_info_experiments
+import com.quietmetrix.dashboard.resources.tab_info_flow
 import com.quietmetrix.dashboard.resources.tab_info_funnels
 import com.quietmetrix.dashboard.resources.tab_info_overview
 import com.quietmetrix.dashboard.resources.tab_info_projects
@@ -55,7 +49,9 @@ import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
 import com.quietmetrix.dashboard.nav.NavDestination as AppTab
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /** Shared one-time credential reveals and destination help dialogs. */
 @Composable
@@ -70,7 +66,7 @@ internal fun DashboardDialogs(viewModel: DashboardViewModel, state: DashboardSta
                 TextButton(
                     onClick = { viewModel.dismissNewProjectKeys() },
                     modifier = Modifier.handCursor(),
-                ) { Text(stringResource(Res.string.action_got_it)) }
+                ) { MaterialText(stringResource(Res.string.action_got_it)) }
             },
             title = { Text(stringResource(Res.string.project_created_title)) },
             text = {
@@ -118,7 +114,7 @@ internal fun DashboardDialogs(viewModel: DashboardViewModel, state: DashboardSta
                 TextButton(
                     onClick = { viewModel.dismissRegeneratedKey() },
                     modifier = Modifier.handCursor(),
-                ) { Text(stringResource(Res.string.action_got_it)) }
+                ) { MaterialText(stringResource(Res.string.action_got_it)) }
             },
             title = { Text(stringResource(Res.string.regenerated_key_title)) },
             text = {
@@ -156,53 +152,6 @@ internal fun DashboardDialogs(viewModel: DashboardViewModel, state: DashboardSta
         )
     }
 
-    // Invitation link reveal (admin copies it to share with the new user).
-    state.lastInviteLink?.let { link ->
-        val clipboard = LocalClipboardManager.current
-        val copiedMsg = stringResource(Res.string.snackbar_invite_link_copied)
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissInviteLink() },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.dismissInviteLink() },
-                    modifier = Modifier.handCursor(),
-                ) { Text(stringResource(Res.string.action_got_it)) }
-            },
-            title = { Text(stringResource(Res.string.invite_link_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(Res.string.invite_link_body),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(6.dp),
-                                modifier = Modifier.weight(1f)) {
-                            Text(link,
-                                 modifier = Modifier.padding(8.dp),
-                                 style = MaterialTheme.typography.bodySmall)
-                        }
-                        IconButton(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(link))
-                                scope.launch { snackbarState.showSnackbar(copiedMsg) }
-                            },
-                            modifier = Modifier.handCursor(),
-                        ) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_copy),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                }
-            },
-        )
-    }
-
     // One-time reveal of a freshly created personal access token, with a copy button.
     state.newAccessToken?.let { plaintextToken ->
         val clipboard = LocalClipboardManager.current
@@ -213,7 +162,7 @@ internal fun DashboardDialogs(viewModel: DashboardViewModel, state: DashboardSta
                 TextButton(
                     onClick = { viewModel.dismissNewAccessToken() },
                     modifier = Modifier.handCursor(),
-                ) { Text(stringResource(Res.string.action_got_it)) }
+                ) { MaterialText(stringResource(Res.string.action_got_it)) }
             },
             title = { Text(stringResource(Res.string.tokens_created_title)) },
             text = {
@@ -269,7 +218,7 @@ internal fun DashboardDialogs(viewModel: DashboardViewModel, state: DashboardSta
                 TextButton(
                     onClick = { viewModel.dismissTabInfo() },
                     modifier = Modifier.handCursor(),
-                ) { Text(stringResource(Res.string.action_got_it)) }
+                ) { MaterialText(stringResource(Res.string.action_got_it)) }
             },
             title = { Text(stringResource(tab.labelRes)) },
             text = {

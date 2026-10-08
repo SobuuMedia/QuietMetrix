@@ -49,12 +49,22 @@ class ExperimentService(
             trafficPercent = request.trafficPercent ?: 100,
             variants = request.variants ?: DEFAULT_VARIANTS,
             countries = ExperimentValidation.normalizeCountries(request.countries),
+            mode = request.mode ?: "legacy",
+            placementKey = request.placementKey?.trim()?.ifBlank { null },
+            revision = if (request.mode == null || request.mode == "legacy") 0 else 1,
+            bPercent = request.bPercent,
+            languages = normalizeLanguages(request.languages),
+            matchMode = request.matchMode?.lowercase() ?: "all",
+            goalEvent = request.goalEvent?.trim()?.ifBlank { null },
+            iconKey = request.iconKey?.trim()?.ifBlank { null },
         )
 
         val errors = ExperimentValidation.validate(definition)
         if (errors.isNotEmpty()) {
             return ExperimentOutcome.Error(400, "schema_violation", errors.joinToString("; "))
         }
+        val v2Errors = validateV2(definition)
+        if (v2Errors.isNotEmpty()) return ExperimentOutcome.Error(400, "schema_violation", v2Errors.joinToString("; "))
 
         if (repo.findByKey(projectId, definition.experimentKey) != null) {
             return ExperimentOutcome.Error(409, "experiment_exists", "An experiment with this key already exists")
@@ -96,6 +106,13 @@ class ExperimentService(
             if (request.trafficPercent != null) add("traffic_percent")
             if (request.variants != null) add("variants")
             if (request.countries != null) add("countries")
+            if (request.mode != null) add("mode")
+            if (request.placementKey != null) add("placement_key")
+            if (request.bPercent != null) add("b_percent")
+            if (request.languages != null) add("languages")
+            if (request.matchMode != null) add("match_mode")
+            if (request.goalEvent != null) add("goal_event")
+            if (request.iconKey != null) add("icon_key")
         }
         val disallowed = requestedFieldEdits.filterNot { it in editable }
         if (disallowed.isNotEmpty()) {
@@ -109,11 +126,21 @@ class ExperimentService(
             trafficPercent = request.trafficPercent ?: existing.trafficPercent,
             variants = request.variants ?: existing.variants,
             countries = if (request.countries != null) ExperimentValidation.normalizeCountries(request.countries) else existing.countries,
+            mode = request.mode ?: existing.mode,
+            placementKey = request.placementKey ?: existing.placementKey,
+            revision = existing.revision,
+            bPercent = request.bPercent ?: existing.bPercent,
+            languages = if (request.languages != null) normalizeLanguages(request.languages) else existing.languages,
+            matchMode = request.matchMode?.lowercase() ?: existing.matchMode,
+            goalEvent = request.goalEvent ?: existing.goalEvent,
+            iconKey = request.iconKey ?: existing.iconKey,
         )
         val errors = ExperimentValidation.validate(mergedDefinition)
         if (errors.isNotEmpty()) {
             return ExperimentOutcome.Error(400, "schema_violation", errors.joinToString("; "))
         }
+        val v2Errors = validateV2(mergedDefinition)
+        if (v2Errors.isNotEmpty()) return ExperimentOutcome.Error(400, "schema_violation", v2Errors.joinToString("; "))
 
         val updated = repo.update(
             projectId,
@@ -127,11 +154,37 @@ class ExperimentService(
                 status = request.status,
                 selectedVariant = request.selectedVariant,
                 expectedStatus = existing.status,
+                mode = request.mode,
+                placementKey = request.placementKey?.trim(),
+                bPercent = request.bPercent,
+                languages = if (request.languages != null) normalizeLanguages(request.languages) ?: emptyList() else null,
+                matchMode = request.matchMode?.lowercase(),
+                goalEvent = request.goalEvent?.trim(),
+                iconKey = request.iconKey?.trim(),
+                revision = if (existing.status == "draft" && existing.mode == "legacy" && mergedDefinition.mode != "legacy") 1 else existing.revision,
             ),
         ) ?: return ExperimentOutcome.Error(409, "invalid_transition", "Experiment changed; refresh before retrying")
 
         return ExperimentOutcome.Ok(updated)
     }
+
+    private fun validateV2(definition: ExperimentDefinition): List<String> = buildList {
+        if (definition.mode !in setOf("legacy", "visibility", "variants")) add("mode must be legacy, visibility, or variants")
+        if (definition.mode != "legacy" && definition.bPercent !in 0..100) add("b_percent must be between 0 and 100")
+        if (definition.mode != "legacy" && definition.bPercent != null && definition.variants.size == 2 &&
+            (definition.variants[0].weight != 100 - definition.bPercent || definition.variants[1].weight != definition.bPercent)) {
+            add("variant weights must match b_percent (A = 100 - B, B = b_percent)")
+        }
+        if (definition.matchMode !in setOf("all", "any")) add("match_mode must be all or any")
+        if (definition.mode != "legacy" && definition.placementKey.isNullOrBlank()) add("placement_key is required for v2 experiments")
+        if ((definition.goalEvent?.length ?: 0) > 64) add("goal_event must be at most 64 characters")
+        if (definition.goalEvent != null && !definition.goalEvent.matches(Regex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$"))) add("goal_event must be a valid event key")
+        if (definition.languages?.any { !it.matches(Regex("^[a-z]{2,3}$")) } == true) add("languages must contain normalized primary language codes")
+    }
+
+    private fun normalizeLanguages(values: List<String>?): List<String>? = values
+        ?.map { it.trim().substringBefore('-').lowercase() }
+        ?.distinct()?.sorted()?.takeIf { it.isNotEmpty() }
 
     fun delete(projectId: Long, experimentKey: String): ExperimentOutcome<Unit> {
         val existing = repo.findByKey(projectId, experimentKey)

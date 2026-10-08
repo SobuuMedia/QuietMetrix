@@ -31,7 +31,9 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,7 +54,7 @@ class FunnelRoutesIntegrationTest {
     @Test
     fun `create funnel then list returns it with the wire shape the dashboard expects`() = testApplication {
         val db = freshDb()
-        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, Funnels) }
+        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, Funnels, com.quietmetrix.server.persistence.tables.FunnelDefinitionRevisions) }
         UserRepository(db).create("admin@test.com", "password")
         val projectRepo = ProjectRepository(db)
         val apiKey = projectRepo.create("Demo", null, 1L)
@@ -127,7 +129,7 @@ class FunnelRoutesIntegrationTest {
     @Test
     fun `invalid funnel definition is rejected before hitting the repository`() = testApplication {
         val db = freshDb()
-        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, Funnels) }
+        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, Funnels, com.quietmetrix.server.persistence.tables.FunnelDefinitionRevisions) }
         UserRepository(db).create("admin@test.com", "password")
         val projectRepo = ProjectRepository(db)
         val apiKey = projectRepo.create("Demo", null, 1L)

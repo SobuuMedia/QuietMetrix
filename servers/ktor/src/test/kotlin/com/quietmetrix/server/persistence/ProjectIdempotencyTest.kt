@@ -3,7 +3,8 @@ package com.quietmetrix.server.persistence
 import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,10 +29,12 @@ class ProjectIdempotencyTest {
         val db = db("idem1")
         val ownerId = UserRepository(db).create("owner@test.com", "password")
         val repo = ProjectRepository(db)
-        repo.create("App", null, ownerId, idempotencyKey = "req-123")
+        repo.create("App", null, ownerId, idempotencyKey = "req-123", iconKey = "fitness", declaredPlatforms = listOf("ios"))
 
         val found = repo.findByOwnerAndIdempotencyKey(ownerId, "req-123")
         assertEquals("App", found?.get("name"))
+        assertEquals("fitness", found?.get("iconKey"))
+        assertEquals("[\"ios\"]", found?.get("declaredPlatforms"))
     }
 
     @Test

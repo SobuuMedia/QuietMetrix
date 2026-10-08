@@ -1,6 +1,6 @@
 name: Deploy PHP Backend (production)
 
-# Manual only, on purpose: this mirrors php-hosting/ onto quietmetrix.getsobuu.com
+# Manual only, on purpose: this mirrors php-hosting/ onto analytics.example.com
 # (IONOS shared hosting), which is the moment any already-installed client on an
 # older SDK loses analytics until it updates (the old /api/v1/track route is gone
 # in this codebase — see CHANGELOG.md's Breaking section). Never auto-run this on
@@ -13,17 +13,20 @@ name: Deploy PHP Backend (production)
 #   QM_PROD_FTP_HOST   - SFTP host for the IONOS account
 #   QM_PROD_FTP_USER   - SFTP username
 #   QM_PROD_FTP_PASS   - SFTP password
-#   QM_PROD_REMOTE_PATH - remote path quietmetrix.getsobuu.com's doc root maps to
+#   QM_PROD_REMOTE_PATH - remote path analytics.example.com's doc root maps to
 #                         on this IONOS account (e.g. /quietmetrix/) - set this to
 #                         the real path before the first run; there is no safe
 #                         default to guess here.
+
+env:
+  QM_PROD_PUBLIC_ORIGIN: ${{ vars.QM_PROD_PUBLIC_ORIGIN }}
 
 on:
   workflow_dispatch:
 
 jobs:
   deploy:
-    name: Mirror php-hosting/ to quietmetrix.getsobuu.com
+    name: Mirror php-hosting/ to analytics.example.com
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +70,7 @@ jobs:
           REMOTE_PATH: ${{ secrets.QM_PROD_REMOTE_PATH }}
         run: |
           if [ -z "$REMOTE_PATH" ]; then
-            echo "::error::QM_PROD_REMOTE_PATH is not set. Set it to the real IONOS doc root for quietmetrix.getsobuu.com before running this workflow."
+            echo "::error::QM_PROD_REMOTE_PATH is not set. Set it to the real IONOS doc root for analytics.example.com before running this workflow."
             exit 1
           fi
           lftp -c "
@@ -91,12 +94,13 @@ jobs:
       - name: Verify the health endpoint
         run: |
           sleep 5
-          curl -sf https://quietmetrix.getsobuu.com/api/v1/health | tee /tmp/health.json
+          : "${QM_PROD_PUBLIC_ORIGIN:?Set QM_PROD_PUBLIC_ORIGIN for the deployment smoke test}"
+          curl -sf ${QM_PROD_PUBLIC_ORIGIN}/api/v1/health | tee /tmp/health.json
           grep -q '"ok":true' /tmp/health.json
 
       - name: Verify /api/v1/track is retired and /api/v1/counters is live
         run: |
-          track_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://quietmetrix.getsobuu.com/api/v1/track)
+          track_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST ${QM_PROD_PUBLIC_ORIGIN}/api/v1/track)
           echo "POST /api/v1/track -> $track_status (expected 404 - this route is removed)"
-          counters_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://quietmetrix.getsobuu.com/api/v1/counters)
+          counters_status=$(curl -s -o /dev/null -w "%{http_code}" -X POST ${QM_PROD_PUBLIC_ORIGIN}/api/v1/counters)
           echo "POST /api/v1/counters -> $counters_status (expected 401 with no API key, not 404)"

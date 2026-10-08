@@ -31,6 +31,7 @@ data class CounterAppInfo(
 
 @Serializable
 data class CounterBatchRequest(
+    @SerialName("batch_id") val batchId: String? = null,
     val sdk: SdkInfo? = null,
     val app: CounterAppInfo? = null,
     /** The device's local date (ISO `yyyy-MM-dd`); clamped server-side to `[today-2, today]`. */
@@ -44,6 +45,45 @@ data class CounterBatchResponse(
     val accepted: Int,
     val quarantined: Int = 0,
 )
+
+/** Additive v2 protocol: `hour=null` means a UTC daily cell; 0..23 means an hourly cell. */
+@Serializable
+data class CounterV2Item(val m: String, val d: Map<String, String> = emptyMap(), val n: Long, val contributors: Int = 0)
+
+@Serializable
+data class CounterV2BatchRequest(
+    @SerialName("batch_id") val batchId: String,
+    val sdk: SdkInfo? = null,
+    val app: CounterAppInfo? = null,
+    val day: String,
+    val hour: Int? = null,
+    val counters: List<CounterV2Item>,
+)
+
+@Serializable
+data class CounterV2Segment(val kind: String, val value: String)
+
+/** Per-cell protocol-v2 envelope. The old batch-day/hour envelope remains accepted during rollout. */
+@Serializable
+data class CounterV2EnvelopeItem(
+    val day: String,
+    val hour: Int? = null,
+    val metric: String,
+    val segment: CounterV2Segment,
+    val dimensions: Map<String, String> = emptyMap(),
+    val n: Long,
+)
+
+@Serializable
+data class CounterV2EnvelopeRequest(
+    val schema: Int,
+    @SerialName("batch_id") val batchId: String,
+    val sdk: SdkInfo,
+    val items: List<CounterV2EnvelopeItem>,
+)
+
+@Serializable
+data class CounterV2BatchResponse(val ok: Boolean = true, val accepted: Int, val replayed: Boolean)
 
 @Serializable
 data class ErrorResponse(
@@ -62,6 +102,9 @@ data class HealthResponse(
 data class MetaResponse(
     val version: String = "0.2.0",
     val debug: Boolean = false,
+    val ai_enabled: Boolean = false,
+    val selfhost: Boolean = true,
+    val capabilities: List<String> = listOf("counter_batch_receipts", "unique_window_v2", "counter_protocol_v2_hourly", "counter_protocol_v2_schema2"),
 )
 
 @Serializable
@@ -88,12 +131,41 @@ data class UserResponse(
     val email: String,
     val role: String = "admin",
     val createdAt: String,
+    @SerialName("platform_operator") val platformOperator: Boolean = false,
 )
 
 @Serializable
 data class CreateProjectRequest(
     val name: String,
     val description: String? = null,
+    @SerialName("icon_key") val iconKey: String = "book",
+    @SerialName("declared_platforms") val declaredPlatforms: List<String> = emptyList(),
+)
+
+@Serializable
+data class CreatedProjectResponse(
+    val id: String,
+    val name: String,
+    val description: String? = null,
+    @SerialName("api_key") val apiKey: String,
+    @SerialName("api_key_last4") val apiKeyLast4: String,
+    @SerialName("icon_key") val iconKey: String,
+    @SerialName("declared_platforms") val declaredPlatforms: List<String>,
+    val message: String,
+)
+
+@Serializable
+data class ProjectCreateReplayResponse(
+    val id: String,
+    val name: String,
+    @SerialName("api_key_last4") val apiKeyLast4: String?,
+    val message: String,
+)
+
+@Serializable
+data class DeletedProjectResponse(
+    val deleted: Boolean,
+    @SerialName("project_id") val projectId: String,
 )
 
 @Serializable
@@ -113,6 +185,7 @@ data class UserListResponse(
 data class InviteUserRequest(
     val email: String,
     val role: String,
+    @SerialName("new_organization") val newOrganization: Boolean = false,
 )
 
 @Serializable
@@ -141,11 +214,20 @@ data class ProjectResponse(
     val id: String,
     val name: String,
     val description: String? = null,
+    @SerialName("api_key")
     val apiKey: String,
     @SerialName("api_key_last4") val apiKeyLast4: String? = null,
+    @SerialName("plan_id")
     val planId: String? = null,
+    @SerialName("created_at")
     val createdAt: String,
     @SerialName("owner_user_id") val ownerUserId: String? = null,
+    @SerialName("last_received_at") val lastReceivedAt: String? = null,
+    val platforms: List<String> = emptyList(),
+    @SerialName("sdk_versions") val sdkVersions: List<String> = emptyList(),
+    @SerialName("activity_status") val activityStatus: String = "waiting_for_first_data",
+    @SerialName("icon_key") val iconKey: String = "book",
+    @SerialName("declared_platforms") val declaredPlatforms: List<String> = emptyList(),
 )
 
 @Serializable

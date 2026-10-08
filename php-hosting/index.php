@@ -21,6 +21,9 @@ if (!file_exists(__DIR__ . '/' . $configFile)) {
 }
 
 require_once __DIR__ . '/' . $configFile;
+// Shared hosts may enable display_errors globally. Never disclose PHP warnings,
+// filesystem paths, or database details in production API responses.
+if (!defined('DEBUG') || !DEBUG) ini_set('display_errors', '0');
 require_once __DIR__ . '/src/db.php';
 require_once __DIR__ . '/src/jwt.php';
 require_once __DIR__ . '/src/accessTokens.php';
@@ -39,8 +42,10 @@ require_once __DIR__ . '/src/activationCounterAnalyze.php';
 require_once __DIR__ . '/src/searchCounterAnalyze.php';
 require_once __DIR__ . '/src/frictionCounterAnalyze.php';
 require_once __DIR__ . '/src/askAnalyticsAnalyze.php';
+require_once __DIR__ . '/src/ai.php';
 require_once __DIR__ . '/src/analyticsWindow.php';
 require_once __DIR__ . '/src/bootstrap.php';
+require_once __DIR__ . '/src/maintenance.php';
 
 // ---------------------------------------------------------------------------
 // Global exception handler — never leak stack traces to clients
@@ -68,42 +73,25 @@ set_exception_handler(function (Throwable $e): void {
 // ---------------------------------------------------------------------------
 // Refuse to start with placeholder secrets
 // ---------------------------------------------------------------------------
-if (JWT_SECRET === 'change_me_to_a_long_random_string_at_least_32_chars') {
-    http_response_code(500);
-    header('Content-Type: application/json');
-    echo json_encode([
-        'error'   => 'misconfigured',
-        'message' => 'JWT_SECRET must be changed in config.php (use: openssl rand -hex 32)',
-    ]);
-    exit;
+if (strlen(JWT_SECRET) < 32 || str_starts_with(JWT_SECRET, 'change_me')) {
+    jsonResponse(500, ['error'=>'misconfigured','message'=>'Set a strong random JWT_SECRET of at least 32 characters']); exit;
 }
-if (ADMIN_PASSWORD === 'change_me') {
-    http_response_code(500);
-    header('Content-Type: application/json');
-    echo json_encode([
-        'error'   => 'misconfigured',
-        'message' => 'ADMIN_PASSWORD must be changed in config.php',
-    ]);
-    exit;
-}
-
-// ---------------------------------------------------------------------------
-// Refuse to start if rate limiting is enabled without APCu
-// ---------------------------------------------------------------------------
-if (defined('RATE_LIMIT_ENABLED') && RATE_LIMIT_ENABLED && !function_exists('apcu_fetch')) {
-    http_response_code(500);
-    header('Content-Type: application/json');
-    echo json_encode([
-        'error'   => 'misconfigured',
-        'message' => 'RATE_LIMIT_ENABLED is true but APCu is not available. Install and enable the APCu PHP extension.',
-    ]);
-    exit;
+if (cloudMode()) {
+    $public = parse_url(defined('APP_BASE_URL') ? APP_BASE_URL : '');
+    $retention = getenv('QM_RETENTION_DAYS'); $budget = getenv('QM_COUNTER_REQUESTS_PER_DAY');
+    if (!$public || ($public['scheme'] ?? '') !== 'https' || empty($public['host']) || isset($public['user']) || isset($public['query']) ||
+        ALLOWED_ORIGIN === '*' || !RATE_LIMIT_ENABLED || !INGEST_IP_ENABLED || DEBUG ||
+        ($retention !== false && $retention !== '' && (int)$retention <= 0) ||
+        ($budget !== false && $budget !== '' && (int)$budget <= 0)) {
+        jsonResponse(500, ['error'=>'misconfigured','message'=>'Hosted mode requires HTTPS public URL, explicit CORS, enabled limits, retention and production settings']); exit;
+    }
 }
 
 // ---------------------------------------------------------------------------
 // First-run install (creates schema + admin user idempotently)
 // ---------------------------------------------------------------------------
 ensureInstalled();
+dataMaintenance(getDb());
 
 // ---------------------------------------------------------------------------
 // Security headers + CORS
@@ -151,11 +139,19 @@ if (BASE_PATH !== '' && strpos($uri, BASE_PATH) === 0) {
 }
 $uri = '/' . ltrim(rtrim($uri, '/'), '/');
 
+if (str_starts_with($uri, '/api/') && $uri !== '/api/v1/health') enforceSharedLimit('public-ip:' . (clientIp() ?? 'unknown'), 120);
+
+if (in_array($uri, ['/api/v1/counters','/api/v2/counters'], true)) {
+    $budget = getenv('QM_COUNTER_REQUESTS_PER_DAY');
+    $budget = $budget !== false && $budget !== '' ? (int)$budget : (cloudMode() ? 10000 : 0);
+    if ($budget > 0) enforceSharedLimit('ingest-daily:' . requireApiKey(), $budget, 86400);
+}
+
 // Browser hitting the bare domain → send them to the dashboard.
 if ($method === 'GET' && ($uri === '/' || $uri === '')) {
     $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
     if (str_contains($accept, 'text/html')) {
-        header('Location: ' . rtrim(BASE_PATH, '/') . '/dashboard/');
+        header('Location: ' . rtrim(BASE_PATH, '/') . '/dashboard/' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : ''));
         http_response_code(302);
         exit;
     }
@@ -182,6 +178,9 @@ if ($method === 'GET' && $uri === '/api/v1/_meta') {
     jsonResponse(200, [
         'version' => '0.2.0',
         'debug'   => DEBUG === true,
+        'ai_enabled' => (bool)aiConfig()['enabled'],
+        'selfhost' => !aiConfig()['cloud'],
+        'capabilities' => ['counter_batch_receipts', 'unique_window_v2', 'counter_protocol_v2_hourly', 'counter_protocol_v2_schema2'],
     ]);
     exit;
 }
@@ -199,6 +198,10 @@ if ($method === 'POST' && $uri === '/api/v1/auth/refresh') {
     exit;
 }
 
+if ($method === 'POST' && $uri === '/api/v1/auth/logout') {
+    require_once __DIR__ . '/src/routes/auth.php'; handleLogout(); exit;
+}
+
 // ---- Counter ingest (api-key auth) ----
 
 if ($method === 'POST' && $uri === '/api/v1/counters') {
@@ -206,14 +209,38 @@ if ($method === 'POST' && $uri === '/api/v1/counters') {
     handleCounters();
     exit;
 }
+if ($method === 'POST' && $uri === '/api/v2/counters') {
+    require_once __DIR__ . '/src/counterRegistryV2.php';
+    require_once __DIR__ . '/src/routes/countersV2.php';
+    handleCountersV2();
+    exit;
+}
+if ($method === 'GET' && $uri === '/api/v1/sdk/capabilities') {
+    $projectId = requireApiKey();
+    jsonResponse(200, [
+        'capabilities' => ['counter_batch_receipts', 'unique_window_v2', 'counter_protocol_v2_hourly', 'counter_protocol_v2_schema2', 'remote_funnels', 'experiment_config_v2'],
+        'minimum_versions' => ['counter_protocol_v2_hourly' => '0.4.0', 'counter_protocol_v2_schema2' => '0.6.0', 'remote_funnels' => '0.4.0', 'experiment_config_v2' => '0.4.0'],
+    ]);
+    exit;
+}
 if ($method === 'POST' && $uri === '/api/v1/funnels/register') {
     require_once __DIR__ . '/src/routes/funnels.php';
     handleFunnelsRegister();
     exit;
 }
+if ($method === 'GET' && $uri === '/api/v2/sdk/funnels') {
+    require_once __DIR__ . '/src/routes/funnels.php';
+    handleFunnelsConfigV2();
+    exit;
+}
 if ($method === 'GET' && $uri === '/api/v1/experiments/config') {
     require_once __DIR__ . '/src/routes/experiments.php';
     handleExperimentsConfig();
+    exit;
+}
+if ($method === 'GET' && $uri === '/api/v2/sdk/experiments') {
+    require_once __DIR__ . '/src/routes/experiments.php';
+    handleExperimentsConfigV2();
     exit;
 }
 
@@ -245,6 +272,11 @@ if ($method === 'GET' && $uri === '/api/v1/projects') {
 if ($method === 'POST' && $uri === '/api/v1/projects') {
     require_once __DIR__ . '/src/routes/projects.php';
     handleProjectsCreate();
+    exit;
+}
+if ($method === 'PATCH' && preg_match('#^/api/v1/projects/([^/]+)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/projects.php';
+    handleProjectsUpdate($m[1]);
     exit;
 }
 if ($method === 'DELETE' && preg_match('#^/api/v1/projects/([^/]+)$#', $uri, $m)) {
@@ -340,6 +372,11 @@ if ($method === 'GET' && $uri === '/api/v1/users') {
     handleUsersList();
     exit;
 }
+if ($method === 'POST' && preg_match('#^/api/v1/users/([^/]+)/recover$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/users.php';
+    handleUserRecovery($m[1]); exit;
+}
+
 if ($method === 'POST' && $uri === '/api/v1/users/invite') {
     require_once __DIR__ . '/src/routes/users.php';
     handleUserInvite();
@@ -366,8 +403,26 @@ if ($method === 'POST' && preg_match('#^/api/v1/invites/([^/]+)/accept$#', $uri,
     exit;
 }
 
+// Operator and project AI routes.
+if (preg_match('#^/api/v1/_operator/ai/(plans|assignments|usage)(?:/([^/]+))?$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/ai.php';
+    handleAiOperator($method, $m[1], $m[2] ?? null);
+    exit;
+}
+if (preg_match('#^/api/v1/projects/([^/]+)/ai/(capabilities|insight|ask)$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/ai.php';
+    if ($method !== ($m[2] === 'capabilities' ? 'GET' : 'POST')) { errorResponse(405, 'method_not_allowed', 'Unsupported method'); exit; }
+    handleAi($m[1], $m[2]);
+    exit;
+}
+
 // ---- Dashboard data ----
 
+if ($method === 'GET' && preg_match('#^/api/v2/projects/([^/]+)/report$#', $uri, $m)) {
+    require_once __DIR__ . '/src/routes/dashboard.php';
+    handleProjectReportV2($m[1]);
+    exit;
+}
 if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/aggregates$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/dashboard.php';
     handleProjectAggregates($m[1]);
@@ -400,7 +455,8 @@ if ($method === 'GET' && preg_match('#^/api/v1/projects/([^/]+)/retention$#', $u
 }
 if ($method === 'POST' && preg_match('#^/api/v1/projects/([^/]+)/ask$#', $uri, $m)) {
     require_once __DIR__ . '/src/routes/dashboard.php';
-    handleProjectAsk($m[1]);
+    require_once __DIR__ . '/src/routes/ai.php';
+    handleAi($m[1], 'ask', true);
     exit;
 }
 

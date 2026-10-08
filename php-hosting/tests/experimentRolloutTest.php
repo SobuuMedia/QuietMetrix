@@ -44,8 +44,8 @@ function now(): string {
 }
 $GLOBALS['rolloutDb'] = new PDO('sqlite::memory:');
 getDb()->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-getDb()->exec('CREATE TABLE experiments (project_id TEXT, experiment_key TEXT, name TEXT, screen TEXT, status TEXT, selected_variant TEXT, traffic_percent INTEGER, variants TEXT, countries TEXT, created_at TEXT, updated_at TEXT, started_at TEXT, ended_at TEXT)');
-getDb()->prepare('INSERT INTO experiments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([
+getDb()->exec("CREATE TABLE experiments (project_id TEXT, experiment_key TEXT, name TEXT, screen TEXT, status TEXT, selected_variant TEXT, traffic_percent INTEGER, variants TEXT, countries TEXT, mode TEXT DEFAULT 'legacy', placement_key TEXT, revision INTEGER DEFAULT 0, b_percent INTEGER, languages TEXT, match_mode TEXT DEFAULT 'all', goal_event TEXT, icon_key TEXT, created_at TEXT, updated_at TEXT, started_at TEXT, ended_at TEXT)");
+getDb()->prepare('INSERT INTO experiments (project_id, experiment_key, name, screen, status, selected_variant, traffic_percent, variants, countries, created_at, updated_at, started_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([
     'p', 'cta', 'CTA', null, 'active', null, 30, $row['variants'], $row['countries'], 'created', 'updated', 'started', null,
 ]);
 $GLOBALS['rolloutBody'] = ['status' => 'shipped', 'selected_variant' => 'b'];

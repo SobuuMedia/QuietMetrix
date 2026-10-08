@@ -1,36 +1,28 @@
 # QuietMetrix Core SDK
 
-Lightweight privacy-respecting analytics SDK for Kotlin Multiplatform.
+Version 0.7.0. Maven coordinates: `io.github.sobuumedia:quietmetrix-sdk:0.7.0`.
 
-## What is automatically collected
+For JavaScript/TypeScript browser apps, install `@sobuumedia/quietmetrix-sdk@0.7.0`
+from npm and use ES module imports. Compose/WASM apps use the Maven artifacts.
 
-The SDK collects the following fields by default when events are sent:
+The SDK records aggregate counters on the device. It sends metric names, allowed
+categorical dimensions, UTC days/hours, contribution counts, platform and SDK version.
+It never sends a raw event stream, installation identifier, or session trail. Optional
+country/language targeting uses app-supplied values; it does not infer country from locale.
 
-| Field | Purpose | Storage |
-|-------|---------|---------|
-| `anonymous_id` | Stable per-device identifier for user-journey analytics | Persistent (SharedPreferences / NSUserDefaults / localStorage / disk file) |
-| `platform` | Platform name (e.g. `android`, `ios`, `web`) | Collected per-event |
-| `os_name` | Operating system name | Collected per-event |
-| `os_version` | OS version string | Collected per-event |
-| `browser_name` / `browser_version` | Browser detection (web target) | Collected per-event |
-| `device_model` | Device model string | Collected per-event |
-| `screen_width` / `screen_height` | Logical screen dimensions in pixels | Collected per-event |
-| `language` | Device locale/language | Collected per-event |
-| `user_agent` | HTTP User-Agent header (web target) | Collected per-event |
-| `app_version` | Application version (if provided by integrator) | Collected per-event |
-| `sdk_version` | QuietMetrix SDK version | Collected per-event |
+Consent and analytics opt-out persist in platform storage. Android initialization must
+supply an application Context. Browser builds use localStorage; storage failure disables
+tracking. Native apps use SharedPreferences or NSUserDefaults; JVM uses a local store.
+Set `trackingAllowedByDefault = false` and call `setCookieConsent(true)` after acceptance.
+Revocation removes unsent data and returns experiment elements to their control view.
 
-### Privacy note
+The aggregate outbox persists before transport. Lost responses retry the same receipt IDs;
+schema-2 envelopes contain at most 512 items. Outbox retention is bounded, and unfinished
+session duration is omitted after an OS kill. Visits are persisted at foreground start.
+A process can still terminate before an asynchronous call executes; await recording where
+an application needs a completed local-write guarantee.
 
-These fields are device-level metadata, not personal information by themselves. However, when combined they can form a stable fingerprint. Integrators should:
-
-- Review this list against their privacy policy
-- Disable specific fields via `DeviceContext` overrides on each platform if needed
-- Set `trackingAllowedByDefault = false` and gate collection behind explicit user consent for GDPR/CCPA compliance
-
-### Persistence model
-
-- **`anonymous_id`**: Stored in platform-persistent storage (SharedPreferences on Android, NSUserDefaults on iOS, localStorage on web, disk file on desktop/JVM). Survives app restarts but is scoped per `storageKeyPrefix`.
-- **All other fields**: Collected fresh on each event or on each init cycle. Not persisted beyond the event payload.
-- **Event queue**: Flushed to the server within `flushIntervalMs` (default 30s). If the network is unavailable, events are buffered in memory up to `maxQueueSize` and retried with exponential backoff.
-- **Consent state**: Tracked via `InMemoryStore` only — resets on app restart. Use `setAnalyticsEnabled()` after each init to restore the user's choice.
+See [integration documentation](../docs/sdk/android.md),
+[metrics and privacy](../docs/sdk/metrics-and-privacy.md), and
+[iOS artifacts](../docs/sdk/ios.md). Compose experiment wrappers use
+`io.github.sobuumedia:quietmetrix-sdk-compose:0.7.0`.

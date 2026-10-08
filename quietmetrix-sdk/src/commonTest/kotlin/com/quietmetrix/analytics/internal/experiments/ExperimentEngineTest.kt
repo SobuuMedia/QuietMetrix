@@ -4,7 +4,6 @@ import com.quietmetrix.analytics.QuietMetrix
 import com.quietmetrix.analytics.QuietMetrixConfig
 import com.quietmetrix.analytics.getVariant
 import com.quietmetrix.analytics.internal.ConfigHolder
-import com.quietmetrix.analytics.internal.InMemoryStore
 import com.quietmetrix.analytics.internal.ScreenTracker
 import com.quietmetrix.analytics.internal.counters.MetricGateway
 import com.quietmetrix.analytics.internal.createPersistentStore
@@ -21,7 +20,7 @@ class ExperimentEngineTest {
     @BeforeTest
     fun setUp() {
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
         MetricGateway.reset()
         ExperimentClient.reset()
         ExperimentTracker.reset()
@@ -32,7 +31,7 @@ class ExperimentEngineTest {
         ScreenTracker.reset() // avoids the documented ScreenTracker async-stop flake
         QuietMetrix.stop()
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
         MetricGateway.reset()
         ExperimentClient.reset()
         ExperimentTracker.reset()

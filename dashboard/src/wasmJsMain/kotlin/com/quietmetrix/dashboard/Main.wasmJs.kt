@@ -8,7 +8,7 @@ import kotlinx.browser.window
 /**
  * API base URL resolution, in priority order:
  *   1. `?api=...` query param  → for local dev against a remote server
- *   2. Empty string             → same-origin: calls go to `/api/v1/...` on
+ *   2. Browser origin           → same-origin: calls go to `/api/v1/...` on
  *                                  whatever host served `dashboard.js`. This is
  *                                  how the dashboard is meant to run in
  *                                  production behind both the PHP and Ktor
@@ -26,17 +26,17 @@ private fun resolveApiBase(): String {
             if (eq > 0 && pair.substring(0, eq) == "api") {
                 val candidate = pair.substring(eq + 1)
                 if (isAllowedApiBase(candidate)) {
-                    return candidate
+                    return candidate.ifEmpty { window.location.origin }
                 }
             }
         }
     }
-    return ""
+    return window.location.origin
 }
 
 /** Allowed API base URLs from query-param override. */
 private fun isAllowedApiBase(url: String): Boolean {
-    // Same-origin is always safe and handled by empty string.
+    // An empty override selects the browser origin.
     if (url.isEmpty()) return true
     // Local dev hosts
     if (url.startsWith("http://localhost:")) return true
@@ -61,7 +61,7 @@ private fun resolveInviteToken(): String? {
         if (eq > 0 && pair.substring(0, eq) == "invite") {
             val candidate = pair.substring(eq + 1)
             if (candidate.isNotEmpty() && candidate.length <= 256 && candidate.all { it.isLetterOrDigit() }) {
-                return candidate
+                return candidate.ifEmpty { window.location.origin }
             }
         }
     }

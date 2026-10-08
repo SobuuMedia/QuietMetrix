@@ -4,6 +4,9 @@
     <string name="brand">QuietMetrix</string>
 
     <!-- Login screen -->
+    <string name="login_tagline">Analytics, with a little more quiet.</string>
+    <string name="login_intro">Welcome back. Sign in to your workspace.</string>
+    <string name="login_access_hint">Need access? Ask your workspace administrator.</string>
     <string name="login_title">Sign in</string>
     <string name="login_email_label">Email</string>
     <string name="login_password_label">Password</string>
@@ -43,6 +46,7 @@
     <string name="nav_funnels">Funnels</string>
     <string name="nav_experiments">Experiments</string>
     <string name="nav_users">Users</string>
+    <string name="nav_team">Team</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_menu_cd">Open navigation menu</string>
     <string name="nav_badge_new">NEW</string>
@@ -89,7 +93,7 @@
 
     <!-- Time-range options -->
     <string name="range_1h">Last hour</string>
-    <string name="range_1d">Last day</string>
+    <string name="range_1d">Today</string>
     <string name="range_7d">Last 7 days</string>
     <string name="range_30d">Last 30 days</string>
     <string name="range_90d">Last 90 days</string>
@@ -175,9 +179,23 @@
     <!-- Projects -->
     <string name="projects_your">Your projects</string>
     <string name="projects_delete">Delete</string>
+    <string name="projects_edit">Edit</string>
+    <string name="projects_edit_title">Edit project name</string>
+    <string name="projects_edit_save">Save changes</string>
     <string name="projects_delete_confirm_title">Delete project</string>
     <string name="projects_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
     <string name="projects_created">Created %1$s</string>
+    <string name="projects_open_dashboard">Open dashboard</string>
+    <string name="project_activity_receiving">Receiving data</string>
+    <string name="project_activity_stale">No recent data</string>
+    <string name="project_activity_waiting">Waiting for first data</string>
+    <string name="project_last_received">Last received %1$s UTC</string>
+    <string name="project_platforms_observed">Observed: %1$s</string>
+    <string name="project_sdk_versions">SDK %1$s</string>
+    <string name="project_platform_coverage_private">Platform and SDK details appear after at least five installations contribute.</string>
+    <string name="project_icon_label">App icon</string>
+    <string name="project_declared_platforms_label">Configured platforms</string>
+    <string name="project_platforms_configured">Configured: %1$s</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -194,6 +212,7 @@
     <string name="settings_refresh">Refresh data</string>
     <string name="settings_about_title">About</string>
     <string name="settings_about_body">QuietMetrix — a privacy-first, self-hostable analytics dashboard.</string>
+    <string name="settings_twemoji_attribution">Emoji artwork: Twemoji 17.0.3 by jdecked, licensed CC BY 4.0</string>
 
     <!-- Settings: Access tokens (agents/CLIs) -->
     <string name="tokens_title">Access tokens</string>
@@ -229,14 +248,20 @@
     <string name="regenerated_key_title">New API key</string>
 
     <!-- Users management -->
-    <string name="tab_info_users">Manage who can access QuietMetrix. Admins manage everything; developers see assigned projects and can rotate API keys; reviewers have read-only access to their assigned projects.</string>
-    <string name="users_title">Users</string>
+    <string name="tab_info_users">Manage who can access QuietMetrix. Admins manage everything; editors see assigned projects and can rotate API keys; viewers have read-only access to their assigned projects.</string>
+    <string name="users_title">Team</string>
+    <string name="team_hero_title">Your team, minus the complexity</string>
+    <string name="team_hero_before">%1$d people can see your data. </string>
+    <string name="team_hero_before_one">1 person can see your data. </string>
+    <string name="team_hero_highlight">You decide</string>
+    <string name="team_hero_after"> who sees what.</string>
+    <string name="team_you">You</string>
     <string name="users_invite_action">Invite user</string>
     <string name="users_email_label">Email</string>
     <string name="users_role_label">Role</string>
     <string name="role_admin">Admin</string>
-    <string name="role_developer">Developer</string>
-    <string name="role_reviewer">Reviewer</string>
+    <string name="role_developer">Editor</string>
+    <string name="role_reviewer">Viewer</string>
     <string name="status_invited">Invited</string>
     <string name="status_active">Active</string>
     <string name="users_invite_send">Send invite</string>
@@ -255,8 +280,9 @@
     <string name="access_add_user">Add user</string>
     <string name="access_remove">Remove</string>
     <string name="access_empty">No users assigned to this project.</string>
-    <string name="access_hint">Assign developers and reviewers to the projects they should see.</string>
-    <string name="team_role_explainer">Admins manage the team and projects. Developers can change project setup. Reviewers have read-only access.</string>
+    <string name="access_hint">Assign editors and viewers to the projects they should see.</string>
+    <string name="team_role_explainer">Admins manage the team and projects. Editors can change project setup. Viewers have read-only access.</string>
+    <string name="team_project_access">Project access</string>
     <string name="ask_drawer_title">Ask your data</string>
     <string name="ask_drawer_scope">About %1$s · %2$s. Answers use privacy-safe aggregates.</string>
     <string name="ask_drawer_input">Ask about your analytics</string>
@@ -267,6 +293,8 @@
     <string name="ask_drawer_suggestion_retention">What is Day 1 retention?</string>
     <string name="ask_drawer_suggestion_screen">Which screen is reached most?</string>
     <string name="ask_drawer_retry">Ask again</string>
+    <string name="ask_drawer_unavailable">Ask is not configured for this server yet. Your dashboard analytics remain available without AI answers.</string>
+    <string name="ask_drawer_exhausted">The project has used its AI allowance for this month. It resets on %1$s.</string>
 
     <!-- Funnels -->
     <string name="funnels_title">Funnels</string>
@@ -275,47 +303,52 @@
          an apostrophe — see Task 17's report. Should be a bare '. Not fixed here (out of that
          task's scope); fix the text below when next touched. -->
     <string name="funnel_empty">No funnels yet — declare one in your app\'s SDK config and it will appear here.</string>
-    <string name="funnel_tutorial_title">How funnels work</string>
-    <string name="funnel_tutorial_intro">A funnel shows how many people complete a sequence of steps — like viewing your signup screen, then submitting it — and exactly where the rest drop off.</string>
+    <string name="funnel_empty_title">See how people move through your app</string>
+    <string name="funnel_empty_intro">Create a funnel from events your app already tracks. Current SDK releases evaluate app-declared definitions; dashboard-created funnels need the upcoming remote configuration support before they collect results.</string>
     <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
-    <string name="funnel_tutorial_step1">Steps reference events you already track (e.g. screen_view, button_click). Declare the funnel once in your app\'s SDK config as a FunnelManifest — no dashboard setup needed.</string>
     <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
-    <string name="funnel_tutorial_step2">Each device evaluates its own progress against the funnel\'s steps in real time and reports only how far it got. The funnel appears here automatically once your app registers it.</string>
     <string name="funnel_none_selected">Select a funnel to see its results.</string>
     <string name="funnel_pick_funnel">Select a funnel</string>
     <string name="funnel_badge_sdk">From app</string>
     <string name="funnel_delete">Delete</string>
-    <string name="funnel_kpi_started">🚪 Started</string>
-    <string name="funnel_kpi_completed">🏁 Made it to the end</string>
-    <string name="funnel_kpi_success_rate">🎯 Success rate</string>
+    <string name="funnel_kpi_started">Started</string>
+    <string name="funnel_kpi_completed">Made it to the end</string>
+    <string name="funnel_kpi_success_rate">Success rate</string>
     <string name="funnel_card_steps">Steps</string>
     <string name="funnel_no_entrants">No entrants in this range.</string>
     <string name="funnel_delete_confirm_title">Delete funnel</string>
     <string name="funnel_delete_confirm_body">Delete "%1$s"? This cannot be undone.</string>
     <string name="funnel_editor_cancel">Cancel</string>
-    <string name="funnel_eyebrow_emoji">🪜</string>
+    <string name="funnel_eyebrow_emoji"></string>
     <string name="funnel_headline_lead">Out of 10 people who started “%1$s”, </string>
     <string name="funnel_headline_highlight">%1$d</string>
     <string name="funnel_headline_tail"> make it all the way through.</string>
     <string name="funnel_new_action">New funnel</string>
-    <string name="funnel_dropoff_message">😢 %1$s people left here (%2$s)</string>
-    <string name="funnel_dropoff_why">✨ Why did they leave?</string>
-    <string name="funnel_expert_toggle">🤓 Expert</string>
-    <string name="funnel_expert_table_title">🤓 Step table</string>
-    <string name="funnel_copy_csv">⧉ Copy as CSV</string>
-    <string name="funnel_copy_csv_copied">✓ Copied</string>
-    <string name="funnel_new_guide_title">🪜 Declare a funnel</string>
-    <string name="funnel_new_guide_intro">Funnels are declared in your SDK config, not here — add one and it shows up on this screen automatically.</string>
-    <string name="funnel_new_guide_step1_title">1. Add it to your SDK config</string>
-    <string name="funnel_new_guide_code_kotlin">val signupFunnel = Funnel(\n    key = "signup",\n    name = "Signup",\n    steps = listOf(\n        FunnelStep(key = "view", event = "screen_view", screen = "signup"),\n        FunnelStep(key = "submit", event = "signup_submitted"),\n    ),\n)\n\nQuietMetrix.init(QuietMetrixConfig(\n    apiKey = "qm_ak_your_api_key",\n    funnels = listOf(signupFunnel),\n))</string>
-    <string name="funnel_new_guide_code_swift">let signupFunnel = Funnel(\n    key: "signup",\n    name: "Signup",\n    steps: [\n        FunnelStep(key: "view", event: "screen_view", screen: "signup"),\n        FunnelStep(key: "submit", event: "signup_submitted"),\n    ]\n)\n\nlet config = QuietMetrixConfig(\n    apiKey: "qm_ak_your_api_key",\n    funnels: [signupFunnel]\n)\nQuietMetrix.shared.initialize(config: config)</string>
-    <string name="funnel_new_guide_code_js">init({\n    apiKey: "qm_ak_your_api_key",\n    funnels: [\n        {\n            key: "signup",\n            name: "Signup",\n            steps: [\n                { key: "view", event: "screen_view", screen: "signup" },\n                { key: "submit", event: "signup_submitted" },\n            ],\n        },\n    ],\n});</string>
-    <string name="funnel_new_guide_step2_title">2. All set</string>
-    <string name="funnel_new_guide_step2_body">Once your app registers the funnel, it appears on this screen automatically — no dashboard setup needed. Edit the steps in code and ship an update to change them.</string>
-    <string name="funnel_new_guide_done">Done</string>
-
+    <string name="funnel_builder_title">Build a funnel</string>
+    <string name="funnel_builder_intro">Define the ordered app events to evaluate. Existing SDK releases evaluate only funnels already declared in app code.</string>
+    <string name="funnel_builder_key">Funnel key</string>
+    <string name="funnel_builder_name">Name</string>
+    <string name="funnel_builder_description">Description (optional)</string>
+    <string name="funnel_builder_window_days">Conversion window (days, 1–90)</string>
+    <string name="funnel_builder_steps">Ordered steps (2–10)</string>
+    <string name="funnel_builder_step_number">Step %1$d</string>
+    <string name="funnel_builder_step_key">Step key</string>
+    <string name="funnel_builder_event">Event name</string>
+    <string name="funnel_builder_step_name">Display name (optional)</string>
+    <string name="funnel_builder_screen_optional">Screen (optional)</string>
+    <string name="funnel_builder_remove_step">Remove step</string>
+    <string name="funnel_builder_add_step">Add step</string>
+    <string name="funnel_builder_create">Create funnel</string>
+    <string name="funnel_dropoff_message">%1$s people left here (%2$s)</string>
+    <string name="funnel_dropoff_why">Why did they leave?</string>
+    <string name="funnel_expert_toggle">Expert</string>
+    <string name="funnel_expert_table_title">Step table</string>
+    <string name="funnel_copy_csv">Copy as CSV</string>
+    <string name="funnel_copy_csv_copied">Copied</string>
     <!-- Experiments (A/B testing) -->
     <string name="experiments_title">Experiments</string>
+    <string name="experiment_hero_prefix">Show two versions of an app element, and let your users </string>
+    <string name="experiment_hero_highlight">pick the winner</string>
     <string name="experiment_empty">No experiments yet — create one to start an A/B test.</string>
     <string name="experiment_none_selected">Select an experiment to see its results.</string>
     <string name="experiment_pick_experiment">Select an experiment</string>
@@ -327,7 +360,7 @@
     <string name="experiment_status_active">Active</string>
     <string name="experiment_status_paused">Paused</string>
     <string name="experiment_status_ended">Ended</string>
-    <string name="experiment_card_emoji">🧪</string>
+    <string name="experiment_card_emoji"></string>
     <string name="experiment_status_running">Running</string>
     <string name="experiment_status_finished">Finished</string>
     <string name="experiment_action_start">Start</string>
@@ -351,9 +384,31 @@
     <string name="experiment_editor_countries_hint">Leave empty for all countries. Example: ES, FR, MX</string>
     <!-- TODO: \' renders as a literal backslash here (see Task 17's report) — should be a bare '. -->
     <string name="experiment_editor_countries_invalid">Some codes aren\'t valid 2-letter country codes</string>
+    <string name="experiment_mode_label">Experiment mode</string>
+    <string name="experiment_mode_visibility">Show an element</string>
+    <string name="experiment_mode_variants">Compare two variants</string>
+    <string name="experiment_b_percent_label">Variant B allocation (%)</string>
+    <string name="experiment_visibility_allocation_label">Element: %1$s</string>
+    <string name="experiment_variant_allocation_label">B allocation: %1$s</string>
+    <string name="experiment_languages_label">Languages (optional)</string>
+    <string name="experiment_languages_hint">Primary language codes, e.g. fr, en</string>
+    <string name="experiment_languages_invalid">Use 2–3 letter primary language codes</string>
+    <string name="experiment_match_mode_label">When both filters are set</string>
+    <string name="experiment_match_all">Match all</string>
+    <string name="experiment_match_any">Match any</string>
+    <string name="experiment_audience_help">A country rule and a language rule are separate. Users outside the audience see control.</string>
+    <string name="experiment_audience_everyone">everyone</string>
+    <string name="experiment_review_allocation">%1$d%% see B; %2$d%% see control within the matching audience.</string>
+    <string name="experiment_review_audience">Audience: %1$s. Everyone else sees control.</string>
+    <string name="experiment_review_languages">Languages: %1$s</string>
+    <string name="experiment_goal_event_label">Goal event key (optional)</string>
+    <string name="experiment_goal_event_hint">login_success</string>
+    <string name="experiment_goal_event_invalid">Use up to 64 letters, numbers, underscores, dots or hyphens; start with a letter.</string>
+    <string name="experiment_goal_exposure_only">Exposure only: conversion results are not collected.</string>
+    <string name="experiment_review_goal">Conversion goal: %1$s</string>
     <string name="experiment_editor_submit">Create</string>
-    <string name="experiment_wizard_next">Next →</string>
-    <string name="experiment_wizard_back">← Back</string>
+    <string name="experiment_wizard_next">Next</string>
+    <string name="experiment_wizard_back">Back</string>
     <string name="experiment_wizard_step">Step %1$d of 3</string>
     <string name="experiment_wizard_screen_summary">Screen: %1$s</string>
     <string name="experiment_wizard_countries_summary">Countries: %1$s</string>
@@ -368,6 +423,12 @@
     <string name="experiment_traffic_label">Traffic: %1$s</string>
     <string name="experiment_results_title">Results</string>
     <string name="experiment_results_unit_note">Counted per session. Only aggregate counts are stored — QuietMetrix never knows which user saw which variant.</string>
+    <string name="experiment_installation_unit_note">Counts are distinct active installations, locally deduplicated per revision. Only aggregate counts are sent; no installation identifier or assignment leaves the app.</string>
+    <string name="experiment_exposures_label">Exposed installations</string>
+    <string name="experiment_conversions_label">Goal installations</string>
+    <string name="experiment_goal_rate_label">Goal conversion</string>
+    <string name="experiment_revision_cumulative_note">Cumulative results since this revision started. The shared date range does not change these totals.</string>
+    <string name="experiment_installation_evidence_collecting">Collecting reportable data. Evidence requires at least 100 installations per variant and 5 goal and non-goal installations in each.</string>
     <string name="experiment_results_not_enough_data">Not enough data yet</string>
     <string name="experiment_results_baseline_badge">Baseline</string>
     <string name="experiment_impressions_label">Sessions shown</string>
@@ -435,24 +496,22 @@
     <string name="header_server_unreachable_message">We can't reach your QuietMetrix server.</string>
     <string name="action_try_again">Try again</string>
 
-    <!-- Overview hero + privacy card (Task 18; design_handoff_dashboard_redesign/README.md > 2.
-         Overview). Relabeled per post-review decision (see Task 18's report "Relabeling" section):
-         the hero shows "sessions" (what is actually tracked), not "people" (a distinct-device/WAU
-         metric this dashboard doesn't measure), and the trend is a direction ("trending up/down
-         this period"), not a numeric percent framed as a period-over-period comparison — see
-         OverviewHeroLogic.kt's KDoc for the full reasoning. -->
-    <string name="overview_hero_greeting">👋 Hey, %1$s team. Here's your %2$s overview.</string>
-    <string name="overview_hero_sessions">%1$s sessions</string>
+    <!-- Overview hero uses the exact fixed-window People measure when available. -->
+    <string name="overview_hero_greeting">Hey, %1$s team. Here's your %2$s overview.</string>
+    <string name="overview_hero_people">%1$s people</string>
     <string name="overview_hero_opened">opened %1$s</string>
-    <string name="overview_hero_trend_up">trending up this period</string>
-    <string name="overview_hero_trend_down">trending down this period</string>
-    <string name="overview_hero_tail_standout">Most of that was %1$s.</string>
-    <string name="overview_hero_tail_generic">Keep an eye on what's trending next.</string>
-    <string name="overview_hero_ai_chip">✨ From your recorded numbers</string>
+    <string name="overview_hero_current_period">during this period.</string>
+    <string name="overview_hero_change_more">%1$s more than the previous period</string>
+    <string name="overview_hero_change_less">%1$s fewer than the previous period</string>
+    <string name="overview_hero_change_same">about the same as the previous period</string>
+    <string name="overview_hero_unavailable">Your app’s activity, at a glance.</string>
+    <string name="overview_hero_tail_standout">Most recorded activity was %1$s.</string>
+    <string name="overview_hero_ai_chip">From your recorded numbers</string>
     <string name="overview_hero_tell_me_more">Tell me more</string>
-    <string name="overview_hero_copy">⧉ Copy</string>
-    <string name="overview_hero_loading">🧮 Counting your people…</string>
-    <string name="overview_empty_greeting">👋 Welcome to %1$s</string>
+    <string name="overview_hero_copy">Copy</string>
+    <string name="overview_hero_copied">Copied</string>
+    <string name="overview_hero_loading">Counting your people…</string>
+    <string name="overview_empty_greeting">Welcome to %1$s</string>
     <string name="overview_empty_headline_lead">No data yet. Let's get your</string>
     <string name="overview_empty_headline_highlight">first event</string>
     <string name="overview_empty_headline_tail">in about 5 minutes.</string>
@@ -461,47 +520,38 @@
     <string name="overview_error_ai_nap_body">Current analytics could not be loaded. Previously loaded values may be out of date. Try again.</string>
     <string name="overview_privacy_title">Privacy check: all clear</string>
     <string name="overview_privacy_body">0 personal data stored. No cookies, no ad IDs, no fingerprinting. Your users stay anonymous.</string>
-    <string name="overview_privacy_gdpr_chip">GDPR ✓</string>
+    <string name="overview_privacy_gdpr_chip">GDPR</string>
     <string name="overview_privacy_no_banner_chip">No consent banner needed</string>
     <string name="overview_privacy_info_cd">What does this privacy check mean?</string>
-    <string name="overview_privacy_lock_emoji">🔒</string>
-    <string name="overview_privacy_info_glyph">ⓘ</string>
-    <string name="overview_error_ai_nap_emoji">😴</string>
+    <string name="overview_privacy_lock_emoji"></string>
+    <string name="overview_error_ai_nap_emoji"></string>
 
-    <!-- Task 19: Overview vitals grid. "Sessions" (not "People") and "Errors" (not "Crashes")
-         are honest relabelings of 2 of the design handoff's 4 vitals — same standard Task 18 set
-         for the hero: "People" would claim a distinct-device count this dashboard doesn't track
-         (it's total sessions); "Crashes" would claim crash-only precision this dashboard doesn't
-         have (the backend counts error/crash/exception events together). See
-         OverviewVitalsLogic.kt's KDoc for the full reasoning. The %1$s argument in the trend
-         strings is a pre-formatted "N%" string built in Kotlin, not a literal "%" in this XML —
-         deliberately avoiding the Compose-resources "%%" unescaping bug Task 18 found (see its
-         report). -->
+    <!-- Legacy duration buckets are approximate; crash-only reports are currently unavailable. -->
+    <string name="overview_vital_people_label">People</string>
+    <string name="overview_vital_people_caption">Reported active installations; one person may use multiple devices.</string>
+    <string name="overview_vital_people_unavailable">Not available for this source or reporting window.</string>
+    <string name="overview_vital_people_suppressed">Hidden because fewer than five installations contributed to this group.</string>
     <string name="overview_vital_sessions_label">Sessions</string>
-    <string name="overview_vital_sessions_caption">How often people open your app.</string>
-    <string name="overview_vital_trend_up">▲ %1$s</string>
-    <string name="overview_vital_trend_down">▼ %1$s</string>
     <string name="overview_vital_duration_label">Time per visit</string>
-    <string name="overview_vital_duration_caption">Average time spent per visit.</string>
+    <string name="overview_vital_duration_approximate_caption">Approximate average from legacy duration buckets.</string>
+    <string name="overview_vital_duration_reported_caption">Average from completed visits reported by the v2 SDK.</string>
+    <string name="overview_vital_duration_suppressed_caption">Hidden because fewer than five visits were reported.</string>
     <string name="overview_vital_retention_label">Came back next day</string>
     <string name="overview_vital_retention_caption">Share of new users still active the next day.</string>
     <string name="overview_vital_retention_not_tracked">Not tracked yet — visit Retention for cohort details.</string>
-    <string name="overview_vital_errors_caption">Includes crashes, errors, and exceptions.</string>
-    <string name="overview_vital_filter_chip">Selected segment: %1$s ✕</string>
+    <string name="overview_vital_crashes_label">Crashes</string>
+    <string name="overview_vital_crashes_unavailable">Explicit crash-only reporting is not available yet.</string>
+    <string name="overview_vital_crashes_reported_caption">Explicit crash events reported by the v2 SDK.</string>
+    <string name="overview_vital_crashes_suppressed_caption">Hidden because fewer than five installations contributed.</string>
+    <string name="overview_vital_filter_chip">Selected segment: %1$s</string>
 
-    <!-- Task 20: Overview daily-volume chart card. The design handoff's segmented control is
-         "People/Visits/Actions" and its title text implies "who showed up" (a distinct-people
-         count); both "People" and "each week" bucketing are omitted here as not honestly
-         derivable — see OverviewChartLogic.kt's DailyVolumeMetric KDoc ("People" has no backend
-         data, same gap as the hero/vitals grid) and TimeRange.kt (only hourly/daily bucketing
-         exists, no weekly aggregation, so the title has 2 variants, not 3). The record-day
-         caption deliberately does NOT reuse the design mockup's literal "🚀 v2.3 shipped" text —
-         see DailyVolumeSection's KDoc. -->
-    <string name="overview_chart_title_hourly">What happened each hour</string>
-    <string name="overview_chart_title_daily">What happened each day</string>
+    <!-- Task 20: People comes from privacy-gated distinct-installation report bins. -->
+    <string name="overview_chart_title_hourly">Who showed up each hour</string>
+    <string name="overview_chart_title_daily">Who showed up each day</string>
+    <string name="overview_chart_metric_people">People</string>
     <string name="overview_chart_metric_visits">Visits</string>
     <string name="overview_chart_metric_actions">Actions</string>
-    <string name="overview_chart_record_day">🔥 Busiest day: %1$s</string>
+    <string name="overview_chart_record_day">Busiest day: %1$s</string>
 
     <!-- Task 21: 3-card row (screens/platforms/countries) + "Worth a look" + key card. See
          OverviewTopListsLogic.kt's WorthALookObservation KDoc for the full data-honesty
@@ -514,14 +564,14 @@
          DashboardScreen.kt's ProjectCard already documents), so there is nothing real for a Copy
          button here to copy, and no real per-event timestamp exists to back a literal "last
          received" status line. -->
-    <string name="overview_card_screens_title">📍 Where people hang out</string>
-    <string name="overview_card_platforms_title">📱 What they use</string>
-    <string name="overview_card_countries_title">🌍 Where they are</string>
+    <string name="overview_card_screens_title">Where people hang out</string>
+    <string name="overview_card_platforms_title">What they use</string>
+    <string name="overview_card_countries_title">Where they are</string>
     <string name="overview_screen_row_visits">%1$s visits</string>
     <string name="overview_breakdown_filter_cd">Show only %1$s</string>
 
-    <string name="overview_worth_a_look_title">👀 Worth a look</string>
-    <string name="overview_worth_a_look_empty_title">🎈 All caught up!</string>
+    <string name="overview_worth_a_look_title">Worth a look</string>
+    <string name="overview_worth_a_look_empty_title">All caught up!</string>
     <string name="overview_worth_a_look_empty_body">We'll let you know when something new is worth a look.</string>
     <string name="overview_worth_a_look_snooze_cd">Snooze until tomorrow</string>
     <string name="overview_worth_a_look_offline_title">%1$s actions arrived while offline</string>
@@ -531,11 +581,11 @@
     <string name="overview_worth_a_look_dominant_platform_title">%1$s is where most of your traffic comes from</string>
     <string name="overview_worth_a_look_dominant_platform_body">%1$s of sessions this period.</string>
 
-    <string name="overview_key_card_title">🔑 Your %1$s key</string>
-    <string name="overview_key_card_manage">Manage key →</string>
-    <string name="overview_key_card_status_receiving">🟢 Receiving data</string>
-    <string name="overview_key_card_status_waiting">⚪ No events yet this period</string>
-    <string name="overview_key_card_status_unknown">⚠️ Status unknown — can't reach server</string>
+    <string name="overview_key_card_title">Your %1$s key</string>
+    <string name="overview_key_card_manage">Manage key</string>
+    <string name="overview_key_card_status_receiving">Receiving data</string>
+    <string name="overview_key_card_status_waiting">No events yet this period</string>
+    <string name="overview_key_card_status_unknown">Status unknown — can't reach server</string>
 
     <!-- Task 21: Empty-state setup instructions — replaces the 3-card row/"Worth a look"/key card
          region (not the vitals grid or daily-volume chart, which already have their own honest
@@ -556,7 +606,7 @@
     <string name="overview_empty_setup_step2_title">2. Initialize it</string>
     <string name="overview_empty_setup_step3_title">3. Open your app</string>
     <string name="overview_empty_setup_step3_body">Open your app on a device, simulator, or browser — QuietMetrix starts tracking automatically.</string>
-    <string name="overview_empty_setup_waiting">⏳ Waiting for your first event…</string>
+    <string name="overview_empty_setup_waiting">Waiting for your first event…</string>
     <string name="overview_empty_setup_code_install_kotlin">implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")</string>
     <string name="overview_empty_setup_code_init_kotlin">QuietMetrix.init(QuietMetrixConfig(\n    trackingEndpoint = "https://your-server.com/api/v1",\n    apiKey = "qm_ak_your_api_key",\n))</string>
     <string name="overview_empty_setup_code_install_swift">.package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.4.0")</string>
@@ -569,21 +619,26 @@
     <string name="flow_h1_highlight">where they go next</string>
     <string name="flow_h1_tail">.</string>
     <string name="flow_platform_label">Platform</string>
-    <string name="flow_platform_all">🌈 All</string>
+    <string name="flow_platform_all">All</string>
+    <string name="flow_platform_android">Android</string>
+    <string name="flow_platform_ios">iOS</string>
+    <string name="flow_platform_web">Web</string>
     <string name="flow_platform_unavailable_caption">Per-platform filtering isn't available yet.</string>
     <string name="flow_start_from_label">Start from</string>
     <string name="flow_path_label">Path:</string>
-    <string name="flow_path_arrow">→</string>
-    <string name="flow_exit_label">👋 Left the app</string>
+    <string name="flow_copy_path">Copy path</string>
+    <string name="flow_path_copied">Copied</string>
+    <string name="flow_copy_scope">Project: %1$s · Range: %2$s · Platform: %3$s</string>
+    <string name="flow_exit_label">Left the app</string>
     <string name="flow_after_screen">After %1$s · %2$s transitions seen</string>
-    <string name="flow_caption">💡 Click a screen to keep following. 👋 means they left the app.</string>
+    <string name="flow_caption">Click a screen to keep following. “Left the app” marks an exit.</string>
     <string name="flow_state_empty_path">Pick a screen above to see where people go next.</string>
 
     <!-- Flow screen (Task 23): Countries/Platforms/Device types 3-card row -->
     <string name="flow_os_versions_caption">OS version breakdown isn't tracked yet.</string>
 
     <!-- Retention screen (Task 24): H1 + 3 vital cards with a 10-dot "people" grid -->
-    <string name="retention_eyebrow_emoji">🔁</string>
+    <string name="retention_eyebrow_emoji"></string>
     <string name="retention_h1_lead">Out of 10 new people, </string>
     <string name="retention_h1_day1_highlight">%1$d come back</string>
     <string name="retention_h1_mid">the next day and </string>
@@ -592,20 +647,20 @@
     <string name="retention_h1_day7_only_lead">Out of 10 new people, </string>
     <string name="retention_h1_tail"> a week later.</string>
     <string name="retention_h1_not_enough_data">Not enough data yet to tell your retention story — check back once people have had time to come back.</string>
-    <string name="retention_card_day1_label">🌅 Next day</string>
-    <string name="retention_card_day7_label">📅 After a week</string>
-    <string name="retention_card_day30_label">🗓️ After a month</string>
+    <string name="retention_card_day1_label">Next day</string>
+    <string name="retention_card_day7_label">After a week</string>
+    <string name="retention_card_day30_label">After a month</string>
     <string name="retention_card_caption_day1">%1$d in 10 opened it again the day after installing.</string>
     <string name="retention_card_caption_day7">%1$d in 10 are still around 7 days later.</string>
     <string name="retention_card_caption_day30">%1$d in 10 are still around 30 days later.</string>
     <string name="retention_card_too_early">This percentage isn’t available for the selected data.</string>
-    <string name="retention_dot_filled_emoji">🙂</string>
+    <string name="retention_dot_filled_emoji"></string>
     <string name="retention_dot_filled_content_description">Came back</string>
     <string name="retention_dot_empty_content_description">Didn't come back (yet)</string>
 
     <!-- Cohort heatmap (Task 25) -->
-    <string name="cohort_heatmap_title_by_week">🗓️ Week by week</string>
-    <string name="cohort_heatmap_title_by_day">📆 Day by day</string>
+    <string name="cohort_heatmap_title_by_week">Week by week</string>
+    <string name="cohort_heatmap_title_by_day">Day by day</string>
     <string name="cohort_heatmap_desc_by_week">Each row is the group of people who installed that week. Brighter = more of them came back. Tick A and B on two rows to compare them.</string>
     <string name="cohort_heatmap_desc_by_day">Each row is the group of people who installed that day. Brighter = more of them came back. Tick A and B on two rows to compare them.</string>
     <string name="cohort_heatmap_toggle_by_week">By week</string>
@@ -618,22 +673,22 @@
     <string name="cohort_heatmap_checkbox_content_description_unselected">Select %1$s to compare</string>
     <string name="cohort_heatmap_checkbox_content_description_selected">%1$s is selected as %2$s for comparison</string>
     <string name="cohort_heatmap_tooltip_known">Of the %1$s people who installed %2$s, %3$s (%4$s) opened the app again on %5$s.</string>
-    <string name="cohort_heatmap_tooltip_unknown">Too early. Come back after %1$s to see this one ⏳</string>
+    <string name="cohort_heatmap_tooltip_unknown">Too early. Come back after %1$s to see this one.</string>
     <string name="cohort_heatmap_tooltip_unavailable">This percentage isn’t available in the selected data.</string>
 
     <!-- Retention: "⚖️ Comparing A vs B" panel + closing insight card (Task 26) -->
-    <string name="retention_comparison_eyebrow_emoji">⚖️</string>
+    <string name="retention_comparison_eyebrow_emoji">Comparing</string>
     <string name="retention_comparison_heading">Comparing</string>
     <string name="retention_comparison_chip_a">A · %1$s</string>
     <string name="retention_comparison_chip_b">B · %1$s</string>
     <string name="retention_comparison_vs">vs</string>
     <string name="retention_comparison_not_enough_data">Not enough data yet to compare these two.</string>
     <string name="retention_comparison_same">On %1$s, both groups came back the same (%2$s).</string>
-    <string name="retention_comparison_higher">On %1$s, people from %2$s came back %3$d pts more than people from %4$s. 📈</string>
-    <string name="retention_comparison_lower">On %1$s, people from %2$s came back %3$d pts less than people from %4$s. 📉</string>
+    <string name="retention_comparison_higher">On %1$s, people from %2$s came back %3$d pts more than people from %4$s.</string>
+    <string name="retention_comparison_lower">On %1$s, people from %2$s came back %3$d pts less than people from %4$s.</string>
     <string name="retention_comparison_column_values">%1$s · %2$s</string>
-    <string name="retention_comparison_column_unknown">⏳ Not enough data for this day yet.</string>
-    <string name="retention_insight_eyebrow_emoji">✨</string>
+    <string name="retention_comparison_column_unknown">Not enough data for this day yet.</string>
+    <string name="retention_insight_eyebrow_emoji">Insight</string>
     <string name="retention_insight_not_enough_data">Not enough cohort history yet to spot a trend — check back once you have two cohorts old enough to compare.</string>
     <string name="retention_insight_ask_why">Ask why</string>
     <string name="retention_insight_scope_note">Comparing your 2 most recent cohorts — not whatever grouping the heatmap above is set to.</string>
@@ -644,11 +699,11 @@
     <string name="experiment_action_close">Close without rollout</string>
     <string name="experiment_preview_unavailable">Preview unavailable — the SDK does not provide screenshots.</string>
     <string name="experiment_variant_letter">Variant %1$s · %2$s</string>
-    <string name="experiment_confidence_title">🎲 How sure are we?</string>
+    <string name="experiment_confidence_title">How sure are we?</string>
     <string name="experiment_confidence_value">%1$s confidence</string>
     <string name="experiment_plain_winner">%1$s is winning in the selected range.</string>
     <string name="experiment_plain_tie">No clear difference yet — keep collecting data.</string>
-    <string name="experiment_confidence_note">Score = (1 − p-value) × 100; the significance threshold is 95.</string>
+    <string name="experiment_confidence_note">Score = (1 - p-value) x 100; the significance threshold is 95.</string>
     <string name="experiment_rollout_note">Full rollout: %1$s. Results remain live for the selected date range and may include rollout traffic.</string>
     <string name="experiment_original_split">Original test allocation</string>
     <string name="experiment_confirm_title">%1$s: %2$s?</string>
@@ -656,9 +711,9 @@
     <string name="experiment_confirm_stop">Stop assignment after a successful SDK config refresh and a subsequent app session. Existing sessions keep their cached assignment.</string>
     <string name="experiment_raw_stats">Expert statistics</string>
     <string name="experiment_raw_comparison">z = %1$s · p = %2$s</string>
-    <string name="experiment_winner_medal">🏆</string>
+    <string name="experiment_winner_medal">Winner</string>
     <string name="experiment_meter_min">0</string>
-    <string name="experiment_meter_max">95 │ 100</string>
+    <string name="experiment_meter_max">95 / 100</string>
     <string name="comparison_was">Was %1$s (previous period)</string>
     <string name="comparison_unavailable">Previous period unavailable</string>
     <string name="comparison_scope">UTC daily totals · today is still accumulating. Retention uses cohorts started in each period.</string>
@@ -671,6 +726,7 @@
     <string name="drill_copied">Numbers copied</string>
     <string name="drill_unavailable">No matching visible value is available for this selection.</string>
     <string name="drill_sessions_detail">Sessions recorded in this window. These are visits, not distinct people.</string>
+    <string name="drill_people_detail">Distinct reported app installations active in this exact window. A person using multiple devices or reinstalling may count more than once; small counts are hidden for privacy.</string>
     <string name="drill_duration_detail">Average session length estimated from the reported duration buckets.</string>
     <string name="drill_errors_detail">Combined events named error, crash or exception in this window.</string>
     <string name="drill_retention_detail">Newest cohort with a visible value for this return age. Missing or privacy-suppressed values remain unavailable.</string>
@@ -684,7 +740,7 @@
     <string name="drill_daily">Daily volume</string>
     <string name="drill_raw">Raw statistics</string>
     <string name="drill_cohort">Cohort %1$s</string>
-    <string name="drill_delta">%1$s → %2$s</string>
+    <string name="drill_delta">%1$s to %2$s</string>
     <string name="analytics_loading">Counting the selected data…</string>
     <string name="flow_details">Screen details</string>
     <string name="cohort_reported_toggle">By cohort</string>
@@ -700,5 +756,40 @@
     <string name="team_invite_hint">Invite someone to share access to your projects.</string>
     <string name="drill_week_detail">Sum of visible daily counts in this seven-day block. Missing or privacy-suppressed days are not inferred as zero.</string>
     <string name="analytics_daily_scope">Counters have UTC daily resolution. The 1h and 1d selections show today; today is still accumulating.</string>
+    <string name="analytics_resolution_title">Date and data resolution</string>
+    <string name="analytics_resolution_help">Dates use UTC. Daily counters for today are still accumulating. Older SDK versions may report daily totals only, so hourly detail may be unavailable.</string>
     <string name="ask_retention_why_question">Why did retention change between the latest cohorts?</string>
+
+    <!-- Management redesign completion. -->
+    <string name="management_mcp_title">MCP connection</string>
+    <string name="management_mcp_hint">Add this configuration to your MCP client. Replace the token placeholder with an access token using the scopes your agent needs. The MCP process runs on your computer; this dashboard checks the API connection only.</string>
+    <string name="management_api_online">API online</string>
+    <string name="management_api_offline">API not responding</string>
+    <string name="management_api_checking">Checking connection…</string>
+    <string name="management_api_unknown">Connection not checked</string>
+    <string name="management_check_connection">Check connection</string>
+    <string name="management_server_url">Server URL</string>
+    <string name="management_version">Version %1$s</string>
+    <string name="management_invite_title">Invite someone</string>
+    <string name="management_invite_invalid">Enter a valid email address.</string>
+    <string name="management_invite_send">Send invitation</string>
+    <string name="management_invite_sending">Sending…</string>
+    <string name="management_invite_link">Share the invitation link</string>
+    <string name="management_invite_link_hint">Send an invitation to generate a link for that person.</string>
+    <string name="management_expiry">Expires after</string>
+    <string name="management_expiry_never">No expiry</string>
+    <string name="management_expiry_30">30 days</string>
+    <string name="management_expiry_90">90 days</string>
+    <string name="management_token_create">Create token</string>
+    <string name="management_key_hint">Only the last four characters are stored. Regenerate to get a new key.</string>
+    <string name="brand_mark">QuietMetrix</string>
+    <string name="ai_allowance_reached">Your plan’s AI allowance has been reached. It resets on %1$s.</string>
+    <string name="ai_selfhost_instructions">Optional AI: configure QM_AI_PROVIDER, QM_AI_MODEL and QM_AI_API_KEY on the server. Use QM_AI_BASE_URL for a custom endpoint and QM_AI_LOCAL=true for a keyless local server. No subscription limits apply to self-hosted AI.</string>
+    <string name="funnel_builder_key_format">Use lowercase letters, numbers, underscores and hyphens.</string>
+    <string name="funnel_builder_move_up">Move up</string>
+    <string name="funnel_builder_move_down">Move down</string>
+    <string name="retention_data_source_v2">Install-based cohorts (v2)</string>
+    <string name="retention_data_source_legacy">Legacy cohort data</string>
+    <string name="team_new_organization">Create a separate customer organization (administrator)</string>
+    <string name="team_recover_account">Create password recovery link</string>
 </resources>

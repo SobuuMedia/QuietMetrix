@@ -1,6 +1,10 @@
 package com.quietmetrix.dashboard.ui.screens
 
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.runComposeUiTest
 import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.Totals
 import com.quietmetrix.dashboard.nav.WindowSizeClass
@@ -19,8 +23,22 @@ class OverviewUnavailableTest {
                 VitalsSection(AggregatesResponse(totals = Totals(events = 100)), null, null, false, WindowSizeClass.Expanded)
             }
         }
-        onAllNodesWithText("—").assertCountEquals(3)
+        onAllNodesWithText("—").assertCountEquals(4)
         onNodeWithText("100").assertDoesNotExist()
         onNodeWithText("0s").assertDoesNotExist()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun suppressedPeopleExplainsThePrivacyThreshold() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                VitalsSection(
+                    AggregatesResponse(peopleState = "suppressed"),
+                    null, null, false, WindowSizeClass.Expanded,
+                )
+            }
+        }
+        onNodeWithText("Hidden because fewer than five installations contributed to this group.").assertExists()
     }
 }

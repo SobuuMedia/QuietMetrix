@@ -26,20 +26,13 @@ import kotlin.test.Test
 
 /**
  * Screenshot-golden coverage for Task 19's Overview vitals grid (`OverviewScreen.kt`'s
- * `VitalsSection`): 4 `KpiCard`s (Sessions, Time per visit, Came back next day, Errors) + the
+ * `VitalsSection`): 4 `KpiCard`s (People, Time per visit, Came back next day, Crashes) + the
  * optional lavender filter chip, derived per `goldens/README.md`'s "How a task derives its own
  * golden" process.
  *
- * Real-crop derivation checked and REJECTED for all 4 states: the vitals row sits below the hero
- * in every `_source/0{1,2,3,4}-overview-*.png` frame, and the hero itself already wraps past each
- * frame's 540px-tall fold before the vitals row would begin (confirmed by direct pixel inspection
- * — `02-overview-loading.png` shows two bare skeleton rectangles at y≈343-442 with zero label/
- * value/pill content, cut off again by the mockup toolbar before a 3rd or 4th card could appear).
- * This matches `KpiCardScreenshotTest`'s identical finding for the restyled `KpiCard` itself. Every
- * golden here is therefore token/prototype/README-derived (design_handoff_dashboard_redesign/
- * README.md > Overview: "4 vital cards ... People, Time per visit, Came back next day, Crashes"),
- * built from the real composable, not pixel-copied from a JPEG — same standing fallback as
- * `KpiCardScreenshotTest`'s and Task 9's `pill/variants.png`.
+ * The dated handoff screenshots show these cards, but include dashboard chrome and a prototype
+ * state bar over part of the row. These focused renders are implementation regression baselines;
+ * full-screen parity is checked separately against the full-resolution handoff references.
  *
  * Normal and Errors share one golden (`vitals/grid-normal.png`): `VitalsSection` has no
  * server-reachability awareness of its own (same as the pre-existing legacy KPI rows it
@@ -55,7 +48,7 @@ class OverviewVitalsScreenshotTest {
 
     private val sizeClass = WindowSizeClass.Expanded
 
-    private val loadedAgg = AggregatesResponse(totals = Totals(events = 8734, errors = 12))
+    private val loadedAgg = AggregatesResponse(people = 1284, totals = Totals(events = 8734, errors = 12))
     private val loadedSess = SessionsResponse(
         totalSessions = 1284,
         avgDurationSec = 185,

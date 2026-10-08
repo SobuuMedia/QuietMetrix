@@ -3,7 +3,10 @@ package com.quietmetrix.server.routes
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.domain.AddMemberRequest
 import com.quietmetrix.server.domain.CreateProjectRequest
+import com.quietmetrix.server.domain.CreatedProjectResponse
+import com.quietmetrix.server.domain.DeletedProjectResponse
 import com.quietmetrix.server.domain.ErrorResponse
+import com.quietmetrix.server.domain.ProjectCreateReplayResponse
 import com.quietmetrix.server.domain.ProjectListResponse
 import com.quietmetrix.server.domain.ProjectMemberListResponse
 import com.quietmetrix.server.domain.ProjectMemberResponse
@@ -19,7 +22,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
 import io.ktor.server.routing.delete
@@ -29,6 +31,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
+import com.quietmetrix.server.util.receiveBounded as receive
 
 fun Routing.configureProjectRoutes() {
     val projectRepo by inject<ProjectRepository>()
@@ -61,22 +64,10 @@ fun Routing.configureProjectRoutes() {
             }
             val userId = principal.userId
 
-            if (quotaEnforcer != null) {
-                val user = userRepo.findById(userId)
-                val planId = user?.get("planId") as? String
-                val projectCount = projectRepo.countByOwnerId(userId)
-                if (!quotaEnforcer.checkProjectLimit(planId, projectCount)) {
-                    call.respond(
-                        HttpStatusCode.Forbidden,
-                        ErrorResponse("project_limit_reached", "You have reached the maximum number of projects allowed for your plan.")
-                    )
-                    return@post
-                }
-            }
-
             val request = try {
                 call.receive<CreateProjectRequest>()
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                 call.respond(
                     HttpStatusCode.BadRequest,
                     ErrorResponse("invalid_json", "Request body is not valid JSON")
@@ -92,6 +83,14 @@ fun Routing.configureProjectRoutes() {
                 return@post
             }
 
+            val allowedIcons = setOf("book", "shopping", "music", "fitness", "travel", "other")
+            val allowedPlatforms = setOf("android", "ios", "web", "desktop")
+            if (request.iconKey !in allowedIcons || request.declaredPlatforms.size > 4 ||
+                request.declaredPlatforms.any { it !in allowedPlatforms } || request.declaredPlatforms.distinct().size != request.declaredPlatforms.size) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("schema_violation", "Invalid project icon or declared platform list"))
+                return@post
+            }
+
             // A retried request (e.g. an agent that never saw the first response) must not
             // mint a second project/key. The plaintext key is never stored, so a replay
             // cannot re-show it — it returns the earlier project's public info instead.
@@ -99,22 +98,31 @@ fun Routing.configureProjectRoutes() {
             if (idempotencyKey != null) {
                 val existing = projectRepo.findByOwnerAndIdempotencyKey(userId, idempotencyKey)
                 if (existing != null) {
-                    call.respond(HttpStatusCode.OK, mapOf(
-                        "id" to "proj_${existing["id"]}",
-                        "name" to existing["name"],
-                        "api_key_last4" to existing["apiKeyLast4"],
-                        "message" to "A project already exists for this Idempotency-Key. Its API key was shown once, at creation, and cannot be retrieved again — use POST /projects/{id}/regenerate-key for a new one."
+                    call.respond(HttpStatusCode.OK, ProjectCreateReplayResponse(
+                        id = "proj_${existing["id"]}",
+                        name = existing["name"] as String,
+                        apiKeyLast4 = existing["apiKeyLast4"] as? String,
+                        message = "A project already exists for this Idempotency-Key. Its API key was shown once, at creation, and cannot be retrieved again — use POST /projects/{id}/regenerate-key for a new one.",
                     ))
                     return@post
                 }
             }
 
-            val apiKey = projectRepo.create(request.name, request.description, userId, idempotencyKey)
+            val apiKey = projectRepo.create(request.name, request.description, userId, idempotencyKey, request.iconKey, request.declaredPlatforms, projectLimit = if (config.isCloud) com.quietmetrix.server.ratelimit.hostedProjectLimit(userRepo.findById(userId)?.get("planId") as? String) else null)
+            val projectId = projectRepo.validateApiKey(apiKey) ?: run {
+                call.respond(HttpStatusCode.InternalServerError, ErrorResponse("create_failed", "Project was created but could not be reloaded"))
+                return@post
+            }
 
-            call.respond(HttpStatusCode.Created, mapOf(
-                "api_key" to apiKey,
-                "api_key_last4" to apiKey.takeLast(4),
-                "message" to "Project created. Store this key securely — it will not be shown again."
+            call.respond(HttpStatusCode.Created, CreatedProjectResponse(
+                id = "proj_$projectId",
+                name = request.name,
+                description = request.description,
+                apiKey = apiKey,
+                apiKeyLast4 = apiKey.takeLast(4),
+                iconKey = request.iconKey,
+                declaredPlatforms = request.declaredPlatforms,
+                message = "Project created. Store this key securely — it will not be shown again.",
             ))
         }
 
@@ -138,17 +146,23 @@ fun Routing.configureProjectRoutes() {
             val offset = call.parameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
             val ownerOnly = call.parameters["owner_only"]?.toBoolean() ?: false
             val isAdmin = principal.isAdmin()
+            val actor = userRepo.findById(userId)!!
+            val tenantAdmin = isAdmin && config.isCloud && actor["platformOperator"] != true
 
             val projects = when {
+                tenantAdmin -> projectRepo.findByTenant(actor["tenantId"].toString(), limit, offset)
                 isAdmin -> projectRepo.findAll(limit, offset)
                 ownerOnly -> projectRepo.findByOwnerId(userId, limit, offset)
                 else -> projectRepo.findAccessibleByUserId(userId, limit, offset)
             }
             val total = when {
+                tenantAdmin -> projectRepo.countTenant(actor["tenantId"].toString())
                 isAdmin -> projectRepo.countAll()
                 ownerOnly -> projectRepo.countByOwnerId(userId)
                 else -> projectRepo.countAccessibleByUserId(userId)
             }
+            val projectIds = projects.mapNotNull { (it["id"] as? Number)?.toLong() }
+            val summaries = projectRepo.activitySummaries(projectIds)
 
             call.respond(ProjectListResponse(
                 projects = projects.map {
@@ -161,6 +175,14 @@ fun Routing.configureProjectRoutes() {
                         planId = it["planId"] as? String,
                         createdAt = it["createdAt"].toString(),
                         ownerUserId = it["ownerUserId"]?.toString(),
+                        lastReceivedAt = summaries[(it["id"] as Number).toLong()]?.lastReceivedAt,
+                        platforms = summaries[(it["id"] as Number).toLong()]?.platforms.orEmpty(),
+                        sdkVersions = summaries[(it["id"] as Number).toLong()]?.sdkVersions.orEmpty(),
+                        activityStatus = summaries[(it["id"] as Number).toLong()]?.status ?: "waiting_for_first_data",
+                        iconKey = it["iconKey"] as? String ?: "book",
+                        declaredPlatforms = runCatching {
+                            kotlinx.serialization.json.Json.decodeFromString<List<String>>(it["declaredPlatforms"] as? String ?: "[]")
+                        }.getOrDefault(emptyList()),
                     )
                 },
                 total = total.toInt(),
@@ -273,7 +295,8 @@ fun Routing.configureProjectRoutes() {
 
                 val request = try {
                     call.receive<UpdateProjectRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(
                         HttpStatusCode.BadRequest,
                         ErrorResponse("invalid_json", "Request body is not valid JSON")
@@ -281,19 +304,19 @@ fun Routing.configureProjectRoutes() {
                     return@patch
                 }
 
-                if (request.name.isBlank()) {
+                if (request.name.isBlank() || request.name.trim().length > 255) {
                     call.respond(
                         HttpStatusCode.BadRequest,
-                        ErrorResponse("schema_violation", "Field 'name' is required and must be a non-empty string")
+                        ErrorResponse("schema_violation", "Field 'name' is required and must be 1–255 characters")
                     )
                     return@patch
                 }
 
-                projectRepo.updateName(id, request.name)
+                projectRepo.updateName(id, request.name.trim())
 
                 call.respond(ProjectResponse(
                     id = "proj_${project["id"]}",
-                    name = request.name,
+                    name = request.name.trim(),
                     description = project["description"] as? String,
                     apiKey = "***",
                     apiKeyLast4 = project["apiKeyLast4"] as? String,
@@ -327,10 +350,7 @@ fun Routing.configureProjectRoutes() {
 
                 projectRepo.softDelete(id)
 
-                call.respond(mapOf(
-                    "deleted" to true,
-                    "project_id" to "proj_$id"
-                ))
+                call.respond(DeletedProjectResponse(deleted = true, projectId = "proj_$id"))
             }
         }
 
@@ -361,7 +381,8 @@ fun Routing.configureProjectRoutes() {
 
                     val request = try {
                         call.receive<AddMemberRequest>()
-                    } catch (_: Exception) {
+                    } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                         call.respond(
                             HttpStatusCode.BadRequest,
                             ErrorResponse("invalid_json", "Request body is not valid JSON")
@@ -393,6 +414,10 @@ fun Routing.configureProjectRoutes() {
                         return@post
                     }
 
+                    if (config.isCloud && !userRepo.sameTenant(userId.toLong(), memberUserId)) {
+                        call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "User not found in this organization"))
+                        return@post
+                    }
                     val existingMembership = memberRepo.findMembership(projectId, memberUserId)
                     if (existingMembership != null) {
                         call.respond(
@@ -409,7 +434,8 @@ fun Routing.configureProjectRoutes() {
                         projectId = "proj_$projectId",
                         userId = memberUserId.toString(),
                         email = memberUser["email"] as String,
-                        role = request.role,
+                        userRole = memberUser["role"] as String,
+                        memberRole = request.role,
                         createdAt = java.time.LocalDateTime.now().toString(),
                     ))
                 }
@@ -449,7 +475,8 @@ fun Routing.configureProjectRoutes() {
                             projectId = "proj_$projectId",
                             userId = memberUserId.toString(),
                             email = memberUserRow?.get("email") as? String ?: "unknown",
-                            role = member["role"] as String,
+                            userRole = memberUserRow?.get("role") as? String ?: "reviewer",
+                            memberRole = member["role"] as String,
                             createdAt = member["createdAt"].toString(),
                         )
                     }

@@ -41,7 +41,70 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - name: Run SDK unit tests
-        run: ./gradlew :quietmetrix-sdk:iosSimulatorArm64Test
+        run: ./gradlew :quietmetrix-sdk:jvmTest :quietmetrix-sdk:jsNodeTest :quietmetrix-sdk:iosSimulatorArm64Test :quietmetrix-sdk:macosArm64Test :dashboard:jvmTest :quietmetrix-cli:jsNodeTest :quietmetrix-mcp:jsNodeTest :quietmetrix-sdk-compose:compileKotlinJvm
+
+      - name: Build and verify public SDK artifacts
+        run: |
+          python3 tools/release/prepare-sdk.py --local
+          ./gradlew :quietmetrix-sdk:assembleQuietMetrixXCFramework :quietmetrix-sdk:prepareNpmPackage
+          ./gradlew -p tools/release-consumers/jvm compileKotlin
+          ./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution
+          swiftc -typecheck -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -target "$(uname -m)-apple-ios17.0-simulator" -F quietmetrix-sdk/build/XCFrameworks/release/QuietMetrix.xcframework/ios-arm64_x86_64-simulator -framework QuietMetrix samples/ios/QuietMetrixSample/App.swift samples/ios/QuietMetrixSample/ContentView.swift samples/ios/QuietMetrixSample/ExperimentElement.swift
+      - name: Verify production browser SDK privacy
+        run: |
+          npm install --prefix "$RUNNER_TEMP/qm-browser" playwright@1.60.0
+          "$RUNNER_TEMP/qm-browser/node_modules/.bin/playwright" install chromium
+          QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" node tools/e2e/browser-sdk-proof.cjs
+          QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" node tools/e2e/wasm-consumer-proof.cjs
+
+  native-storage:
+    name: Native SDK storage (${{ matrix.os }})
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            task: linuxX64Test
+          - os: windows-latest
+            task: mingwX64Test
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-37'
+      - name: Install Linux native transport
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Verify native SDK on its supported host
+        shell: bash
+        run: ./gradlew :quietmetrix-sdk:${{ matrix.task }}
+
+  android-consumer:
+    name: Android published consumer and process restart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Install compile SDK and publish local consumer artifacts
+        run: |
+          sdkmanager "platforms;android-37"
+          ./gradlew :quietmetrix-sdk:publishAndroidPublicationToMavenLocal :quietmetrix-sdk:publishKotlinMultiplatformPublicationToMavenLocal
+          ./gradlew -p tools/release-consumers/android assembleDebug
+      - name: Verify consent and visit lifecycle on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          disable-animations: true
+          script: QM_ANDROID_DEVICE=emulator-5554 python3 tools/release-consumers/android/verify-restart.py
 
   ktor-tests:
     name: Ktor Server Tests
@@ -67,9 +130,32 @@ jobs:
       - name: Run Ktor server tests
         run: ./gradlew :servers:ktor:test
 
+      - name: Rehearse production TLS, database outage and backup restore
+        run: |
+          docker build -t quietmetrix-release-proof -f servers/ktor/Dockerfile .
+          QM_PROOF_IMAGE=quietmetrix-release-proof python3 tools/e2e/production-deployment-proof.py
+
   php-tests:
     name: PHP Server Tests
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-fixture-password
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pci-fixture-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      BOOTSTRAP_TEST_HOST: 127.0.0.1
+      BOOTSTRAP_TEST_NAME: qm_bootstrap_test
+      BOOTSTRAP_TEST_USER: root
+      BOOTSTRAP_TEST_PASS: ci-fixture-password
+      QM_V2_MYSQL_HOST: 127.0.0.1
+      QM_V2_MYSQL_DB: qm_counter_test
+      QM_V2_MYSQL_USER: root
+      QM_V2_MYSQL_PASS: ci-fixture-password
     defaults:
       run:
         working-directory: php-hosting
@@ -80,18 +166,36 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.2"
-          extensions: pdo
+          extensions: pdo, pdo_mysql, pdo_sqlite, apcu
           coverage: none
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
 
       - name: Validate PHP syntax
         run: |
-          php -l index.php
-          php -l src/*.php
-          php -l src/routes/*.php
+          find . -name '*.php' ! -name config.php -print0 | xargs -0 -n 1 php -l
 
-      - name: Run smoke test
+      - name: Create disposable integration databases
         run: |
-          cp config.example.php config.php
-          php -S localhost:8081 &
-          sleep 2
-          curl -sSf http://localhost:8081/api/v1/health || exit 1
+          php -r '$db=new PDO("mysql:host=127.0.0.1", "root", "ci-fixture-password"); foreach (["qm_bootstrap_test", "qm_counter_test"] as $name) $db->exec("CREATE DATABASE " . $name);'
+      - name: Run PHP regression scripts
+        run: |
+          set -euo pipefail
+          for test in tests/*Test.php; do php "$test"; done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Prepare production browser SDK and contract tools
+        run: |
+          ../gradlew :quietmetrix-sdk:jsBrowserProductionLibraryDistribution
+          npm install --prefix "$RUNNER_TEMP/qm-browser" playwright@1.60.0 newman@6.2.1
+          "$RUNNER_TEMP/qm-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify PHP HTTP tenant and session isolation
+        env:
+          QM_SMOKE_DB_PORT: "3306"
+          QM_SMOKE_DB_PASSWORD: ci-fixture-password
+        run: QM_SMOKE_BROWSER_PROOF=1 QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" QM_NEWMAN_BIN="$RUNNER_TEMP/qm-browser/node_modules/.bin/newman" python3 ../tools/e2e/php-release-smoke.py

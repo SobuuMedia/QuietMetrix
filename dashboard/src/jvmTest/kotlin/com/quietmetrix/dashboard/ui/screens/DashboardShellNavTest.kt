@@ -97,6 +97,13 @@ class DashboardShellNavTest {
     }
 
     @Test
+    fun rangeMenuOmitsUnsupportedLastHourChoice() = renderShellAt(widthDp = 1200) { _ ->
+        onNodeWithText("Last 7 days").performClick()
+        onNodeWithText("Today").assertExists()
+        onAllNodesWithText("Last hour").assertCountEquals(0)
+    }
+
+    @Test
     fun allEightDestinationsAreReachableAndClickableAtMinimumSupportedWidth() {
         // 320dp is this project's established "tiny width is still Compact" floor
         // (nav/Breakpoint.kt's BreakpointTest.tinyWidthIsCompact asserts
@@ -106,11 +113,8 @@ class DashboardShellNavTest {
         // so every destination (admin role, so all 8 -- including the
         // admin-only "Users" entry -- are visible) must still render as a
         // present, clickable pill once it wraps onto its own line(s).
-        // Matched as "<emoji> <label>" (how NavPillItem renders its text) rather
-        // than the emoji alone: the Projects destination's emoji ("📦") also
-        // appears, alone, in the unrelated ProjectDropdown trigger text ("📦 No
-        // projects ▾"), which is itself clickable -- disambiguating on the full
-        // "emoji label" pair avoids that false match.
+        // Navigation now renders vector icons alongside localized labels.
+        // Matching label text and click semantics still proves each destination is reachable.
         val labelsByDestination = mapOf(
             NavDestination.Overview to "Overview",
             NavDestination.Flow to "Flow",
@@ -118,13 +122,13 @@ class DashboardShellNavTest {
             NavDestination.Projects to "Projects",
             NavDestination.Funnels to "Funnels",
             NavDestination.Experiments to "Experiments",
-            NavDestination.Users to "Users",
+            NavDestination.Users to "Team",
             NavDestination.Settings to "Settings",
         )
         val adminState = DashboardState(user = ApiUser(id = "1", email = "admin@x.c", role = UserRole.ADMIN))
         renderShellAt(widthDp = 320, state = adminState) { _ ->
             NavDestination.entries.forEach { destination ->
-                val pillText = "${destination.emoji} ${labelsByDestination.getValue(destination)}"
+                val pillText = labelsByDestination.getValue(destination)
                 onAllNodesWithText(pillText, substring = true)
                     .filter(hasClickAction())
                     .assertCountEquals(1)

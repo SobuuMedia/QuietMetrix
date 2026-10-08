@@ -19,13 +19,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -35,6 +34,7 @@ import com.quietmetrix.dashboard.resources.ic_close
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Maximum width of a [DrawerShell] panel, matching the HTML prototype's
@@ -130,7 +130,8 @@ fun DrawerShell(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = onDismiss,
-                    ),
+                    )
+                    .handCursor(),
             )
 
             Surface(

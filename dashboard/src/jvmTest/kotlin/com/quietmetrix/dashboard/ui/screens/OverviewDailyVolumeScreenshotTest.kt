@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -18,6 +19,7 @@ import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.DailyPoint
 import com.quietmetrix.dashboard.api.SessionsResponse
 import com.quietmetrix.dashboard.api.TimeRange
+import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.testutil.assertMatchesGolden
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
 import com.quietmetrix.dashboard.theme.ThemeMode
@@ -52,6 +54,12 @@ class OverviewDailyVolumeScreenshotTest {
             DailyPoint(day = "2026-09-22", total = 310),
             DailyPoint(day = "2026-09-23", total = 140),
         ),
+        dailyPeople = listOf(
+            DailyPoint(day = "2026-09-20", total = 22),
+            DailyPoint(day = "2026-09-21", total = 25),
+            DailyPoint(day = "2026-09-22", total = 37),
+            DailyPoint(day = "2026-09-23", total = 31),
+        ),
     )
     private val sessWithRecordDay = SessionsResponse(
         totalSessions = 1284,
@@ -63,9 +71,46 @@ class OverviewDailyVolumeScreenshotTest {
         ),
     )
 
+    @Test
+    fun peopleVisitsActionsTabsStayVisibleOnPhoneAndTablet() = runComposeUiTest {
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
+                    DailyVolumeSection(
+                        agg = aggWithRecordDay.copy(dailyPeople = aggWithRecordDay.daily),
+                        sess = sessWithRecordDay,
+                        range = TimeRange.Day7,
+                        sizeClass = WindowSizeClass.Compact,
+                        modifier = Modifier.width(328.dp),
+                    )
+                }
+            }
+        }
+        listOf("Who showed up each day", "People", "Visits", "Actions").forEach { onNodeWithText(it).assertIsDisplayed() }
+        val phoneRight = onNodeWithText("Actions").fetchSemanticsNode().boundsInRoot.right
+        assert(phoneRight <= 360f) { "Phone chart tab extends past its 360dp viewport: $phoneRight" }
+
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
+                    DailyVolumeSection(
+                        agg = aggWithRecordDay.copy(dailyPeople = aggWithRecordDay.daily),
+                        sess = sessWithRecordDay,
+                        range = TimeRange.Day7,
+                        sizeClass = WindowSizeClass.Medium,
+                        modifier = Modifier.width(736.dp),
+                    )
+                }
+            }
+        }
+        listOf("People", "Visits", "Actions").forEach { onNodeWithText(it).assertIsDisplayed() }
+        val tabletRight = onNodeWithText("Actions").fetchSemanticsNode().boundsInRoot.right
+        assert(tabletRight <= 768f) { "Tablet chart tab extends past its 768dp viewport: $tabletRight" }
+    }
+
     @Suppress("DEPRECATION")
     @Test
-    fun normalActionsStateMatchesGolden() = runComposeUiTest {
+    fun defaultPeopleStateMatchesGolden() = runComposeUiTest {
         setContent {
             QuietMetrixTheme(ThemeMode.Dark) {
                 Box(
@@ -81,11 +126,11 @@ class OverviewDailyVolumeScreenshotTest {
             }
         }
         waitForIdle()
-        onRoot().captureToImage().assertMatchesGolden("overview/daily-volume/chart-normal-actions.png")
+        onRoot().captureToImage().assertMatchesGolden("overview/daily-volume/chart-people.png")
     }
 
-    // Starts on the default "Actions" selection (see normalActionsStateMatchesGolden) and clicks
-    // the "Visits" segment, exercising both the segmented control's interaction and the Visits
+    // Starts on the default "People" selection and clicks the "Visits" segment, exercising both
+    // the segmented control's interaction and the Visits
     // data path (SessionsResponse.dailySessions) in one golden.
     @Suppress("DEPRECATION")
     @Test
@@ -145,6 +190,11 @@ class OverviewDailyVolumeScreenshotTest {
                     DailyVolumeSection(
                         agg = AggregatesResponse(
                             daily = listOf(
+                                DailyPoint(day = "2026-09-20", total = 100),
+                                DailyPoint(day = "2026-09-21", total = 100),
+                                DailyPoint(day = "2026-09-22", total = 100),
+                            ),
+                            dailyPeople = listOf(
                                 DailyPoint(day = "2026-09-20", total = 100),
                                 DailyPoint(day = "2026-09-21", total = 100),
                                 DailyPoint(day = "2026-09-22", total = 100),

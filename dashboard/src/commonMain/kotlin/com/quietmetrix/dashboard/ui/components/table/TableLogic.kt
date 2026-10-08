@@ -9,8 +9,11 @@ package com.quietmetrix.dashboard.ui.components.table
  * Label for an optional screen name. Treats null AND blank/empty as "absent" so a stray empty
  * string from the backend renders as [placeholder] (e.g. "—") instead of a mysteriously blank cell.
  */
-fun screenLabel(name: String?, placeholder: String): String =
-    name?.takeIf { it.isNotBlank() } ?: placeholder
+fun screenLabel(name: String?, placeholder: String): String = name?.takeIf { it.isNotBlank() }
+    ?.replace('_', ' ')
+    ?.replace('-', ' ')
+    ?.replaceFirstChar { it.uppercase() }
+    ?: placeholder
 
 /** Nulls-last comparison for an optional Comparable selector value. */
 fun <T : Comparable<T>> compareNullsLast(ascending: Boolean): Comparator<T?> =

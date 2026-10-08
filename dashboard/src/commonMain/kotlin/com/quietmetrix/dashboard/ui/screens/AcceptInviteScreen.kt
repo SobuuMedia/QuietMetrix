@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,9 +36,12 @@ import com.quietmetrix.dashboard.resources.invite_password_mismatch
 import com.quietmetrix.dashboard.resources.invite_password_too_short
 import com.quietmetrix.dashboard.resources.invite_set_password
 import com.quietmetrix.dashboard.resources.invite_submit
+import com.quietmetrix.dashboard.ui.components.DashboardCard
 import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Dedicated "accept invitation" page. Opened when the dashboard is loaded with a
@@ -64,7 +65,7 @@ fun AcceptInviteScreen(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Card(modifier = Modifier.widthIn(min = 280.dp, max = 380.dp)) {
+        DashboardCard(modifier = Modifier.widthIn(min = 280.dp, max = 380.dp)) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -79,7 +80,7 @@ fun AcceptInviteScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         TextButton(onClick = onBackToLogin, modifier = Modifier.handCursor()) {
-                            Text(stringResource(Res.string.invite_back_to_login))
+                            MaterialText(stringResource(Res.string.invite_back_to_login))
                         }
                     }
 
@@ -153,11 +154,11 @@ fun AcceptInviteScreen(
                             if (state.inviteSubmitting) {
                                 CircularProgressIndicator(modifier = Modifier.height(16.dp), strokeWidth = 2.dp)
                             } else {
-                                Text(stringResource(Res.string.invite_submit))
+                                MaterialText(stringResource(Res.string.invite_submit))
                             }
                         }
                         TextButton(onClick = onBackToLogin, modifier = Modifier.fillMaxWidth().handCursor()) {
-                            Text(stringResource(Res.string.invite_back_to_login))
+                            MaterialText(stringResource(Res.string.invite_back_to_login))
                         }
                     }
                 }

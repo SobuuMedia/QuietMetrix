@@ -4,12 +4,16 @@ import io.ktor.server.config.ApplicationConfig
 
 data class AppConfig(
     val profile: Profile,
+    val ai: com.quietmetrix.server.ai.AiConfig = com.quietmetrix.server.ai.AiConfig.fromEnvironment(),
     val db: DbConfig,
     val auth: AuthConfig,
     val rateLimit: RateLimitConfig,
     val ipRateLimit: IpRateLimitConfig = IpRateLimitConfig(),
     val cors: CorsConfig = CorsConfig(),
     val trustedProxies: Set<String> = emptySet(),
+    val publicOrigin: String? = null,
+    val retentionDays: Int? = null,
+    val counterRequestsPerDay: Int? = null,
     val counters: CountersConfig = CountersConfig(),
 ) {
     enum class Profile { SELFHOST, CLOUD }
@@ -53,7 +57,10 @@ data class AppConfig(
                 cors = CorsConfig(
                     allowedOrigins = parseOrigins(config.propertyOrNull("quietmetrix.cors.allowedOrigins")),
                 ),
-                trustedProxies = config.propertyOrNull("quietmetrix.security.trustedProxies")?.getList()?.toSet() ?: emptySet(),
+                trustedProxies = config.propertyOrNull("quietmetrix.security.trustedProxies")?.getString()?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet(),
+                publicOrigin = config.propertyOrNull("quietmetrix.publicOrigin")?.getString()?.trimEnd('/')?.takeIf { it.isNotBlank() },
+                counterRequestsPerDay = config.propertyOrNull("quietmetrix.counterRequestsPerDay")?.getString()?.takeIf { it.isNotBlank() }?.toInt(),
+                retentionDays = config.propertyOrNull("quietmetrix.retentionDays")?.getString()?.takeIf { it.isNotBlank() }?.toInt(),
                 counters = CountersConfig(
                     kThreshold = config.propertyOrNull("quietmetrix.counters.kThreshold")?.getString()?.toInt() ?: 5,
                     maxDistinctCellsPerMetric = config.propertyOrNull("quietmetrix.counters.maxDistinctCellsPerMetric")?.getString()?.toInt() ?: 500,
@@ -67,6 +74,16 @@ data class AppConfig(
             }
             require(appConfig.cors.allowedOrigins.isNotEmpty()) {
                 "QM_CORS_ALLOWED_ORIGINS must be set. Provide a comma-separated list of allowed origins."
+            }
+            require(appConfig.retentionDays == null || appConfig.retentionDays >= 0) { "QM_RETENTION_DAYS must be nonnegative" }
+            if (appConfig.isCloud) {
+                require((appConfig.counterRequestsPerDay ?: 10_000) > 0 && appConfig.retentionDays != 0) { "Hosted ingestion quota and retention cannot be unlimited" }
+                require(appConfig.auth.jwtSecret.length >= 32) { "Hosted JWT secret must contain at least 32 characters" }
+                val origin = appConfig.publicOrigin?.let { runCatching { java.net.URI(it) }.getOrNull() }
+                require(origin?.scheme == "https" && origin.host != null && origin.userInfo == null && origin.rawQuery == null && origin.fragment == null && origin.path.orEmpty().isEmpty()) {
+                    "Hosted deployments require QM_PUBLIC_ORIGIN as an HTTPS origin"
+                }
+                require(appConfig.rateLimit.enabled && appConfig.ipRateLimit.enabled) { "Hosted rate limits must be enabled" }
             }
             return appConfig
         }

@@ -169,7 +169,7 @@ class KeyCardScreenshotTest {
             }
         }
         waitForIdle()
-        onNodeWithText("Manage key →").performClick()
+        onNodeWithText("Manage key").performClick()
         waitForIdle()
         assertTrue(clicked)
     }

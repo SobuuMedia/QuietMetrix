@@ -75,7 +75,7 @@ class RetentionReporterTest {
     }
 
     @Test
-    fun `a day that overshoots the day-1 mark still reports it (at-least, not exactly)`() = runTest {
+    fun `a day that overshoots the day-1 mark still reports it at-least and not exactly`() = runTest {
         val cfg = config("rr3_")
         RetentionReporter.reportIfDue(cfg, now = t0)
         pending() // drain the day-0 signal
@@ -110,7 +110,7 @@ class RetentionReporterTest {
     }
 
     @Test
-    fun `the cohort label reflects the first-launch week, not the reporting day's week`() = runTest {
+    fun `the cohort label reflects the first-launch week and not the reporting day's week`() = runTest {
         val cfg = config("rr6_")
         RetentionReporter.reportIfDue(cfg, now = t0) // first launch: 2026-09-04, week 36
         pending()

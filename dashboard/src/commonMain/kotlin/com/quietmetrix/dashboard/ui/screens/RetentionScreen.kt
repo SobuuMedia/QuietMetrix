@@ -3,14 +3,15 @@ package com.quietmetrix.dashboard.ui.screens
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,14 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import com.quietmetrix.dashboard.viewmodel.isLoading
-import com.quietmetrix.dashboard.viewmodel.DataSection
-import com.quietmetrix.dashboard.ui.components.SectionLoading
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,8 +50,8 @@ import com.quietmetrix.dashboard.format.formatPercent
 import com.quietmetrix.dashboard.format.formatWilsonRange
 import com.quietmetrix.dashboard.format.wilsonInterval
 import com.quietmetrix.dashboard.nav.WindowSizeClass
-import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.ask_retention_why_question
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_a
 import com.quietmetrix.dashboard.resources.cohort_heatmap_checkbox_b
 import com.quietmetrix.dashboard.resources.col_activation
@@ -68,7 +62,6 @@ import com.quietmetrix.dashboard.resources.col_day14
 import com.quietmetrix.dashboard.resources.col_day3
 import com.quietmetrix.dashboard.resources.col_day30
 import com.quietmetrix.dashboard.resources.col_day7
-import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.resources.ic_retention
 import com.quietmetrix.dashboard.resources.nav_retention
 import com.quietmetrix.dashboard.resources.retention_card_caption_day1
@@ -82,17 +75,16 @@ import com.quietmetrix.dashboard.resources.retention_comparison_chip_a
 import com.quietmetrix.dashboard.resources.retention_comparison_chip_b
 import com.quietmetrix.dashboard.resources.retention_comparison_column_unknown
 import com.quietmetrix.dashboard.resources.retention_comparison_column_values
-import com.quietmetrix.dashboard.resources.retention_comparison_eyebrow_emoji
 import com.quietmetrix.dashboard.resources.retention_comparison_heading
 import com.quietmetrix.dashboard.resources.retention_comparison_higher
 import com.quietmetrix.dashboard.resources.retention_comparison_lower
 import com.quietmetrix.dashboard.resources.retention_comparison_not_enough_data
 import com.quietmetrix.dashboard.resources.retention_comparison_same
 import com.quietmetrix.dashboard.resources.retention_comparison_vs
+import com.quietmetrix.dashboard.resources.retention_data_source_legacy
+import com.quietmetrix.dashboard.resources.retention_data_source_v2
 import com.quietmetrix.dashboard.resources.retention_dot_empty_content_description
 import com.quietmetrix.dashboard.resources.retention_dot_filled_content_description
-import com.quietmetrix.dashboard.resources.retention_dot_filled_emoji
-import com.quietmetrix.dashboard.resources.retention_eyebrow_emoji
 import com.quietmetrix.dashboard.resources.retention_h1_day1_highlight
 import com.quietmetrix.dashboard.resources.retention_h1_day1_only_tail
 import com.quietmetrix.dashboard.resources.retention_h1_day7_highlight
@@ -102,34 +94,38 @@ import com.quietmetrix.dashboard.resources.retention_h1_mid
 import com.quietmetrix.dashboard.resources.retention_h1_not_enough_data
 import com.quietmetrix.dashboard.resources.retention_h1_tail
 import com.quietmetrix.dashboard.resources.retention_insight_ask_why
-import com.quietmetrix.dashboard.resources.retention_insight_eyebrow_emoji
 import com.quietmetrix.dashboard.resources.retention_insight_not_enough_data
 import com.quietmetrix.dashboard.resources.retention_insight_scope_note
 import com.quietmetrix.dashboard.resources.state_no_retention
-import com.quietmetrix.dashboard.resources.tab_info_content_description
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.ui.components.CohortGrouping
 import com.quietmetrix.dashboard.ui.components.CohortHeatmap
 import com.quietmetrix.dashboard.ui.components.CohortHeatmapRow
+import com.quietmetrix.dashboard.ui.components.ComparisonNote
+import com.quietmetrix.dashboard.ui.components.DashboardCard
+import com.quietmetrix.dashboard.ui.components.EmojiVector
 import com.quietmetrix.dashboard.ui.components.EmptyState
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
+import com.quietmetrix.dashboard.ui.components.SectionLoading
 import com.quietmetrix.dashboard.ui.components.charts.BarChartCanvas
 import com.quietmetrix.dashboard.ui.components.charts.BarData
 import com.quietmetrix.dashboard.ui.components.handCursor
+import com.quietmetrix.dashboard.ui.components.responsiveDisplayStyle
 import com.quietmetrix.dashboard.ui.components.table.Column
 import com.quietmetrix.dashboard.ui.components.table.DataTable
 import com.quietmetrix.dashboard.ui.components.table.SortColumn
-import com.quietmetrix.dashboard.ui.components.ComparisonNote
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.viewmodel.isLoading
 import org.jetbrains.compose.resources.StringResource
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import com.quietmetrix.dashboard.nav.NavDestination as AppTab
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 // ---------------------------------------------------------------------------
 // Retention screen (Task 24: extracted from DashboardScreen.kt's old inline
@@ -149,29 +145,11 @@ import com.quietmetrix.dashboard.nav.NavDestination as AppTab
  */
 @Composable
 internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
+    MaxWidthContainer(sizeClass = sizeClass, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                IconButton(
-                    onClick = { viewModel.showTabInfo(AppTab.Retention) },
-                    modifier = Modifier.handCursor(),
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.tab_info_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
             state.sectionErrors[DataSection.Retention]?.let {
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
@@ -182,13 +160,18 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
             if (state.isLoading(DataSection.Retention) && cohorts.isEmpty()) {
                 SectionLoading()
             } else if (cohorts.isEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                DashboardCard(modifier = Modifier.fillMaxWidth()) {
                     EmptyState(Res.drawable.ic_retention, Res.string.state_no_retention, Modifier.padding(16.dp))
                 }
             } else {
                 val vitals = computeRetentionVitals(state.retention)
                 var comparisonRows by remember { mutableStateOf(emptyList<CohortHeatmapRow>()) }
                 RetentionHero(vitals)
+                Text(
+                    stringResource(if (state.retention?.source == "v2") Res.string.retention_data_source_v2 else Res.string.retention_data_source_legacy),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 RetentionVitalCardsRow(vitals, sizeClass, onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) },
                     compare = state.compare, previous = computeRetentionVitals(state.comparison.retention))
                 CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it }, onInspect = viewModel::openDrillDown,
@@ -197,7 +180,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 if (comparisonRows.size == 2) {
                 RetentionComparisonPanel(comparisonRows[0], comparisonRows[1])
                 }
-                Card(modifier = Modifier.fillMaxWidth()) {
+                DashboardCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         DataTable(
                             columns = listOf(
@@ -210,7 +193,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                                 Column<RetentionCohort>(
                                     title = stringResource(Res.string.col_cohort_size),
                                     weight = 0.6f,
-                                    cell = { c -> Text(formatCount(c.size.toLong()), style = MaterialTheme.typography.bodyMedium) },
+                                    cell = { c -> Text(if (c.sizeState == "suppressed") "—" else formatCount(c.size.toLong()), style = MaterialTheme.typography.bodyMedium) },
                                     sortSelector = { it.size },
                                 ),
                                 retentionDayColumn(stringResource(Res.string.col_day1)) { it.day1 },
@@ -301,11 +284,11 @@ internal fun RetentionHero(vitals: RetentionVitals, modifier: Modifier = Modifie
     val day7Highlight = vitals.day7?.let { stringResource(Res.string.retention_h1_day7_highlight, dotCountForFraction(it)) }
 
     Column(modifier = modifier) {
-        Text(
-            stringResource(Res.string.retention_eyebrow_emoji) + " " + stringResource(Res.string.nav_retention),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            EmojiVector("🔁", Modifier.size(20.dp))
+            Text(stringResource(Res.string.nav_retention), style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         val sentence = buildAnnotatedString {
             when (retentionHeadlineKind(vitals.day1, vitals.day7)) {
                 RetentionHeadlineKind.Both -> {
@@ -329,7 +312,9 @@ internal fun RetentionHero(vitals: RetentionVitals, modifier: Modifier = Modifie
                 RetentionHeadlineKind.NotEnoughData -> append(notEnoughData)
             }
         }
-        Text(sentence, style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onBackground)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            Text(sentence, style = responsiveDisplayStyle(maxWidth), color = MaterialTheme.colorScheme.onBackground)
+        }
     }
 }
 
@@ -466,7 +451,6 @@ private fun RetentionVitalCard(
 @Composable
 private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Modifier = Modifier) {
     val extended = LocalExtendedColors.current
-    val filledFace = stringResource(Res.string.retention_dot_filled_emoji)
     val filledCd = stringResource(Res.string.retention_dot_filled_content_description)
     val emptyCd = stringResource(Res.string.retention_dot_empty_content_description)
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -482,7 +466,7 @@ private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Mo
                     .semantics { contentDescription = if (isFilled) filledCd else emptyCd },
                 contentAlignment = Alignment.Center,
             ) {
-                if (isFilled) Text(filledFace, style = MaterialTheme.typography.bodySmall)
+                if (isFilled) EmojiVector("🙂", Modifier.size(14.dp))
             }
         }
     }
@@ -505,13 +489,11 @@ private fun RetentionDotGrid(filledCount: Int, totalDots: Int = 10, modifier: Mo
 internal fun RetentionComparisonPanel(rowA: CohortHeatmapRow, rowB: CohortHeatmapRow, modifier: Modifier = Modifier) {
     val takeaway = computeRetentionComparisonTakeaway(rowA, rowB)
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    DashboardCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    stringResource(Res.string.retention_comparison_eyebrow_emoji) + " " + stringResource(Res.string.retention_comparison_heading),
-                    style = MaterialTheme.typography.titleLarge,
-                )
+                EmojiVector("⚖️", Modifier.size(24.dp))
+                Text(stringResource(Res.string.retention_comparison_heading), style = MaterialTheme.typography.titleLarge)
                 Pill(text = stringResource(Res.string.retention_comparison_chip_a, rowA.label), variant = PillVariant.Lime)
                 Text(stringResource(Res.string.retention_comparison_vs), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Pill(text = stringResource(Res.string.retention_comparison_chip_b, rowB.label), variant = PillVariant.Lavender)
@@ -645,11 +627,12 @@ private fun RetentionComparisonColumnsRow(rowA: CohortHeatmapRow, rowB: CohortHe
  */
 @Composable
 internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, onAskWhy: () -> Unit = {}, modifier: Modifier = Modifier) {
+    val aiAvailable = com.quietmetrix.dashboard.ui.components.LocalAiAccess.current.available
     val extended = LocalExtendedColors.current
     val takeaway = computeRetentionClosingInsightTakeaway(cohorts)
     val sentence = retentionComparisonSentence(takeaway, stringResource(Res.string.retention_insight_not_enough_data))
 
-    Card(
+    DashboardCard(
         modifier = modifier.fillMaxWidth(),
         border = BorderStroke(1.dp, extended.hairline),
     ) {
@@ -658,7 +641,7 @@ internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, onAskWh
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(stringResource(Res.string.retention_insight_eyebrow_emoji), style = MaterialTheme.typography.headlineSmall)
+            EmojiVector("✨", Modifier.size(28.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(sentence, style = MaterialTheme.typography.bodyLarge)
                 Text(
@@ -667,10 +650,10 @@ internal fun RetentionClosingInsightCard(cohorts: List<RetentionCohort>, onAskWh
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Pill(
+            if (com.quietmetrix.dashboard.ui.components.LocalAiAccess.current.enabled) Pill(
                 text = stringResource(Res.string.retention_insight_ask_why),
                 variant = PillVariant.Neutral,
-                onClick = onAskWhy,
+                onClick = onAskWhy, enabled = aiAvailable,
             )
         }
     }

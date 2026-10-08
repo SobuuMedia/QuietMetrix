@@ -1,7 +1,5 @@
 package com.quietmetrix.dashboard.ui.screens
 
-import com.quietmetrix.dashboard.viewmodel.analyticsSections
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -11,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -22,8 +21,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,9 +36,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.ErrorKind
 import com.quietmetrix.dashboard.api.TimeRange
@@ -57,12 +60,19 @@ import com.quietmetrix.dashboard.api.UiError
 import com.quietmetrix.dashboard.nav.NavDestination
 import com.quietmetrix.dashboard.nav.WindowSizeClass
 import com.quietmetrix.dashboard.nav.classifyWindow
-import com.quietmetrix.dashboard.resources.*
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.action_got_it
 import com.quietmetrix.dashboard.resources.action_refresh
 import com.quietmetrix.dashboard.resources.action_signout
 import com.quietmetrix.dashboard.resources.action_try_again
+import com.quietmetrix.dashboard.resources.ai_allowance_reached
+import com.quietmetrix.dashboard.resources.analytics_period_label
+import com.quietmetrix.dashboard.resources.analytics_resolution_help
+import com.quietmetrix.dashboard.resources.analytics_resolution_title
 import com.quietmetrix.dashboard.resources.brand
+import com.quietmetrix.dashboard.resources.comparison_scope
+import com.quietmetrix.dashboard.resources.drill_question
+import com.quietmetrix.dashboard.resources.drill_scope
 import com.quietmetrix.dashboard.resources.header_ask_button
 import com.quietmetrix.dashboard.resources.header_avatar_cd
 import com.quietmetrix.dashboard.resources.header_progress_bar_cd
@@ -70,8 +80,18 @@ import com.quietmetrix.dashboard.resources.header_server_unreachable_message
 import com.quietmetrix.dashboard.resources.header_theme_toggle_cd
 import com.quietmetrix.dashboard.resources.header_toggle_compare
 import com.quietmetrix.dashboard.resources.header_toggle_expert
+import com.quietmetrix.dashboard.resources.ic_brand
+import com.quietmetrix.dashboard.resources.ic_calendar
+import com.quietmetrix.dashboard.resources.ic_chevron_down
+import com.quietmetrix.dashboard.resources.ic_compare
+import com.quietmetrix.dashboard.resources.ic_dark_mode
+import com.quietmetrix.dashboard.resources.ic_info
+import com.quietmetrix.dashboard.resources.ic_light_mode
 import com.quietmetrix.dashboard.resources.ic_refresh
 import com.quietmetrix.dashboard.resources.ic_signout
+import com.quietmetrix.dashboard.resources.ic_twemoji_1f4e6
+import com.quietmetrix.dashboard.resources.ic_twemoji_1f913
+import com.quietmetrix.dashboard.resources.ic_twemoji_2728
 import com.quietmetrix.dashboard.resources.nav_badge_new
 import com.quietmetrix.dashboard.resources.picker_no_projects
 import com.quietmetrix.dashboard.resources.picker_select_project
@@ -80,55 +100,25 @@ import com.quietmetrix.dashboard.theme.LocalThemeMode
 import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import com.quietmetrix.dashboard.theme.ThemeMode
-import com.quietmetrix.dashboard.ui.components.CopyErrorButton
+import com.quietmetrix.dashboard.theme.resolveSystemThemeMode
 import com.quietmetrix.dashboard.ui.components.AskDrawer
+import com.quietmetrix.dashboard.ui.components.CopyErrorButton
 import com.quietmetrix.dashboard.ui.components.DrillDownDrawer
 import com.quietmetrix.dashboard.ui.components.ErrorBanner
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.handCursor
-import com.quietmetrix.dashboard.viewmodel.selectDrillDown
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.analyticsSections
+import com.quietmetrix.dashboard.viewmodel.selectDrillDown
 import com.quietmetrix.dashboard.viewmodel.serverUnreachableError
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-
-/**
- * Lime-badged "shh" logo glyph (design_handoff_dashboard_redesign/README.md >
- * Header: emoji-badge logo, lime rounded square, shushing-face emoji). Kept
- * as a named constant — not inlined directly into the `Text(...)` call that
- * renders it — matching `NavDestination.emoji`'s convention of naming glyph
- * constants rather than embedding them as bare literals.
- */
-private const val LOGO_EMOJI = "🤫"
-
-/** Project-switcher dropdown glyph (no per-project emoji exists in [ApiProject], so this is a fixed stand-in matching the "📦 Projects" nav glyph). */
-private const val PROJECT_EMOJI = "📦"
-
-/** Date-range dropdown glyph (design_handoff_dashboard_redesign/README.md > Header: "🗓️ Last 7 days ▾"). */
-private const val DATE_EMOJI = "🗓️"
-
-/** Dropdown-trigger chevron glyph, shared by the project and date-range dropdowns. */
-private const val CHEVRON_DOWN = "▾"
-
-/** Compare-toggle glyph (design_handoff_dashboard_redesign/README.md > Header: "⇄ Compare toggle"). */
-private const val COMPARE_EMOJI = "⇄"
-
-/** Expert-toggle glyph (design_handoff_dashboard_redesign/README.md > Header: "🤓 Expert toggle"). */
-private const val EXPERT_EMOJI = "🤓"
-
-/** Light-theme glyph for the theme toggle (design_handoff_dashboard_redesign/README.md > Header: "☀️/🌙 theme toggle"). */
-private const val THEME_LIGHT_EMOJI = "☀️"
-
-/** Dark-theme glyph for the theme toggle. */
-private const val THEME_DARK_EMOJI = "🌙"
-
-/** Ask-the-data button glyph (design_handoff_dashboard_redesign/README.md > Header: "✨ Ask button (lavender, opens right-hand drawer)"). */
-private const val ASK_EMOJI = "✨"
-
-/** Server-unreachable banner glyph (design_handoff_dashboard_redesign/README.md > Header: "An error banner (coral background, 🔌 icon, ...)"). */
-private const val PLUG_EMOJI = "🔌"
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /** Height of [HeaderProgressBar]'s sliding fill — design_handoff_dashboard_redesign/README.md > Header: "A 3px progress bar". */
 private val PROGRESS_BAR_HEIGHT = 3.dp
@@ -159,6 +149,7 @@ fun DashboardShell(
     snackbarState: SnackbarHostState,
     content: @Composable (WindowSizeClass) -> Unit,
 ) {
+    androidx.compose.runtime.CompositionLocalProvider(com.quietmetrix.dashboard.ui.components.LocalAiAccess provides state.ai) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val sizeClass = classifyWindow(maxWidth)
 
@@ -175,8 +166,8 @@ fun DashboardShell(
                 } else {
                     state.error?.let { ErrorBanner(it, onDismiss = { viewModel.clearError() }) }
                 }
-                if (state.activeDestination in analyticsDestinations) {
-                    Text(stringResource(Res.string.analytics_daily_scope), Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+                if (state.ai.reason == "ai_allowance_exhausted") {
+                    Text(stringResource(Res.string.ai_allowance_reached, state.ai.reset_date), Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 }
                 if (state.compare && state.activeDestination in analyticsDestinations) {
                     val dates = analyticsPeriodDates(state.range, state.analyticsAnchor)
@@ -188,7 +179,7 @@ fun DashboardShell(
                         InlineErrorNotice(error, onRetry = { viewModel.refresh() })
                     }
                 }
-                Box(modifier = Modifier.fillMaxSize().padding(16.dp).alpha(if (state.refreshing) .45f else 1f)) {
+                Box(modifier = Modifier.fillMaxSize().padding(vertical = 16.dp).alpha(if (state.refreshing) .45f else 1f)) {
                     content(sizeClass)
                 }
             }
@@ -205,6 +196,7 @@ fun DashboardShell(
                 viewModel.openAskDrawer(question)
             }
         }
+    }
     }
 }
 
@@ -293,7 +285,7 @@ internal fun HeaderProgressBarTrack(fraction: Float, modifier: Modifier = Modifi
 @Composable
 internal fun ServerUnreachableBanner(error: UiError, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     val extended = LocalExtendedColors.current
-    val message = "$PLUG_EMOJI " + stringResource(Res.string.header_server_unreachable_message)
+    val message = stringResource(Res.string.header_server_unreachable_message)
     Surface(color = extended.coral, modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -309,7 +301,7 @@ internal fun ServerUnreachableBanner(error: UiError, onRetry: () -> Unit, modifi
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onRetry, modifier = Modifier.handCursor()) {
-                Text(stringResource(Res.string.action_try_again), color = extended.onLime, fontWeight = FontWeight.Bold)
+                MaterialText(stringResource(Res.string.action_try_again), color = extended.onLime, fontWeight = FontWeight.Bold)
             }
             CopyErrorButton(error, tint = extended.onLime)
         }
@@ -317,15 +309,9 @@ internal fun ServerUnreachableBanner(error: UiError, onRetry: () -> Unit, modifi
 }
 
 /**
- * The persistent dashboard-redesign header (design_handoff_dashboard_redesign/README.md
- * > Screens / Views > "1. Header (persistent across all screens)"): a
- * three-row [Column] — brand + project/date dropdowns, the Compare/Expert/
- * Refresh/Theme/Ask/avatar toggle row, and the nav pill row — each wrapped
- * in a [FlowRow] so it reflows onto a second line on narrow widths rather
- * than overflowing (the spec's "wraps on narrow widths, never wraps text
- * within a single control"). The nav pill row is now the only navigation
- * surface at every width (see [DashboardShell]'s KDoc) — there is no
- * hamburger/drawer trigger here any more.
+ * The persistent dashboard header uses the handoff's two-row desktop composition:
+ * brand/project/date and trailing controls share the first row, with navigation below.
+ * At narrower widths, controls wrap into a separate row before navigation.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -333,69 +319,140 @@ private fun DashboardTopBar(
     viewModel: DashboardViewModel,
     state: DashboardState,
 ) {
-    val themeMode = LocalThemeMode.current
+    val savedThemeMode = LocalThemeMode.current
+    val themeMode = if (savedThemeMode == ThemeMode.System) resolveSystemThemeMode() else savedThemeMode
     val setThemeMode = LocalThemeModeSetter.current
     val compareOn = state.compare
 
-    Surface(color = MaterialTheme.colorScheme.surface) {
+    Surface(color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
+            BoxWithConstraints(Modifier.widthIn(max = 1360.dp).fillMaxWidth()) {
+              val containerWidth = maxWidth
+              val gutter = when {
+                  maxWidth < 600.dp -> 16.dp
+                  maxWidth < 1024.dp -> 24.dp
+                  else -> 32.dp
+              }
+              Column(
+                modifier = Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 16.dp, bottom = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                HeaderLogoAndWordmark()
-                Spacer(Modifier.weight(1f))
-                ProjectDropdown(
-                    projects = state.projects,
-                    currentProjectId = state.currentProjectId,
-                    onSelect = { viewModel.selectProject(it) },
+              ) {
+                if (containerWidth >= 1200.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        HeaderLogoAndWordmark()
+                        ProjectDropdown(
+                            projects = state.projects,
+                            currentProjectId = state.currentProjectId,
+                            onSelect = { viewModel.selectProject(it) },
+                            modifier = Modifier.widthIn(max = 190.dp),
+                        )
+                        DateRangeDropdown(range = state.range, onSelect = { viewModel.selectRange(it) })
+                        Spacer(Modifier.weight(1f))
+                        HeaderUtilityControls(
+                            compareVisible = state.activeDestination in analyticsDestinations,
+                            compareOn = compareOn,
+                            onCompareToggle = { viewModel.toggleCompare() },
+                            expertOn = state.expertMode,
+                            onExpertToggle = { viewModel.toggleExpertMode() },
+                            refreshing = state.refreshing,
+                            onRefresh = { viewModel.refresh() },
+                            themeMode = themeMode,
+                            onToggleTheme = { setThemeMode(if (themeMode == ThemeMode.Light) ThemeMode.Dark else ThemeMode.Light) },
+                            onAsk = { viewModel.openAskDrawer() },
+                        )
+                        HeaderAvatar(state.user?.email) { viewModel.logout() }
+                    }
+                } else {
+                    if (containerWidth >= 1024.dp) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            HeaderLogoAndWordmark()
+                            ProjectDropdown(
+                                projects = state.projects,
+                                currentProjectId = state.currentProjectId,
+                                onSelect = { viewModel.selectProject(it) },
+                                modifier = Modifier.widthIn(max = 190.dp),
+                            )
+                            DateRangeDropdown(range = state.range, onSelect = { viewModel.selectRange(it) })
+                            Spacer(Modifier.weight(1f))
+                            HeaderAvatar(state.user?.email) { viewModel.logout() }
+                        }
+                    } else {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            HeaderLogoAndWordmark()
+                            Spacer(Modifier.weight(1f))
+                            HeaderAvatar(state.user?.email) { viewModel.logout() }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ProjectDropdown(
+                                projects = state.projects,
+                                currentProjectId = state.currentProjectId,
+                                onSelect = { viewModel.selectProject(it) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            DateRangeDropdown(
+                                range = state.range,
+                                onSelect = { viewModel.selectRange(it) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        HeaderUtilityControls(
+                            compareVisible = state.activeDestination in analyticsDestinations,
+                            compareOn = compareOn,
+                            onCompareToggle = { viewModel.toggleCompare() },
+                            expertOn = state.expertMode,
+                            onExpertToggle = { viewModel.toggleExpertMode() },
+                            refreshing = state.refreshing,
+                            onRefresh = { viewModel.refresh() },
+                            themeMode = themeMode,
+                            onToggleTheme = { setThemeMode(if (themeMode == ThemeMode.Light) ThemeMode.Dark else ThemeMode.Light) },
+                            onAsk = { viewModel.openAskDrawer() },
+                        )
+                    }
+                }
+
+                NavPillRow(
+                    destinations = NavDestination.visibleFor(state.user?.role),
+                    current = state.activeDestination,
+                    onSelect = { viewModel.navigateTo(it) },
                 )
-                DateRangeDropdown(range = state.range, onSelect = { viewModel.selectRange(it) })
+              }
             }
-
-            HeaderToggleRow(
-                compareOn = compareOn,
-                compareVisible = state.activeDestination in analyticsDestinations,
-                onCompareToggle = { viewModel.toggleCompare() },
-                expertOn = state.expertMode,
-                onExpertToggle = { viewModel.toggleExpertMode() },
-                refreshing = state.refreshing,
-                onRefresh = { viewModel.refresh() },
-                themeMode = themeMode,
-                onToggleTheme = { setThemeMode(if (themeMode == ThemeMode.Light) ThemeMode.Dark else ThemeMode.Light) },
-                onAsk = { viewModel.openAskDrawer() },
-                userEmail = state.user?.email,
-                onSignOut = { viewModel.logout() },
-            )
-
-            NavPillRow(
-                destinations = NavDestination.visibleFor(state.user?.role),
-                current = state.activeDestination,
-                onSelect = { viewModel.navigateTo(it) },
-            )
         }
     }
 }
 
-/**
- * The header's left-most element: the lime-badged [LOGO_EMOJI] glyph next
- * to the "quietmetrix" wordmark (design_handoff_dashboard_redesign/README.md
- * > Header: "emoji-badge logo (lime rounded square, 🤫) + wordmark").
- */
+/** Existing browser favicon rendered beside the wordmark. */
 @Composable
 internal fun HeaderLogoAndWordmark(modifier: Modifier = Modifier) {
     val extended = LocalExtendedColors.current
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Surface(color = extended.lime, shape = QmShapeTokens.chip) {
-            Text(LOGO_EMOJI, modifier = Modifier.padding(6.dp))
-        }
+        Icon(painterResource(Res.drawable.ic_brand), contentDescription = null, tint = Color.Unspecified,
+            modifier = Modifier.size(38.dp))
         Text(
             stringResource(Res.string.brand),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, lineHeight = 26.sp),
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -425,7 +482,7 @@ internal fun ProjectDropdown(
     val current = projects.firstOrNull { it.id == currentProjectId }
     val noProjects = stringResource(Res.string.picker_no_projects)
     val selectProjectLabel = stringResource(Res.string.picker_select_project)
-    val triggerText = "$PROJECT_EMOJI " + (current?.name ?: if (projects.isEmpty()) noProjects else selectProjectLabel) + " $CHEVRON_DOWN"
+    val triggerText = current?.name ?: if (projects.isEmpty()) noProjects else selectProjectLabel
 
     Box(modifier = modifier) {
         Surface(
@@ -435,18 +492,20 @@ internal fun ProjectDropdown(
             shape = QmShapeTokens.pill,
             modifier = Modifier.handCursor(),
         ) {
-            Text(
-                triggerText,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Icon(painterResource(Res.drawable.ic_twemoji_1f4e6), contentDescription = null,
+                    tint = Color.Unspecified, modifier = Modifier.size(18.dp))
+                Text(triggerText, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Icon(painterResource(Res.drawable.ic_chevron_down), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             projects.forEach { p ->
                 DropdownMenuItem(
-                    text = { Text(p.name) },
+                    text = { MaterialText(p.name) },
                     onClick = { onSelect(p.id); expanded = false },
                     modifier = Modifier.handCursor(),
                 )
@@ -471,33 +530,48 @@ internal fun DateRangeDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val triggerText = "$DATE_EMOJI " + stringResource(range.labelRes) + " $CHEVRON_DOWN"
+    var resolutionHelp by remember { mutableStateOf(false) }
+    val triggerText = stringResource(range.labelRes)
 
-    Box(modifier = modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+      Box {
         Surface(
             onClick = { expanded = true },
             color = LocalExtendedColors.current.chipFill,
             shape = QmShapeTokens.pill,
             modifier = Modifier.handCursor(),
         ) {
-            Text(
-                triggerText,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Icon(painterResource(Res.drawable.ic_calendar), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                Text(triggerText, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+                Icon(painterResource(Res.drawable.ic_chevron_down), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            TimeRange.entries.forEach { r ->
+            TimeRange.entries.filter { it != TimeRange.Hour1 }.forEach { r ->
                 DropdownMenuItem(
-                    text = { Text(stringResource(r.labelRes)) },
+                    text = { MaterialText(stringResource(r.labelRes)) },
                     onClick = { onSelect(r); expanded = false },
                     modifier = Modifier.handCursor(),
                 )
             }
         }
+      }
+      IconButton(onClick = { resolutionHelp = true }, modifier = Modifier.size(32.dp).handCursor()) {
+          Icon(painterResource(Res.drawable.ic_info), contentDescription = stringResource(Res.string.analytics_resolution_title),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
+      }
     }
+    if (resolutionHelp) AlertDialog(
+        onDismissRequest = { resolutionHelp = false },
+        title = { Text(stringResource(Res.string.analytics_resolution_title)) },
+        text = { Text(stringResource(Res.string.analytics_resolution_help)) },
+        confirmButton = { TextButton(onClick = { resolutionHelp = false }, modifier = Modifier.handCursor()) { MaterialText(stringResource(Res.string.action_got_it)) } },
+    )
 }
 
 /**
@@ -505,8 +579,9 @@ internal fun DateRangeDropdown(
  * Header: "⇄ Compare toggle ... 🤓 Expert toggle ... 🔄 Refresh button ...
  * ☀️/🌙 theme toggle ... ✨ Ask button (lavender, opens right-hand drawer)
  * ... user avatar circle"). [onRefresh] and the theme toggle retain their existing
- * behavior; [onExpertToggle] updates the shared dashboard preference.
- * [onCompareToggle]/[onAsk] remain stub callbacks pending their later tasks.
+ * behavior; [onExpertToggle] updates the shared dashboard preference. Compare updates the shared
+ * range query, and Ask opens its drawer even when the server has no AI entitlement so the drawer
+ * can explain that state.
  * [onSignOut] is the pre-existing `DashboardViewModel.logout`, now reached
  * through the avatar's dropdown menu rather than a standalone button.
  */
@@ -529,66 +604,77 @@ internal fun HeaderToggleRow(
     val extended = LocalExtendedColors.current
     var avatarMenuExpanded by remember { mutableStateOf(false) }
 
-    FlowRow(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (compareVisible) ToggleChip(emoji = COMPARE_EMOJI, label = stringResource(Res.string.header_toggle_compare), on = compareOn, onClick = onCompareToggle)
-        ToggleChip(emoji = EXPERT_EMOJI, label = stringResource(Res.string.header_toggle_expert), on = expertOn, onClick = onExpertToggle)
-
-        IconButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.handCursor()) {
-            Icon(
-                painter = painterResource(Res.drawable.ic_refresh),
-                contentDescription = stringResource(Res.string.action_refresh),
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
-        val themeToggleCd = stringResource(Res.string.header_theme_toggle_cd)
-        IconButton(
-            onClick = onToggleTheme,
-            modifier = Modifier.handCursor().semantics { contentDescription = themeToggleCd },
-        ) {
-            Text(if (themeMode == ThemeMode.Light) THEME_DARK_EMOJI else THEME_LIGHT_EMOJI, style = MaterialTheme.typography.titleMedium)
-        }
-
-        val askLabel = "$ASK_EMOJI " + stringResource(Res.string.header_ask_button)
-        Pill(text = askLabel, variant = PillVariant.Lavender, onClick = onAsk)
-
-        val avatarCd = stringResource(Res.string.header_avatar_cd)
-        Box {
-            Surface(
-                onClick = { avatarMenuExpanded = true },
-                color = extended.lavender,
-                shape = CircleShape,
-                modifier = Modifier.size(32.dp).handCursor().semantics { contentDescription = avatarCd },
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = (userEmail?.firstOrNull()?.uppercaseChar() ?: '?').toString(),
-                        color = extended.onLime,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val compact = maxWidth < 560.dp
+        if (compact) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HeaderUtilityControls(compareVisible, compareOn, onCompareToggle, expertOn, onExpertToggle,
+                        refreshing, onRefresh, themeMode, onToggleTheme, onAsk)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    HeaderAvatar(userEmail, onSignOut)
                 }
             }
-            DropdownMenu(expanded = avatarMenuExpanded, onDismissRequest = { avatarMenuExpanded = false }) {
-                userEmail?.let {
-                    DropdownMenuItem(text = { Text(it) }, onClick = {}, enabled = false)
-                }
-                DropdownMenuItem(
-                    text = { Text(stringResource(Res.string.action_signout)) },
-                    leadingIcon = {
-                        Icon(
-                            painter = painterResource(Res.drawable.ic_signout),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    },
-                    onClick = { onSignOut(); avatarMenuExpanded = false },
-                    modifier = Modifier.handCursor(),
-                )
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                HeaderUtilityControls(compareVisible, compareOn, onCompareToggle, expertOn, onExpertToggle,
+                    refreshing, onRefresh, themeMode, onToggleTheme, onAsk)
+                Spacer(Modifier.weight(1f))
+                HeaderAvatar(userEmail, onSignOut)
             }
+        }
+    }
+}
+
+@Composable
+private fun HeaderUtilityControls(
+    compareVisible: Boolean, compareOn: Boolean, onCompareToggle: () -> Unit,
+    expertOn: Boolean, onExpertToggle: () -> Unit, refreshing: Boolean, onRefresh: () -> Unit,
+    themeMode: ThemeMode, onToggleTheme: () -> Unit, onAsk: () -> Unit,
+) {
+    BoxWithConstraints {
+        val compact = maxWidth < 560.dp
+        val controls: @Composable () -> Unit = {
+            if (compareVisible) ToggleChip(icon = Res.drawable.ic_compare, label = stringResource(Res.string.header_toggle_compare), on = compareOn, onClick = onCompareToggle)
+            ToggleChip(icon = Res.drawable.ic_twemoji_1f913, label = stringResource(Res.string.header_toggle_expert), on = expertOn, onClick = onExpertToggle, colorful = true)
+            IconButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.handCursor()) {
+                Icon(painter = painterResource(Res.drawable.ic_refresh), contentDescription = stringResource(Res.string.action_refresh), modifier = Modifier.size(20.dp))
+            }
+            val themeToggleCd = stringResource(Res.string.header_theme_toggle_cd)
+            IconButton(onClick = onToggleTheme, modifier = Modifier.handCursor().semantics { contentDescription = themeToggleCd }) {
+                Icon(painterResource(if (themeMode == ThemeMode.Light) Res.drawable.ic_dark_mode else Res.drawable.ic_light_mode),
+                    contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+            Pill(text = stringResource(Res.string.header_ask_button), variant = PillVariant.Lavender,
+                onClick = onAsk, leadingIcon = Res.drawable.ic_twemoji_2728, colorfulIcon = true)
+        }
+        if (compact) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { controls() }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { controls() }
+        }
+    }
+}
+
+@Composable
+private fun HeaderAvatar(userEmail: String?, onSignOut: () -> Unit) {
+    val extended = LocalExtendedColors.current
+    var avatarMenuExpanded by remember { mutableStateOf(false) }
+    val avatarCd = stringResource(Res.string.header_avatar_cd)
+    Box {
+        Surface(onClick = { avatarMenuExpanded = true }, color = extended.coral, shape = CircleShape,
+            modifier = Modifier.size(40.dp).handCursor().semantics { contentDescription = avatarCd }) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(text = (userEmail?.firstOrNull()?.uppercaseChar() ?: '?').toString(), color = extended.onLime,
+                    style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        DropdownMenu(expanded = avatarMenuExpanded, onDismissRequest = { avatarMenuExpanded = false }) {
+            userEmail?.let { DropdownMenuItem(text = { MaterialText(it) }, onClick = {}, enabled = false) }
+            DropdownMenuItem(text = { MaterialText(stringResource(Res.string.action_signout)) },
+                leadingIcon = { Icon(painter = painterResource(Res.drawable.ic_signout), contentDescription = null, modifier = Modifier.size(18.dp)) },
+                onClick = { onSignOut(); avatarMenuExpanded = false }, modifier = Modifier.handCursor())
         }
     }
 }
@@ -599,9 +685,9 @@ internal fun HeaderToggleRow(
  * active state reads clearly without a separate indicator glyph.
  */
 @Composable
-private fun ToggleChip(emoji: String, label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val text = "$emoji $label"
-    Pill(text = text, variant = if (on) PillVariant.Lime else PillVariant.Neutral, onClick = onClick, modifier = modifier)
+private fun ToggleChip(icon: DrawableResource, label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, colorful: Boolean = false) {
+    Pill(text = label, variant = if (on) PillVariant.Lime else PillVariant.Neutral,
+        onClick = onClick, modifier = modifier, leadingIcon = icon, colorfulIcon = colorful)
 }
 
 /**
@@ -617,7 +703,6 @@ private fun ToggleChip(emoji: String, label: String, on: Boolean, onClick: () ->
  * behind their text, only the active Overview pill does (see
  * `goldens/README.md`'s log entry for this golden).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun NavPillRow(
     destinations: List<NavDestination>,
@@ -625,16 +710,18 @@ internal fun NavPillRow(
     onSelect: (NavDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    FlowRow(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        destinations.forEach { dest ->
-            Box {
-                NavPillItem(destination = dest, selected = dest == current, onClick = { onSelect(dest) })
-                if (dest == NavDestination.Experiments) {
-                    NewBadge(modifier = Modifier.align(Alignment.TopEnd))
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val perRow = when {
+            maxWidth < 600.dp -> 2
+            maxWidth < 1024.dp -> 5
+            else -> destinations.size.coerceAtLeast(1)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            destinations.chunked(perRow).forEach { rowDestinations ->
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    rowDestinations.forEach { dest ->
+                        NavPillItem(destination = dest, selected = dest == current, onClick = { onSelect(dest) })
+                    }
                 }
             }
         }
@@ -642,23 +729,36 @@ internal fun NavPillRow(
 }
 
 /**
- * A single nav-row entry: [PillVariant.NavActive] when selected, or plain
- * (unfilled) emoji+label text otherwise — see [NavPillRow]'s KDoc for why
- * the inactive style has no background.
+ * A single nav-row entry. Its vector icon is rendered by Compose Resources,
+ * avoiding platform-dependent emoji glyphs in the shared dashboard.
  */
 @Composable
 private fun NavPillItem(destination: NavDestination, selected: Boolean, onClick: () -> Unit) {
-    val label = destination.emoji + " " + stringResource(destination.labelRes)
-    if (selected) {
-        Pill(text = label, variant = PillVariant.NavActive, onClick = onClick)
-    } else {
-        Surface(onClick = onClick, color = Color.Transparent, shape = QmShapeTokens.pill, modifier = Modifier.handCursor()) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+    val foreground = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(selected) {
+        if (selected) bringIntoViewRequester.bringIntoView()
+    }
+    Surface(
+        onClick = onClick,
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        contentColor = foreground,
+        shape = QmShapeTokens.pill,
+        modifier = Modifier.bringIntoViewRequester(bringIntoViewRequester).handCursor(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                painter = painterResource(destination.icon),
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(16.dp),
             )
+            Text(stringResource(destination.labelRes), style = MaterialTheme.typography.labelLarge)
+            if (destination == NavDestination.Experiments) NewBadge()
         }
     }
 }

@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS projects (
     id              VARCHAR(36)   NOT NULL,
     name            VARCHAR(255)  NOT NULL,
     description     VARCHAR(1000) NULL,
+    icon_key        VARCHAR(32)   NOT NULL DEFAULT 'book',
+    declared_platforms JSON       NULL,
     owner_user_id   VARCHAR(36)  NOT NULL,
     api_key_hash    CHAR(64)     NOT NULL,    -- SHA-256 hex of the random api token
     api_key_last4   CHAR(4)      NULL,         -- non-sensitive, for masked display
@@ -136,6 +138,14 @@ CREATE TABLE IF NOT EXISTS experiments (
     traffic_percent  INT          NOT NULL DEFAULT 100,
     variants         JSON         NOT NULL,   -- [{name, weight}, {name, weight}]
     countries        JSON         NULL,       -- ["ES","FR"] or NULL = all countries
+    mode             VARCHAR(16)  NOT NULL DEFAULT 'legacy',
+    placement_key    VARCHAR(64)  NULL,
+    revision         INT          NOT NULL DEFAULT 0,
+    b_percent        INT          NULL,
+    languages        JSON         NULL,
+    match_mode       VARCHAR(8)   NOT NULL DEFAULT 'all',
+    goal_event       VARCHAR(64)  NULL,
+    icon_key         VARCHAR(32)  NULL,
     created_at       VARCHAR(32)  NOT NULL,
     updated_at       VARCHAR(32)  NOT NULL,
     started_at       VARCHAR(32)  NULL,
@@ -180,4 +190,54 @@ CREATE TABLE IF NOT EXISTS counters_quarantine (
     PRIMARY KEY (id),
     KEY idx_counters_quarantine_project (project_id, quarantined_at),
     CONSTRAINT fk_counters_q_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Optional batch_id support gives new SDKs idempotent counter retries. Older clients may
+-- continue sending the original batch shape without a receipt id.
+CREATE TABLE IF NOT EXISTS counter_batch_receipts (
+    project_id   VARCHAR(36) NOT NULL,
+    batch_id     VARCHAR(64) NOT NULL,
+    payload_hash CHAR(64) NOT NULL,
+    claim_token  CHAR(32) NOT NULL,
+    accepted     INT NOT NULL DEFAULT 0,
+    quarantined  INT NOT NULL DEFAULT 0,
+    created_at   VARCHAR(32) NOT NULL,
+    PRIMARY KEY (project_id, batch_id),
+    KEY idx_counter_batch_receipts_created (created_at),
+    CONSTRAINT fk_counter_batch_receipt_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Additive v2 counter cells. hour=-1 denotes a daily resolution cell; 0..23 are UTC hours.
+CREATE TABLE IF NOT EXISTS counter_cells_v2 (
+    project_id   VARCHAR(36) NOT NULL,
+    day          VARCHAR(10) NOT NULL,
+    hour         SMALLINT NOT NULL DEFAULT -1,
+    metric       VARCHAR(64) NOT NULL,
+    platform     VARCHAR(20) NOT NULL DEFAULT 'unknown',
+    sdk_version  VARCHAR(32) NOT NULL DEFAULT 'unknown',
+    app_version  VARCHAR(32) NOT NULL DEFAULT '',
+    country      CHAR(2) NOT NULL DEFAULT '  ',
+    dims_hash    CHAR(64) NOT NULL,
+    cardinality_hash CHAR(64) NULL,
+    dims         TEXT NOT NULL,
+    n            BIGINT NOT NULL DEFAULT 0,
+    contributors BIGINT NOT NULL DEFAULT 0,
+    updated_at   VARCHAR(32) NOT NULL,
+    PRIMARY KEY (project_id, day, hour, metric, platform, app_version, country, dims_hash),
+    KEY idx_counter_cells_v2_project_metric_time (project_id, metric, day, hour),
+    KEY idx_counter_cells_v2_cardinality (project_id, metric, cardinality_hash),
+    CONSTRAINT fk_counter_cells_v2_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS counter_batch_receipts_v2 (
+    project_id VARCHAR(36) NOT NULL,
+    batch_id VARCHAR(64) NOT NULL,
+    payload_hash CHAR(64) NOT NULL,
+    claim_token CHAR(32) NOT NULL,
+    accepted INT NOT NULL DEFAULT 0,
+    created_at VARCHAR(32) NOT NULL,
+    expires_at VARCHAR(32) NOT NULL,
+    PRIMARY KEY (project_id, batch_id),
+    KEY idx_counter_batch_receipts_v2_created (created_at),
+    KEY idx_counter_batch_receipts_v2_expires (expires_at),
+    CONSTRAINT fk_counter_batch_receipt_v2_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

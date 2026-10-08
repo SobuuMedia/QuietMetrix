@@ -7,6 +7,9 @@ internal actual fun createPersistentStore(prefix: String): PersistentStore = NSD
 internal class NSDefaultsPersistentStore(private val prefix: String) : PersistentStore {
     private val defaults = NSUserDefaults.standardUserDefaults
     override fun get(key: String): String? = defaults.stringForKey("${prefix}${key}")
-    override fun set(key: String, value: String) = defaults.setObject(value, "${prefix}${key}")
+    override fun set(key: String, value: String) {
+        defaults.setObject(value, "${prefix}${key}")
+        check(defaults.synchronize()) { "Could not durably persist QuietMetrix state" }
+    }
     override fun remove(key: String) = defaults.removeObjectForKey("${prefix}${key}")
 }

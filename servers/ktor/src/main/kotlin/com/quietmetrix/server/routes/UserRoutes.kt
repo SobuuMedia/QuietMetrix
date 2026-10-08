@@ -1,7 +1,5 @@
 package com.quietmetrix.server.routes
 
-import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.domain.AcceptInviteRequest
 import com.quietmetrix.server.domain.ErrorResponse
@@ -19,7 +17,6 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.origin
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
 import io.ktor.server.routing.delete
@@ -28,7 +25,7 @@ import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.inject
-import java.util.Date
+import com.quietmetrix.server.util.receiveBounded as receive
 
 private val VALID_ROLES = setOf("admin", "developer", "reviewer")
 
@@ -44,7 +41,9 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                     call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Admins only"))
                     return@get
                 }
-                call.respond(UserListResponse(userRepo.listAll().map {
+                val actor = userRepo.findById(principal.payload.getClaim("userId").asString().toLong())!!
+                val visible = if (config.isCloud && actor["platformOperator"] != true) userRepo.listTenant(actor["tenantId"].toString()) else userRepo.listAll()
+                call.respond(UserListResponse(visible.map {
                     UserListItem(
                         id = it["id"].toString(),
                         email = it["email"] as String,
@@ -52,6 +51,22 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                         status = it["status"] as? String ?: "active",
                     )
                 }))
+            }
+
+            post("/{id}/recover") {
+                val principal = call.principal<JWTPrincipal>() ?: return@post
+                if (principal.roleClaim() != "admin") {
+                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Administrators only")); return@post
+                }
+                val id = call.parameters["id"]?.toLongOrNull() ?: return@post
+                val user = userRepo.findById(id)
+                val token = userRepo.createRecovery(id)
+                if (user == null || token == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Active account not found")); return@post
+                }
+                val origin = call.request.origin
+                val base = config.publicOrigin ?: "${origin.scheme}://${origin.serverHost}:${origin.serverPort}"
+                call.respond(InviteResponse("$base/dashboard/?invite=$token", UserListItem(id.toString(), user["email"].toString(), user["role"].toString(), "active")))
             }
 
             post("/invite") {
@@ -62,7 +77,8 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                 }
                 val request = try {
                     call.receive<InviteUserRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Invalid JSON"))
                     return@post
                 }
@@ -79,9 +95,16 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                     call.respond(HttpStatusCode.Conflict, ErrorResponse("already_exists", "A user with that email already exists"))
                     return@post
                 }
-                val token = userRepo.createInvite(email, request.role)
+                val actor = userRepo.findById(principal.payload.getClaim("userId").asString().toLong())!!
+                if (request.newOrganization && (actor["platformOperator"] != true || request.role != "admin")) {
+                    call.respond(HttpStatusCode.Forbidden, ErrorResponse("forbidden", "Only platform operators can create customer organizations"))
+                    return@post
+                }
+                val tenant = if (request.newOrganization) java.util.UUID.randomUUID().toString() else actor["tenantId"].toString()
+                val token = userRepo.createInvite(email, request.role, tenantId = tenant)
                 val origin = call.request.origin
-                val link = "${origin.scheme}://${origin.serverHost}:${origin.serverPort}/?invite=$token"
+                val base = config.publicOrigin ?: "${origin.scheme}://${origin.serverHost}:${origin.serverPort}"
+                val link = "$base/dashboard/?invite=$token"
                 val created = userRepo.findByEmail(email)
                 call.respond(HttpStatusCode.Created, InviteResponse(
                     inviteLink = link,
@@ -106,7 +129,8 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                 }
                 val request = try {
                     call.receive<UpdateUserRoleRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Invalid JSON"))
                     return@patch
                 }
@@ -118,7 +142,7 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "User not found"))
                     return@patch
                 }
-                if (target["role"] == "admin" && request.role != "admin" && userRepo.countAdmins() <= 1) {
+                if (target["role"] == "admin" && request.role != "admin" && userRepo.countAdmins(if (config.isCloud) target["tenantId"].toString() else null) <= 1) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("last_admin", "Cannot remove the last admin"))
                     return@patch
                 }
@@ -144,11 +168,16 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "User not found"))
                     return@delete
                 }
-                if (target["role"] == "admin" && userRepo.countAdmins() <= 1) {
+                if (target["role"] == "admin" && userRepo.countAdmins(if (config.isCloud) target["tenantId"].toString() else null) <= 1) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("last_admin", "Cannot delete the last admin"))
                     return@delete
                 }
-                userRepo.delete(id)
+                try {
+                    userRepo.delete(id)
+                } catch (e: com.quietmetrix.server.persistence.AccountOwnsProjects) {
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse("account_owns_projects", e.message!!))
+                    return@delete
+                }
                 call.respond(mapOf("ok" to true))
             }
         }
@@ -169,7 +198,8 @@ fun Routing.configureUserRoutes(config: AppConfig) {
             val token = call.parameters["token"] ?: return@post
             val request = try {
                 call.receive<AcceptInviteRequest>()
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Invalid JSON"))
                 return@post
             }
@@ -182,25 +212,17 @@ fun Routing.configureUserRoutes(config: AppConfig) {
                 return@post
             }
             val userId = user["id"].toString()
-            userRepo.acceptInvite(userId.toLong(), request.password)
+            if (!userRepo.acceptInvite(userId.toLong(), request.password, token)) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("invalid_invite", "Link already used or expired"))
+                return@post
+            }
 
             val role = user["role"] as? String ?: "reviewer"
             val email = user["email"] as String
-            val accessToken = JWT.create()
-                .withAudience(config.auth.jwtAudience)
-                .withIssuer(config.auth.jwtIssuer)
-                .withClaim("userId", userId)
-                .withClaim("email", email)
-                .withClaim("role", role)
-                .withExpiresAt(Date(System.currentTimeMillis() + config.auth.sessionTtlHours * 3600_000L))
-                .sign(Algorithm.HMAC256(config.auth.jwtSecret))
-            val refreshToken = JWT.create()
-                .withAudience(config.auth.jwtAudience)
-                .withIssuer(config.auth.jwtIssuer)
-                .withClaim("userId", userId)
-                .withClaim("type", "refresh")
-                .withExpiresAt(Date(System.currentTimeMillis() + 2L * 24 * 3600_000L))
-                .sign(Algorithm.HMAC256(config.auth.jwtSecret))
+            val sessionId = java.util.UUID.randomUUID().toString()
+            val accessToken = com.quietmetrix.server.auth.accessToken(config, user, sessionId)
+            val refreshToken = com.quietmetrix.server.auth.refreshToken(config, userId, sessionId)
+            userRepo.createSession(userId.toLong(), sessionId, refreshToken)
 
             call.respond(LoginResponse(
                 token = accessToken,

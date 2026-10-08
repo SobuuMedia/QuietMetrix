@@ -3,8 +3,8 @@ package com.quietmetrix.server.routes
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.counters.ActivationCounterAnalyzer
 import com.quietmetrix.server.counters.ActivationCounterCell
-import com.quietmetrix.server.counters.OverviewCounterAnalyzer
 import com.quietmetrix.server.counters.FrictionCounterAnalyzer
+import com.quietmetrix.server.counters.OverviewCounterAnalyzer
 import com.quietmetrix.server.counters.SearchCounterAnalyzer
 import com.quietmetrix.server.counters.SessionCounterAnalyzer
 import com.quietmetrix.server.counters.ValueCounterAnalyzer
@@ -14,24 +14,24 @@ import com.quietmetrix.server.domain.BreakdownItem
 import com.quietmetrix.server.domain.DailyPointItem
 import com.quietmetrix.server.domain.DailySessionItem
 import com.quietmetrix.server.domain.ErrorResponse
+import com.quietmetrix.server.domain.FrictionResponse
+import com.quietmetrix.server.domain.FrictionScreenItem
+import com.quietmetrix.server.domain.RetentionCohort
+import com.quietmetrix.server.domain.RetentionResponse
 import com.quietmetrix.server.domain.ScreenDurationItem
+import com.quietmetrix.server.domain.SearchResponse
+import com.quietmetrix.server.domain.SearchScreenItem
+import com.quietmetrix.server.domain.SessionsResponse
 import com.quietmetrix.server.domain.TopEventItem
 import com.quietmetrix.server.domain.TopScreenItem
 import com.quietmetrix.server.domain.TopValueItem
-import com.quietmetrix.server.domain.RetentionCohort
-import com.quietmetrix.server.domain.RetentionResponse
-import com.quietmetrix.server.domain.SessionsResponse
-import com.quietmetrix.server.domain.FrictionResponse
-import com.quietmetrix.server.domain.FrictionScreenItem
-import com.quietmetrix.server.domain.SearchResponse
-import com.quietmetrix.server.domain.SearchScreenItem
 import com.quietmetrix.server.domain.TransitionItem
 import com.quietmetrix.server.domain.TransitionsResponse
-import com.quietmetrix.server.retention.RetentionCounterAnalyzer
-import com.quietmetrix.server.retention.RetentionCounterCell
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
 import com.quietmetrix.server.ratelimit.RateLimiter
+import com.quietmetrix.server.retention.RetentionCounterAnalyzer
+import com.quietmetrix.server.retention.RetentionCounterCell
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -51,6 +51,7 @@ fun Routing.configureDashboardRoutes() {
     val projectRepo by inject<com.quietmetrix.server.persistence.ProjectRepository>()
     val memberRepo by inject<com.quietmetrix.server.persistence.ProjectMemberRepository>()
     val counterRepo by inject<CounterRepository>()
+    val counterV2Repo by inject<com.quietmetrix.server.persistence.CounterV2Repository>()
     val rateLimiter by inject<RateLimiter>()
     val accessTokenRepo by inject<AccessTokenRepository>()
     val config by inject<AppConfig>()
@@ -124,9 +125,8 @@ fun Routing.configureDashboardRoutes() {
             // "Ship what maps cleanly": top_events, screen_durations (bucket-approximated),
             // platforms, and daily totals all read from counters. top_screens is approximated
             // from screen_transition (no standalone "screen viewed" counter exists).
-            // countries/browsers/os/device_classes/languages are not tracked as counter
-            // dimensions yet, so those fields are empty rather than silently faked; offline is
-            // always 0 for the same reason. See OverviewCounterAnalyzer's doc comment.
+            // Browser/OS/language and offline causes are not tracked. Country is app-provided,
+            // and device class is only a coarse SDK category; neither uses paid lookup.
             val eventCells = counterRepo.readCells(id, "event", fromDay, toDay)
             val topEvents = eventCells.sortedByDescending { it.n }.take(10)
                 .map { TopEventItem(eventName = it.dims["name"], count = it.n) }
@@ -142,8 +142,29 @@ fun Routing.configureDashboardRoutes() {
             val dailyTotals = counterRepo.dailyTotals(id, "event", fromDay, toDay)
                 .map { DailyPointItem(day = it.day.toString(), total = it.n) }
 
-            val platforms = counterRepo.totalsByPlatform(id, "event", fromDay, toDay)
+            val legacyPlatforms = counterRepo.totalsByPlatform(id, "event", fromDay, toDay)
                 .map { BreakdownItem(name = it.platform, count = it.n) }
+
+            val peopleDays = when {
+                rangeDays <= 7L -> rangeDays.toInt().coerceAtLeast(1)
+                rangeDays <= 30L -> 30
+                else -> 90
+            }
+            val peopleFrom = toDay.minusDays((peopleDays - 1).toLong())
+            val people = counterRepo.readCells(id, "unique_window_v2", peopleFrom, toDay)
+                .firstOrNull { cell ->
+                    cell.dims["scope_kind"] == "project" && cell.dims["scope_key"] == "all" &&
+                        cell.dims["days"] == peopleDays.toString() && cell.dims["end_day"] == toDay.toString()
+                }?.n
+            val countries = if (people != null) counterRepo.uniqueWindowByFacet(
+                id, peopleFrom, toDay, peopleDays, toDay, "country",
+            ).map { BreakdownItem(name = it.name, count = it.n) } else emptyList()
+            val platforms = if (people != null) counterRepo.uniqueWindowByFacet(
+                id, peopleFrom, toDay, peopleDays, toDay, "platform",
+            ).map { BreakdownItem(name = it.name, count = it.n) } else legacyPlatforms
+            val deviceClasses = if (people != null) counterRepo.uniqueWindowByFacet(
+                id, peopleFrom, toDay, peopleDays, toDay, "device_class",
+            ).map { BreakdownItem(name = it.name, count = it.n) } else emptyList()
 
             val valueCells = counterRepo.readCells(id, "value", fromDay, toDay)
             val topValues = ValueCounterAnalyzer.analyze(valueCells).take(10)
@@ -157,15 +178,16 @@ fun Routing.configureDashboardRoutes() {
             call.respond(
                 AggregatesResponse(
                     windowDays = rangeDays.toInt().coerceAtLeast(1),
+                    people = people,
                     totals = AggregatesTotals(events = totalEvents, offline = 0, errors = errorCount),
                     topEvents = topEvents,
                     topScreens = topScreens,
                     screenDurations = screenDurations,
                     topValues = topValues,
                     daily = dailyTotals,
-                    countries = emptyList(),
+                    countries = countries,
                     platforms = platforms,
-                    deviceClasses = emptyList(),
+                    deviceClasses = deviceClasses,
                 ),
             )
         }
@@ -215,7 +237,14 @@ fun Routing.configureDashboardRoutes() {
             val fromDay = window.fromDay
             val toDay = window.toDay
 
-            val transitions = counterRepo.readCells(id, "screen_transition", fromDay, toDay)
+            val platform = call.parameters["platform"] ?: "all"
+            if (platform !in setOf("all", "android", "ios", "web", "desktop", "unknown")) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid platform"))
+                return@get
+            }
+            val v2 = counterV2Repo.readTransitions(id, fromDay, toDay, platform)
+            val transitionCells = if (v2.present) v2.cells else counterRepo.readTransitionCells(id, fromDay, toDay, platform)
+            val transitions = transitionCells
                 .mapNotNull { cell ->
                     val from = cell.dims["from"] ?: return@mapNotNull null
                     val to = cell.dims["to"] ?: return@mapNotNull null

@@ -2,6 +2,10 @@ package com.quietmetrix.analytics.internal.context
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "android"
+    actual val deviceClass: String = runCatching {
+        val widthDp = android.content.res.Resources.getSystem().configuration.smallestScreenWidthDp
+        when { widthDp <= 0 -> "unknown"; widthDp >= 600 -> "tablet"; else -> "phone" }
+    }.getOrDefault("unknown")
     actual val language: String? = java.util.Locale.getDefault()?.language
     actual val appVersion: String? = null
     actual val screenWidth: Int? = null

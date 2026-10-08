@@ -6,33 +6,29 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.quietmetrix.dashboard.viewmodel.isLoading
-import com.quietmetrix.dashboard.viewmodel.DataSection
-import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,29 +37,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.CreateExperimentRequest
 import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.api.VariantDto
-import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.nav.WindowSizeClass
-import com.quietmetrix.dashboard.resources.*
-import com.quietmetrix.dashboard.ui.components.ConfirmDialog
-import com.quietmetrix.dashboard.ui.components.ModalShell
-import com.quietmetrix.dashboard.ui.components.ModalFooter
-import com.quietmetrix.dashboard.ui.components.ModalFooterAction
-import com.quietmetrix.dashboard.ui.components.ModalFooterEmphasis
-import com.quietmetrix.dashboard.ui.components.CodeSnippetPanel
+import com.quietmetrix.dashboard.nav.classifyWindow
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.action_got_it
+import com.quietmetrix.dashboard.resources.experiment_action_close
 import com.quietmetrix.dashboard.resources.experiment_action_delete
 import com.quietmetrix.dashboard.resources.experiment_action_end
+import com.quietmetrix.dashboard.resources.experiment_action_keep
 import com.quietmetrix.dashboard.resources.experiment_action_pause
 import com.quietmetrix.dashboard.resources.experiment_action_resume
+import com.quietmetrix.dashboard.resources.experiment_action_ship
 import com.quietmetrix.dashboard.resources.experiment_action_start
+import com.quietmetrix.dashboard.resources.experiment_audience_everyone
+import com.quietmetrix.dashboard.resources.experiment_audience_help
+import com.quietmetrix.dashboard.resources.experiment_b_percent_label
+import com.quietmetrix.dashboard.resources.experiment_confirm_rollout
+import com.quietmetrix.dashboard.resources.experiment_confirm_stop
+import com.quietmetrix.dashboard.resources.experiment_confirm_title
 import com.quietmetrix.dashboard.resources.experiment_delete_confirm_body
 import com.quietmetrix.dashboard.resources.experiment_editor_cancel
 import com.quietmetrix.dashboard.resources.experiment_editor_countries_hint
@@ -73,44 +74,85 @@ import com.quietmetrix.dashboard.resources.experiment_editor_key_hint
 import com.quietmetrix.dashboard.resources.experiment_editor_key_label
 import com.quietmetrix.dashboard.resources.experiment_editor_name_label
 import com.quietmetrix.dashboard.resources.experiment_editor_screen_label
-import com.quietmetrix.dashboard.resources.experiment_editor_split_label
 import com.quietmetrix.dashboard.resources.experiment_editor_submit
 import com.quietmetrix.dashboard.resources.experiment_editor_title
-import com.quietmetrix.dashboard.resources.experiment_editor_traffic_label
 import com.quietmetrix.dashboard.resources.experiment_editor_variant_a_label
 import com.quietmetrix.dashboard.resources.experiment_editor_variant_b_label
 import com.quietmetrix.dashboard.resources.experiment_empty
+import com.quietmetrix.dashboard.resources.experiment_explain_question
+import com.quietmetrix.dashboard.resources.experiment_goal_event_hint
+import com.quietmetrix.dashboard.resources.experiment_goal_event_invalid
+import com.quietmetrix.dashboard.resources.experiment_goal_event_label
+import com.quietmetrix.dashboard.resources.experiment_goal_exposure_only
 import com.quietmetrix.dashboard.resources.experiment_help_content_description
+import com.quietmetrix.dashboard.resources.experiment_hero_highlight
+import com.quietmetrix.dashboard.resources.experiment_hero_prefix
+import com.quietmetrix.dashboard.resources.experiment_languages_hint
+import com.quietmetrix.dashboard.resources.experiment_languages_invalid
+import com.quietmetrix.dashboard.resources.experiment_languages_label
 import com.quietmetrix.dashboard.resources.experiment_limit_reached_message
-import com.quietmetrix.dashboard.resources.experiment_card_emoji
+import com.quietmetrix.dashboard.resources.experiment_match_all
+import com.quietmetrix.dashboard.resources.experiment_match_any
+import com.quietmetrix.dashboard.resources.experiment_match_mode_label
+import com.quietmetrix.dashboard.resources.experiment_mode_label
+import com.quietmetrix.dashboard.resources.experiment_mode_variants
+import com.quietmetrix.dashboard.resources.experiment_mode_visibility
 import com.quietmetrix.dashboard.resources.experiment_new
 import com.quietmetrix.dashboard.resources.experiment_none_selected
+import com.quietmetrix.dashboard.resources.experiment_review_allocation
+import com.quietmetrix.dashboard.resources.experiment_review_audience
+import com.quietmetrix.dashboard.resources.experiment_review_goal
+import com.quietmetrix.dashboard.resources.experiment_review_languages
 import com.quietmetrix.dashboard.resources.experiment_screen_label
+import com.quietmetrix.dashboard.resources.experiment_status_closed
 import com.quietmetrix.dashboard.resources.experiment_status_draft
 import com.quietmetrix.dashboard.resources.experiment_status_finished
 import com.quietmetrix.dashboard.resources.experiment_status_paused
 import com.quietmetrix.dashboard.resources.experiment_status_running
+import com.quietmetrix.dashboard.resources.experiment_status_shipped
 import com.quietmetrix.dashboard.resources.experiment_traffic_label
 import com.quietmetrix.dashboard.resources.experiment_usage_line
+import com.quietmetrix.dashboard.resources.experiment_variant_allocation_label
 import com.quietmetrix.dashboard.resources.experiment_variants_split
+import com.quietmetrix.dashboard.resources.experiment_visibility_allocation_label
+import com.quietmetrix.dashboard.resources.experiment_wizard_back
+import com.quietmetrix.dashboard.resources.experiment_wizard_countries_summary
+import com.quietmetrix.dashboard.resources.experiment_wizard_next
+import com.quietmetrix.dashboard.resources.experiment_wizard_screen_summary
+import com.quietmetrix.dashboard.resources.experiment_wizard_step
 import com.quietmetrix.dashboard.resources.experiments_title
 import com.quietmetrix.dashboard.resources.ic_experiment
 import com.quietmetrix.dashboard.resources.ic_info
+import com.quietmetrix.dashboard.resources.ic_plus
+import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.ui.components.CodeSnippetPanel
+import com.quietmetrix.dashboard.ui.components.ConfirmDialog
 import com.quietmetrix.dashboard.ui.components.ContentState
+import com.quietmetrix.dashboard.ui.components.DashboardCard
+import com.quietmetrix.dashboard.ui.components.EmojiVector
 import com.quietmetrix.dashboard.ui.components.EmptyState
+import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
+import com.quietmetrix.dashboard.ui.components.ModalFooter
+import com.quietmetrix.dashboard.ui.components.ModalFooterAction
+import com.quietmetrix.dashboard.ui.components.ModalFooterEmphasis
+import com.quietmetrix.dashboard.ui.components.ModalShell
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
 import com.quietmetrix.dashboard.ui.components.contentStateFor
 import com.quietmetrix.dashboard.ui.components.handCursor
-import com.quietmetrix.dashboard.theme.LocalExtendedColors
+import com.quietmetrix.dashboard.ui.components.responsiveDisplayStyle
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
+import com.quietmetrix.dashboard.viewmodel.DataSection
+import com.quietmetrix.dashboard.viewmodel.isLoading
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * The A/B testing "Experiments" tab: list + create/status-change (experiments are
@@ -128,35 +170,16 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
     val explainQuestion = experiment?.let { stringResource(Res.string.experiment_explain_question, it.name) }
     val activeCount = state.experiments.count { it.status in setOf("draft", "active", "paused") }
 
-    MaxWidthContainer(modifier = Modifier.fillMaxSize()) {
+    MaxWidthContainer(sizeClass = sizeClass, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    stringResource(Res.string.experiments_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                ProjectPicker(state.projects, state.currentProjectId) { viewModel.selectProject(it) }
-                WindowPicker(state.range) { viewModel.selectRange(it) }
-                IconButton(onClick = { viewModel.openExperimentsGuide() }, modifier = Modifier.handCursor()) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_info),
-                        contentDescription = stringResource(Res.string.experiment_help_content_description),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                if (state.canWriteExperiments) {
-                    OutlinedButton(onClick = { showCreateDialog = true }, modifier = Modifier.handCursor()) {
-                        Text(stringResource(Res.string.experiment_new))
-                    }
-                }
-            }
+            ExperimentsHero(
+                canWrite = state.canWriteExperiments,
+                onHelp = { viewModel.openExperimentsGuide() },
+                onCreate = { showCreateDialog = true },
+            )
 
             state.sectionErrors[DataSection.Experiments]?.let {
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
@@ -174,7 +197,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
             }
 
             if (state.experimentLimitReached) {
-                Card(
+                DashboardCard(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 ) {
@@ -190,7 +213,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                             modifier = Modifier.weight(1f),
                         )
                         TextButton(onClick = { viewModel.dismissExperimentLimitReached() }, modifier = Modifier.handCursor()) {
-                            Text(stringResource(Res.string.action_got_it), color = MaterialTheme.colorScheme.onErrorContainer)
+                            MaterialText(stringResource(Res.string.action_got_it), color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                     }
                 }
@@ -205,7 +228,7 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
                     }
                 }
                 ContentState.Empty -> {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    DashboardCard(modifier = Modifier.fillMaxWidth()) {
                         EmptyState(Res.drawable.ic_experiment, Res.string.experiment_empty, Modifier.padding(16.dp))
                     }
                     if (state.sectionErrors[DataSection.Experiments] == null) SetupInstructionsSection()
@@ -248,6 +271,60 @@ fun ExperimentsTab(viewModel: DashboardViewModel, state: DashboardState, sizeCla
             else viewModel.changeExperimentStatus(pending.experiment.key, pending.action.targetStatus!!, pending.selectedVariant)
             pendingAction = null
         }
+    }
+}
+
+/** Handoff-matched experiment intro: on-demand help eyebrow, highlighted claim, and adjacent CTA. */
+@Composable
+internal fun ExperimentsHero(canWrite: Boolean, onHelp: () -> Unit, onCreate: () -> Unit, modifier: Modifier = Modifier) {
+    val extended = LocalExtendedColors.current
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EmojiVector("🧪", Modifier.size(22.dp))
+            Text(stringResource(Res.string.experiments_title), style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Pill(text = "NEW", variant = PillVariant.Lime)
+            IconButton(onClick = onHelp, modifier = Modifier.handCursor()) {
+                Icon(painter = painterResource(Res.drawable.ic_info),
+                    contentDescription = stringResource(Res.string.experiment_help_content_description),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+        }
+        val prefix = stringResource(Res.string.experiment_hero_prefix)
+        val highlight = stringResource(Res.string.experiment_hero_highlight)
+        val hero = buildAnnotatedString {
+            append(prefix)
+            withStyle(SpanStyle(background = extended.lime, color = extended.onLime)) { append(highlight) }
+            append(".")
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val heroStyle = responsiveDisplayStyle(maxWidth)
+            if (maxWidth < 760.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(hero, style = heroStyle, color = MaterialTheme.colorScheme.onBackground)
+                    if (canWrite) NewExperimentButton(onCreate)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    Text(hero, style = heroStyle, color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f))
+                    if (canWrite) NewExperimentButton(onCreate)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewExperimentButton(onClick: () -> Unit) {
+    val extended = LocalExtendedColors.current
+    Button(
+        onClick = onClick,
+        modifier = Modifier.handCursor(),
+        colors = ButtonDefaults.buttonColors(containerColor = extended.lime, contentColor = extended.onLime),
+    ) {
+        Icon(painter = painterResource(Res.drawable.ic_plus), contentDescription = null, modifier = Modifier.size(18.dp))
+        MaterialText(stringResource(Res.string.experiment_new), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     }
 }
 
@@ -306,7 +383,7 @@ private fun ExperimentDetail(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        AssistChip(onClick = {}, label = { Text(statusLabel(experiment.status)) })
+        AssistChip(onClick = {}, label = { MaterialText(statusLabel(experiment.status)) }, modifier = Modifier.handCursor())
         if (experiment.screen != null) {
             Text(
                 stringResource(Res.string.experiment_screen_label, experiment.screen),
@@ -322,17 +399,17 @@ private fun ExperimentDetail(
             )
         }
         Text(
-            stringResource(Res.string.experiment_traffic_label, "${experiment.trafficPercent}%"),
+            experimentAllocationLabel(experiment),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         for ((index, action) in detailActions(experiment, currentExperimentResults(state, experiment)?.comparison, state.canWriteExperiments).withIndex()) {
             if (index == 0) {
-                Button(onClick = { onAction(action) }, modifier = Modifier.handCursor()) { Text(actionLabel(action)) }
+                Button(onClick = { onAction(action) }, modifier = Modifier.handCursor()) { MaterialText(actionLabel(action)) }
                 continue
             }
             TextButton(onClick = { onAction(action) }, modifier = Modifier.handCursor()) {
-                Text(
+                MaterialText(
                     actionLabel(action),
                     color = if (action == ExperimentAction.Delete) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
@@ -371,7 +448,7 @@ internal fun ExperimentsBody(
         val detailSizeClass = classifyWindow(if (split) maxWidth - CARD_LIST_WIDTH - 16.dp else maxWidth)
         val detail: @Composable (Modifier) -> Unit = { modifier ->
             if (experiment == null) {
-                Card(modifier = modifier) {
+                DashboardCard(modifier = modifier) {
                     EmptyState(Res.drawable.ic_experiment, Res.string.experiment_none_selected, Modifier.padding(16.dp))
                 }
             } else {
@@ -438,9 +515,16 @@ private fun cardStatusVariant(status: ExperimentCardStatus): PillVariant = when 
  */
 @Composable
 private fun cardMetaLine(experiment: ExperimentDto): String {
-    val traffic = stringResource(Res.string.experiment_traffic_label, "${if (experiment.status == "shipped") 100 else experiment.trafficPercent}%")
+    val traffic = experimentAllocationLabel(experiment)
     val screen = experiment.screen
     return if (screen != null) stringResource(Res.string.experiment_screen_label, screen) + " · " + traffic else traffic
+}
+
+@Composable
+private fun experimentAllocationLabel(experiment: ExperimentDto): String = when (experiment.mode) {
+    "visibility" -> stringResource(Res.string.experiment_visibility_allocation_label, "${if (experiment.status == "shipped") experiment.bPercent ?: 0 else experiment.bPercent ?: 25}%")
+    "variants" -> stringResource(Res.string.experiment_variant_allocation_label, "${if (experiment.status == "shipped") experiment.bPercent ?: 50 else experiment.bPercent ?: 50}%")
+    else -> stringResource(Res.string.experiment_traffic_label, "${if (experiment.status == "shipped") 100 else experiment.trafficPercent}%")
 }
 
 /**
@@ -501,7 +585,7 @@ private fun ExperimentCard(experiment: ExperimentDto, selected: Boolean, onClick
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.experiment_card_emoji), style = MaterialTheme.typography.titleMedium)
+                EmojiVector("🧪", Modifier.size(24.dp))
                 Text(
                     experiment.name,
                     style = MaterialTheme.typography.bodyLarge,
@@ -530,13 +614,21 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
     var screen by remember { mutableStateOf("") }
     var variantA by remember { mutableStateOf("a") }
     var variantB by remember { mutableStateOf("b") }
-    var splitText by remember { mutableStateOf("50") }
-    var trafficText by remember { mutableStateOf("100") }
+    var visibilitySplitText by remember { mutableStateOf("25") }
+    var variantSplitText by remember { mutableStateOf("50") }
     var countriesText by remember { mutableStateOf("") }
+    var languagesText by remember { mutableStateOf("") }
+    var matchMode by remember { mutableStateOf("all") }
+    var mode by remember { mutableStateOf("visibility") }
+    var goalEvent by remember { mutableStateOf("") }
+    val splitText = if (mode == "visibility") visibilitySplitText else variantSplitText
     val split = splitText.toIntOrNull() ?: -1
-    val traffic = trafficText.toIntOrNull() ?: -1
     val countryParse = parseCountryList(countriesText)
-    val valid = isExperimentFormValid(key, name, variantA, variantB, split, traffic, countriesText)
+    val languageCodes = languagesText.split(',', ' ', '\n', '\t').map { it.trim().substringBefore('-').lowercase() }.filter { it.isNotEmpty() }.distinct().sorted()
+    val languageValid = languageCodes.all { it.matches(Regex("^[a-z]{2,3}$")) }
+    val goalValid = goalEvent.isBlank() || goalEvent.trim().matches(Regex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$"))
+    val valid = isValidExperimentKey(key) && name.isNotBlank() && isValidVariantName(variantA) && isValidVariantName(variantB) &&
+        variantA != variantB && split in 0..100 && countryParse.invalidTokens.isEmpty() && languageValid && goalValid
     val basicsValid = key.isNotBlank() && name.isNotBlank()
 
     ModalShell(
@@ -553,9 +645,15 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
                         if ((step == 0 && !basicsValid) || (step > 0 && !valid)) return@ModalFooterAction
                         if (step < 2) step++ else onSubmit(CreateExperimentRequest(
                             key = key.trim(), name = name.trim(), screen = screen.trim().takeIf { it.isNotEmpty() },
-                            trafficPercent = traffic,
-                            variants = listOf(VariantDto(variantA.trim(), split), VariantDto(variantB.trim(), 100 - split)),
+                            trafficPercent = null,
+                            mode = mode,
+                            bPercent = split,
+                            variants = listOf(VariantDto(variantA.trim(), 100 - split), VariantDto(variantB.trim(), split)),
                             countries = countryParse.normalized.takeIf { it.isNotEmpty() },
+                            placementKey = screen.trim().takeIf { it.isNotEmpty() } ?: key.trim(),
+                            languages = languageCodes.takeIf { it.isNotEmpty() },
+                            matchMode = matchMode,
+                            goalEvent = goalEvent.trim().takeIf { it.isNotEmpty() },
                         ))
                     },
                 ),
@@ -569,6 +667,12 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
                     OutlinedTextField(key, { key = it }, label = { Text(stringResource(Res.string.experiment_editor_key_label)) }, placeholder = { Text(stringResource(Res.string.experiment_editor_key_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.experiment_editor_name_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(screen, { screen = it }, label = { Text(stringResource(Res.string.experiment_editor_screen_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(Res.string.experiment_mode_label), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("visibility", "variants").forEach { option ->
+                            FilterChip(selected = mode == option, onClick = { mode = option }, label = { MaterialText(stringResource(if (option == "visibility") Res.string.experiment_mode_visibility else Res.string.experiment_mode_variants)) }, modifier = Modifier.handCursor())
+                        }
+                    }
                 }
                 1 -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -576,16 +680,38 @@ private fun ExperimentCreateDialog(onDismiss: () -> Unit, onSubmit: (CreateExper
                         OutlinedTextField(variantB, { variantB = it }, label = { Text(stringResource(Res.string.experiment_editor_variant_b_label)) }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(splitText, { splitText = it }, label = { Text(stringResource(Res.string.experiment_editor_split_label)) }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(trafficText, { trafficText = it }, label = { Text(stringResource(Res.string.experiment_editor_traffic_label)) }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(splitText, { value ->
+                            val normalized = value.filter(Char::isDigit).take(3)
+                            if (mode == "visibility") visibilitySplitText = normalized else variantSplitText = normalized
+                        }, label = { Text(stringResource(Res.string.experiment_b_percent_label)) }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                     OutlinedTextField(countriesText, { countriesText = it }, label = { Text(stringResource(Res.string.experiment_editor_countries_label)) }, placeholder = { Text(stringResource(Res.string.experiment_editor_countries_hint)) }, isError = countryParse.invalidTokens.isNotEmpty(), singleLine = true, modifier = Modifier.fillMaxWidth())
                     if (countryParse.invalidTokens.isNotEmpty()) Text(stringResource(Res.string.experiment_editor_countries_invalid), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    OutlinedTextField(languagesText, { languagesText = it }, label = { Text(stringResource(Res.string.experiment_languages_label)) }, placeholder = { Text(stringResource(Res.string.experiment_languages_hint)) }, isError = !languageValid, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (!languageValid) Text(stringResource(Res.string.experiment_languages_invalid), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(Res.string.experiment_match_mode_label), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("all", "any").forEach { option ->
+                            FilterChip(selected = matchMode == option, onClick = { matchMode = option }, label = { MaterialText(stringResource(if (option == "all") Res.string.experiment_match_all else Res.string.experiment_match_any)) }, modifier = Modifier.handCursor())
+                        }
+                    }
+                    Text(stringResource(Res.string.experiment_audience_help), style = MaterialTheme.typography.bodySmall)
                 }
                 else -> {
-                    Text(experimentWizardSummary(name.trim(), key.trim(), variantA.trim(), variantB.trim(), split, traffic), style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(Res.string.experiment_review_allocation, split, 100 - split), style = MaterialTheme.typography.bodyLarge)
+                    val everyoneLabel = stringResource(Res.string.experiment_audience_everyone)
+                    val audienceDescription = buildList {
+                        if (countryParse.normalized.isNotEmpty()) add(countryParse.normalized.joinToString())
+                        if (languageCodes.isNotEmpty()) add(languageCodes.joinToString())
+                    }.joinToString(if (matchMode == "all") " AND " else " OR ").ifEmpty { everyoneLabel }
+                    Text(stringResource(Res.string.experiment_review_audience, audienceDescription), style = MaterialTheme.typography.bodyMedium)
                     if (screen.isNotBlank()) Text(stringResource(Res.string.experiment_wizard_screen_summary, screen.trim()), style = MaterialTheme.typography.bodyMedium)
                     if (countryParse.normalized.isNotEmpty()) Text(stringResource(Res.string.experiment_wizard_countries_summary, countryParse.normalized.joinToString()), style = MaterialTheme.typography.bodyMedium)
+                    if (languageCodes.isNotEmpty()) Text(stringResource(Res.string.experiment_review_languages, languageCodes.joinToString()), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(if (matchMode == "all") Res.string.experiment_match_all else Res.string.experiment_match_any), style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(goalEvent, { goalEvent = it }, label = { Text(stringResource(Res.string.experiment_goal_event_label)) }, placeholder = { Text(stringResource(Res.string.experiment_goal_event_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (!goalValid) Text(stringResource(Res.string.experiment_goal_event_invalid), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    Text(if (goalEvent.isBlank()) stringResource(Res.string.experiment_goal_exposure_only) else stringResource(Res.string.experiment_review_goal, goalEvent.trim()), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

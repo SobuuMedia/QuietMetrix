@@ -72,7 +72,7 @@ documents the equivalent `ALTER TABLE` statements for recent additions.
 
 ### This repo's own production instance
 
-`quietmetrix.getsobuu.com` is deployed via `.github/workflows/deploy-php-hosting.yml`
+`analytics.example.com` is deployed via `.github/workflows/deploy-php-hosting.yml`
 (`workflow_dispatch` only — it never runs on push, since it's a real production cutover, not a
 routine CI step). Before running it:
 

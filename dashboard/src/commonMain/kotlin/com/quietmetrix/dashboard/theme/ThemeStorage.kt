@@ -7,3 +7,9 @@ package com.quietmetrix.dashboard.theme
 expect fun saveThemeMode(mode: ThemeMode)
 expect fun getThemeMode(): ThemeMode
 expect fun resolveSystemThemeMode(): ThemeMode
+
+/** Watches system appearance changes; returns a function that removes the listener. */
+expect fun observeSystemThemeMode(onChange: (ThemeMode) -> Unit): () -> Unit
+
+internal fun parseThemeMode(raw: String?): ThemeMode =
+    raw?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.System

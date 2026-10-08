@@ -12,12 +12,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -32,10 +33,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.ic_compare
 import com.quietmetrix.dashboard.resources.state_loading
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Fraction a [KpiCard]'s container color is blended towards white while
@@ -143,9 +148,11 @@ fun KpiCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    leadingIcon: DrawableResource? = null,
     sub: String? = null,
     delta: String? = null,
     deltaPositive: Boolean = false,
+    deltaIcon: DrawableResource? = null,
     compareNote: String? = null,
     onClick: (() -> Unit)? = null,
     highlighted: Boolean = false,
@@ -158,10 +165,12 @@ fun KpiCard(
     val body: @Composable () -> Unit = {
         KpiCardContent(
             label = label,
+            leadingIcon = leadingIcon,
             value = value,
             sub = sub,
             delta = delta,
             deltaPositive = deltaPositive,
+            deltaIcon = deltaIcon,
             compareNote = compareNote,
             highlighted = highlighted,
         )
@@ -219,10 +228,12 @@ fun KpiCard(
 @Composable
 private fun KpiCardContent(
     label: String,
+    leadingIcon: DrawableResource?,
     value: String,
     sub: String?,
     delta: String?,
     deltaPositive: Boolean,
+    deltaIcon: DrawableResource?,
     compareNote: String?,
     highlighted: Boolean = false,
 ) {
@@ -233,13 +244,19 @@ private fun KpiCardContent(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = mutedColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (leadingIcon != null) Icon(
+                painterResource(leadingIcon), contentDescription = null,
+                tint = Color.Unspecified, modifier = Modifier.size(22.dp),
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = mutedColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Row(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -249,6 +266,7 @@ private fun KpiCardContent(
                 Pill(
                     text = delta,
                     variant = if (deltaPositive) PillVariant.Lime else PillVariant.Neutral,
+                    leadingIcon = deltaIcon,
                 )
             }
         }
@@ -264,11 +282,12 @@ private fun KpiCardContent(
                 color = extended.lavender.copy(alpha = 0.18f),
                 shape = QmShapeTokens.chip,
             ) {
-                Text(
-                    "⇄ $compareNote",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) {
+                    Icon(painterResource(Res.drawable.ic_compare), contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    Text(compareNote, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

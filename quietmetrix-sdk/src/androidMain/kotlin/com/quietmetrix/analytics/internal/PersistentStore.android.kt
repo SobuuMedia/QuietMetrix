@@ -17,6 +17,10 @@ internal class AndroidPersistentStore(private val prefix: String) : PersistentSt
     }
 
     override fun get(key: String): String? = prefs.getString("$prefix$key", null)
-    override fun set(key: String, value: String) = prefs.edit().putString("$prefix$key", value).apply()
+    override fun set(key: String, value: String) {
+        check(prefs.edit().putString("$prefix$key", value).commit()) {
+            "Could not durably persist QuietMetrix state"
+        }
+    }
     override fun remove(key: String) = prefs.edit().remove("$prefix$key").apply()
 }

@@ -2,23 +2,25 @@ package com.quietmetrix.dashboard.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.confirm_dialog_cancel
 import com.quietmetrix.dashboard.theme.ExtendedColors
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * The confirm button's label and fill color for [ConfirmDialog], resolved
@@ -102,7 +104,7 @@ fun ConfirmDialog(
         shape = QmShapeTokens.modal,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(emoji, fontSize = 44.sp)
+                EmojiVector(emoji, Modifier.size(44.dp))
                 Text(title, style = MaterialTheme.typography.headlineLarge)
             }
         },
@@ -110,17 +112,19 @@ fun ConfirmDialog(
         confirmButton = {
             Button(
                 onClick = onConfirm,
+                modifier = Modifier.handCursor(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = buttonSpec.containerColor,
                     contentColor = extended.onLime,
                 ),
-            ) { Text(buttonSpec.label) }
+            ) { MaterialText(buttonSpec.label) }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
+                modifier = Modifier.handCursor(),
                 colors = ButtonDefaults.textButtonColors(containerColor = extended.chipFill),
-            ) { Text(stringResource(Res.string.confirm_dialog_cancel)) }
+            ) { MaterialText(stringResource(Res.string.confirm_dialog_cancel)) }
         },
     )
 }

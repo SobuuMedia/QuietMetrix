@@ -41,19 +41,19 @@ class VariantAssignerTest {
     }
 
     @Test
-    fun assign_countryRequired_deviceCountryNull_isNone() {
+    fun assign_countryRequired_countryCodeNull_isNone() {
         val s = spec(countries = listOf("ES"))
         assertEquals(NONE_VARIANT, VariantAssigner.assign(s, "qm_bkt_0001", null))
     }
 
     @Test
-    fun assign_countryRequired_deviceCountryNotInList_isNone() {
+    fun assign_countryRequired_countryCodeNotInList_isNone() {
         val s = spec(countries = listOf("ES"))
         assertEquals(NONE_VARIANT, VariantAssigner.assign(s, "qm_bkt_0001", "FR"))
     }
 
     @Test
-    fun assign_countryRequired_deviceCountryInList_proceedsNormally() {
+    fun assign_countryRequired_countryCodeInList_proceedsNormally() {
         val s = spec(countries = listOf("ES"), traffic = 100)
         assertTrue(VariantAssigner.assign(s, "qm_bkt_0001", "ES") != NONE_VARIANT)
     }

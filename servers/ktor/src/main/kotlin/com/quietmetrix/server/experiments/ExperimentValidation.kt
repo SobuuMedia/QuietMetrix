@@ -43,8 +43,10 @@ object ExperimentValidation {
                 if (v.name == NONE_VARIANT) {
                     errors.add("variant name cannot be '$NONE_VARIANT'")
                 }
-                if (v.weight < 1 || v.weight > 99) {
-                    errors.add("variant '${v.name}' weight must be between 1 and 99")
+                val minWeight = if (definition.mode == "legacy") 1 else 0
+                val maxWeight = if (definition.mode == "legacy") 99 else 100
+                if (v.weight < minWeight || v.weight > maxWeight) {
+                    errors.add("variant '${v.name}' weight must be between $minWeight and $maxWeight")
                 }
             }
             if (a.name == b.name) {

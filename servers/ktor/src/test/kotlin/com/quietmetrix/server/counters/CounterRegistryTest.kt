@@ -103,6 +103,7 @@ class CounterRegistryTest {
             "search_zero_result" to mapOf("screen" to "Library"),
             "friction" to mapOf("screen" to "Checkout", "kind" to "rage_tap"),
             "experiment" to mapOf("exp" to "checkout_cta", "variant" to "b", "action" to "impression"),
+            "unique_window_v2" to mapOf("scope_kind" to "project", "scope_key" to "all", "days" to "7", "end_day" to "2026-10-04"),
         )
         for ((metric, dims) in examples) {
             val result = CounterRegistry.validate(metric, dims)

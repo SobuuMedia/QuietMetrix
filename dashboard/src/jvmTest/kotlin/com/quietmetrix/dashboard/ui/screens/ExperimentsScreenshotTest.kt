@@ -17,37 +17,43 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ApiUser
-import com.quietmetrix.dashboard.viewmodel.DashboardState
+import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.api.ExperimentResultsResponse
 import com.quietmetrix.dashboard.api.ExperimentVariantResultDto
-import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.api.VariantDto
 import com.quietmetrix.dashboard.testutil.assertMatchesGolden
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
 import com.quietmetrix.dashboard.theme.ThemeMode
+import com.quietmetrix.dashboard.viewmodel.DashboardState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Screenshot-golden coverage for Task 30's Experiments card list (`ExperimentsScreen.kt`):
- * the new `ExperimentCardList`/`ExperimentCard` composables that replace the old
- * `ExperimentPicker` dropdown.
- *
- * **Golden derivation** (`experiments/card-list-*.png`): real-crop derivation checked and
- * REJECTED — `_source/08-experiments-normal.png`'s only visible Experiments content is the
- * header nav + the "🧪 Experiments NEW" eyebrow and the 3-line H1 ("Show two versions of a
- * screen piece, and let your users pick the winner."); the card-list/detail region is outside the
- * usable frame: only a clipped sliver of a list card appears at the bottom, beneath the
- * "MOCKUP ONLY" toolbar, while the "Ask your data" drawer covers the right pane — the same rejection
- * already documented for `funnels/switcher-*.png` and `funnels/cards-*.png` (Task 28) and
- * `retention/cards-normal.png` (Task 24). Derived instead directly from the real composable
- * render with fixture `ExperimentDto`s covering all 4 real statuses (active/draft/paused/ended),
- * `QuietMetrixTheme(Dark)`, `Modifier.width(320.dp)` (the sidebar width used in `ExperimentsTab`),
- * default 1024x768 `runComposeUiTest` canvas, recorded with `-Pgolden.record=true`.
+ * Component screenshot and interaction regression coverage for Experiments. The handoff's
+ * 10.31.06/10.31.11/10.31.14 PNGs are full-resolution design-tool captures; these component
+ * fixtures are regression baselines, not measured reference crops or whole-screen parity proof.
  */
 @OptIn(ExperimentalTestApi::class)
 class ExperimentsScreenshotTest {
+
+    /** First visit shows the live screen and a capable editor can open the real creation flow. */
+    @Suppress("DEPRECATION")
+    @Test
+    fun heroShowsReferenceHeadlineAndCreateActionOnlyForWriters() = runComposeUiTest {
+        var creates = 0
+        setContent {
+            QuietMetrixTheme(ThemeMode.Dark) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
+                    ExperimentsHero(canWrite = true, onHelp = {}, onCreate = { creates++ })
+                }
+            }
+        }
+        onNodeWithText("Experiments", substring = true).assertExists()
+        onNodeWithText("pick the winner", substring = true).assertExists()
+        onNodeWithText("New experiment").performClick()
+        assertEquals(1, creates)
+    }
 
     /** Creates a real-shaped experiment fixture for card-list rendering. */
     private fun experiment(

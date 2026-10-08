@@ -16,6 +16,14 @@ data class ExperimentDefinition(
     val trafficPercent: Int,
     val variants: List<VariantSpec>,
     val countries: List<String>?,
+    val mode: String = "legacy",
+    val placementKey: String? = null,
+    val revision: Int = 0,
+    val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    val matchMode: String = "all",
+    val goalEvent: String? = null,
+    val iconKey: String? = null,
 )
 
 /** Wire shape of one experiment in dashboard-facing responses. */
@@ -32,6 +40,14 @@ data class ExperimentDto(
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("ended_at") val endedAt: String? = null,
     @SerialName("selected_variant") val selectedVariant: String? = null,
+    val mode: String = "legacy",
+    @SerialName("placement_key") val placementKey: String? = null,
+    val revision: Int = 0,
+    @SerialName("b_percent") val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String = "all",
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("icon_key") val iconKey: String? = null,
 )
 
 fun ExperimentRecord.toDto() = ExperimentDto(
@@ -46,6 +62,14 @@ fun ExperimentRecord.toDto() = ExperimentDto(
     startedAt = startedAt,
     endedAt = endedAt,
     selectedVariant = selectedVariant,
+    mode = mode,
+    placementKey = placementKey,
+    revision = revision,
+    bPercent = bPercent,
+    languages = languages,
+    matchMode = matchMode,
+    goalEvent = goalEvent,
+    iconKey = iconKey,
 )
 
 /** `GET /api/v1/projects/{id}/experiments` response. `limit` is null when unlimited. */
@@ -61,6 +85,13 @@ data class CreateExperimentRequest(
     @SerialName("traffic_percent") val trafficPercent: Int? = null,
     val variants: List<VariantSpec>? = null,
     val countries: List<String>? = null,
+    val mode: String? = null,
+    @SerialName("placement_key") val placementKey: String? = null,
+    @SerialName("b_percent") val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String? = null,
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("icon_key") val iconKey: String? = null,
 )
 
 /** Default variant pair used when [CreateExperimentRequest.variants] is omitted. */
@@ -76,6 +107,13 @@ data class UpdateExperimentRequest(
     @SerialName("selected_variant") val selectedVariant: String? = null,
     val variants: List<VariantSpec>? = null,
     val countries: List<String>? = null,
+    val mode: String? = null,
+    @SerialName("placement_key") val placementKey: String? = null,
+    @SerialName("b_percent") val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String? = null,
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("icon_key") val iconKey: String? = null,
 )
 
 /** `GET /api/v1/experiments/config` response — the minimal, SDK-facing config shape. */
@@ -96,4 +134,48 @@ fun ExperimentRecord.toConfigDto() = ExperimentConfigDto(
     trafficPercent = if (status == "shipped") 100 else trafficPercent,
     variants = if (status == "shipped") variants.map { it.copy(weight = if (it.name == selectedVariant) 100 else 0) } else variants,
     countries = if (status == "shipped") null else countries,
+)
+
+/** Versioned SDK payload for visibility/targeting experiments. The legacy v1 DTO remains intact. */
+@Serializable
+data class ExperimentConfigV2Response(val schema: Int = 2, val experiments: List<ExperimentConfigV2Dto>)
+
+@Serializable
+data class ExperimentConfigV2Dto(
+    val key: String,
+    val revision: Int,
+    val mode: String,
+    val status: String,
+    @SerialName("placement_key") val placementKey: String? = null,
+    @SerialName("b_percent") val bPercent: Int,
+    val variants: List<ExperimentVariantV2Dto>,
+    val audience: ExperimentAudienceDto,
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("selected_variant") val selectedVariant: String? = null,
+)
+
+@Serializable
+data class ExperimentVariantV2Dto(val id: String, val label: String, val weight: Int)
+
+@Serializable
+data class ExperimentAudienceDto(
+    val countries: List<String>? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String = "all",
+)
+
+fun ExperimentRecord.toConfigV2Dto() = ExperimentConfigV2Dto(
+    key = experimentKey,
+    revision = revision,
+    mode = mode,
+    status = status,
+    placementKey = placementKey,
+    bPercent = if (status == "shipped") if (selectedVariant?.let { name -> variants.indexOfFirst { it.name == name } } == 1) 100 else 0 else (bPercent ?: 50),
+    variants = variants.mapIndexed { i, v ->
+        val id = if (i == 0) "a" else "b"
+        ExperimentVariantV2Dto(id, v.name, if (status == "shipped") if (id == selectedVariant) 100 else 0 else v.weight)
+    },
+    audience = ExperimentAudienceDto(countries, languages, matchMode),
+    goalEvent = goalEvent,
+    selectedVariant = selectedVariant?.let { name -> variants.indexOfFirst { it.name == name }.takeIf { it >= 0 }?.let { if (it == 0) "a" else "b" } },
 )

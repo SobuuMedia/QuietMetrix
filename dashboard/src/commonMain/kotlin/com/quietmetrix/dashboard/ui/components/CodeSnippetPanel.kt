@@ -7,9 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,6 +21,8 @@ import com.quietmetrix.dashboard.api.ExperimentDto
 import com.quietmetrix.dashboard.resources.Res
 import com.quietmetrix.dashboard.resources.experiment_explain_action
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /** SDK language shown by [CodeSnippetPanel]. */
 internal enum class SnippetLanguage { Kotlin, Swift, JavaScript }
@@ -44,18 +44,18 @@ internal fun experimentSnippet(language: SnippetLanguage, experiment: Experiment
 @Composable
 internal fun CodeSnippetPanel(experiment: ExperimentDto, onExplain: () -> Unit, modifier: Modifier = Modifier) {
     var language by remember(experiment.key) { mutableStateOf(SnippetLanguage.Kotlin) }
-    Card(modifier.fillMaxWidth()) {
+    DashboardCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 SnippetLanguage.entries.forEach { option ->
-                    TextButton(onClick = { language = option }) {
-                        Text(if (language == option) "• ${option.label}" else option.label)
+                    TextButton(onClick = { language = option }, modifier = Modifier.handCursor()) {
+                        MaterialText(if (language == option) "• ${option.label}" else option.label)
                     }
                 }
             }
             Text(experimentSnippet(language, experiment), Modifier.horizontalScroll(rememberScrollState()),
                 style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-            TextButton(onClick = onExplain) { Text(stringResource(Res.string.experiment_explain_action)) }
+            if (LocalAiAccess.current.enabled) TextButton(onClick = onExplain, enabled = LocalAiAccess.current.available, modifier = Modifier.handCursor()) { MaterialText(stringResource(Res.string.experiment_explain_action)) }
         }
     }
 }

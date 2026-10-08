@@ -26,16 +26,23 @@ data class UpdateProjectRequest(
 @Serializable
 data class ProjectMemberResponse(
     val id: String,
+    @SerialName("project_id")
     val projectId: String,
+    @SerialName("user_id")
     val userId: String,
     val email: String,
-    val role: String,
+    @SerialName("user_role")
+    val userRole: String,
+    @SerialName("member_role")
+    val memberRole: String,
+    @SerialName("created_at")
     val createdAt: String,
 )
 
 @Serializable
 data class ProjectMemberListResponse(
     val members: List<ProjectMemberResponse>,
+    @SerialName("total")
     val total: Int,
 )
 

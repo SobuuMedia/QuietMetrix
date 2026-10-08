@@ -14,8 +14,4 @@ expect object TokenStorage {
     fun saveLastProjectId(projectId: String)
     fun getLastProjectId(): String?
     fun clearLastProjectId()
-    /** Whether the Experiments setup guide has been dismissed once already. Deliberately NOT
-     *  cleared by logout() — it's cosmetic per-browser UI state, not session state. */
-    fun saveExperimentsGuideSeen()
-    fun isExperimentsGuideSeen(): Boolean
 }

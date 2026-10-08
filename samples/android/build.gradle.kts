@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.androidApplication)
+    alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.composeMultiplatform)
 }
 
 android {
@@ -20,6 +22,10 @@ android {
         }
     }
 
+    buildFeatures {
+        compose = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -28,6 +34,12 @@ android {
 
 dependencies {
     implementation(project(":quietmetrix-sdk"))
+    implementation(project(":quietmetrix-sdk-compose"))
     implementation(libs.androidx.core)
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation(compose.runtime)
+    implementation(compose.foundation)
+    implementation(compose.material3)
+    implementation(compose.ui)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }

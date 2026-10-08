@@ -3,10 +3,12 @@ package com.quietmetrix.server.persistence
 import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -16,7 +18,7 @@ class UserInviteTest {
 
     private fun repo(name: String): UserRepository {
         val db = Database.connect("jdbc:h2:mem:$name;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers) }
+        transaction(db) { SchemaUtils.create(Users, Projects, ProjectMembers, com.quietmetrix.server.persistence.tables.AuthSessions) }
         return UserRepository(db)
     }
 
@@ -47,6 +49,23 @@ class UserInviteTest {
     fun `bogus invite token returns null`() {
         val repo = repo("invite2")
         assertNull(repo.findByInviteToken("does-not-exist"))
+    }
+
+    @Test
+    fun `recovery revokes sessions rejects old password and cannot be replayed`() {
+        val repo = repo("recovery1")
+        val id = repo.create("recover@test.com", "oldpassword1")
+        val oldHash = repo.findById(id)!!["passwordHash"] as String
+        assertTrue(repo.createSession(id, "old-session", "refresh-old", oldHash))
+        val token = repo.createRecovery(id)!!
+        assertNotNull(repo.validatePassword("recover@test.com", "oldpassword1"))
+        assertTrue(repo.acceptInvite(id, "newpassword1", token))
+        assertFalse(repo.sessionActive(id, "old-session"))
+        assertFalse(repo.createSession(id, "racing-session", "refresh-racing", oldHash))
+        assertNull(repo.validatePassword("recover@test.com", "oldpassword1"))
+        assertNotNull(repo.validatePassword("recover@test.com", "newpassword1"))
+        assertFalse(repo.acceptInvite(id, "replayedpassword", token))
+        assertNotNull(repo.validatePassword("recover@test.com", "newpassword1"))
     }
 
     @Test

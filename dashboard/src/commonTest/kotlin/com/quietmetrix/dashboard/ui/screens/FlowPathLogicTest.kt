@@ -11,8 +11,7 @@ import kotlin.test.assertTrue
 /**
  * Pure-logic coverage for Task 22's Flow breadcrumb ([FlowScreen.kt]'s extraction target):
  * ranking "Start from" screens, building a screen's next-step distribution, extending the
- * breadcrumb path up to [FLOW_PATH_MAX_DEPTH] deep, and the honest no-op platform filter — see
- * [filterTransitionsByPlatform]'s KDoc for the data-honesty finding behind that last one.
+ * breadcrumb path up to [FLOW_PATH_MAX_DEPTH] deep.
  */
 class FlowPathLogicTest {
 
@@ -39,6 +38,12 @@ class FlowPathLogicTest {
     @Test
     fun topStartScreensEmptyWhenNoTransitions() {
         assertEquals(emptyList(), topStartScreens(emptyList()))
+    }
+
+    @Test
+    fun defaultFlowPathStartsAtTheHighestVolumeRootAndWaitsForUserPathSelection() {
+        assertEquals(listOf("home"), defaultFlowPath(sample))
+        assertEquals(emptyList(), defaultFlowPath(emptyList()))
     }
 
     // -- nextStepOptions -------------------------------------------------------------
@@ -110,18 +115,6 @@ class FlowPathLogicTest {
     @Test
     fun buildFlowBreadcrumbEmptyPathIsEmpty() {
         assertEquals(emptyList(), buildFlowBreadcrumb(emptyList(), sample))
-    }
-
-    // -- filterTransitionsByPlatform ------------------------------------------------------
-
-    @Test
-    fun filterTransitionsByPlatformIsAnHonestNoOpForEveryPlatformSinceTheBackendTracksNoPlatformDimension() {
-        // See the function's KDoc: `Transition`/server `TransitionItem` carry no platform field,
-        // so there is no real per-platform split to compute — this asserts the function returns
-        // the input unchanged for every platform rather than fabricating one.
-        FlowPlatform.entries.forEach { platform ->
-            assertEquals(sample, filterTransitionsByPlatform(sample, platform))
-        }
     }
 
     // -- computePlatformStatTiles (Task 23: Flow 3-card row) --------------------------------

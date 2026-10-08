@@ -1,5 +1,6 @@
 package com.quietmetrix.analytics.internal.counters
 
+import com.quietmetrix.analytics.internal.Gate
 import com.quietmetrix.analytics.internal.ScreenTracker
 
 /**
@@ -21,6 +22,7 @@ internal object FrictionCounterBridge {
     private var detector = RageTapDetector()
 
     suspend fun onTap(x: Float, y: Float, timestampMs: Long) {
+        if (!Gate.shouldTrack()) return
         if (!detector.onTap(x, y, timestampMs)) return
         val screen = ScreenTracker.currentScreenName() ?: "unknown"
         MetricGateway.record("friction", mapOf("screen" to screen, "kind" to "rage_tap"))

@@ -14,14 +14,14 @@ class GateTest {
     @BeforeTest
     fun setUp() {
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
     }
 
     @AfterTest
     fun tearDown() {
         QuietMetrix.stop()
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
     }
 
     @Test

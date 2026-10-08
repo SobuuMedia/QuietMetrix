@@ -11,6 +11,8 @@ import com.quietmetrix.server.funnels.FunnelRangeDto
 import com.quietmetrix.server.funnels.FunnelRegistrationService
 import com.quietmetrix.server.funnels.FunnelResponse
 import com.quietmetrix.server.funnels.FunnelResultsResponse
+import com.quietmetrix.server.funnels.FunnelSdkConfigResponse
+import com.quietmetrix.server.funnels.FunnelSdkDefinitionDto
 import com.quietmetrix.server.funnels.FunnelStepCell
 import com.quietmetrix.server.funnels.FunnelStepResult
 import com.quietmetrix.server.funnels.FunnelStepResultDto
@@ -24,18 +26,19 @@ import com.quietmetrix.server.funnels.RegisterFunnelsResponse
 import com.quietmetrix.server.funnels.UpdateFunnelRequest
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
+import com.quietmetrix.server.persistence.CounterV2Repository
 import com.quietmetrix.server.persistence.FunnelRecord
 import com.quietmetrix.server.persistence.FunnelRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.ratelimit.RateLimiter
+import com.quietmetrix.server.util.clientIp
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.header
-import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
@@ -45,6 +48,7 @@ import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.inject
+import com.quietmetrix.server.util.receiveBounded as receive
 
 fun Routing.configureFunnelRoutes() {
     val funnelRepo by inject<FunnelRepository>()
@@ -52,6 +56,7 @@ fun Routing.configureFunnelRoutes() {
     val memberRepo by inject<ProjectMemberRepository>()
     val registrationService by inject<FunnelRegistrationService>()
     val counterRepo by inject<CounterRepository>()
+    val counterV2Repo by inject<CounterV2Repository>()
     val rateLimiter by inject<RateLimiter>()
     val accessTokenRepo by inject<AccessTokenRepository>()
     val config by inject<AppConfig>()
@@ -135,6 +140,7 @@ fun Routing.configureFunnelRoutes() {
         countMode = countMode,
         identityScope = identityScope,
         correlationProperty = correlationProperty,
+        revision = revision,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
@@ -194,9 +200,13 @@ fun Routing.configureFunnelRoutes() {
                 val toJava = window.toInstant
                 val fromDay = window.fromDay
                 val toDay = window.toDay
-                val cells = counterRepo.readCells(projectId, "funnel_step", fromDay, toDay)
-                    .filter { it.dims["f"] == funnel.funnelKey }
-                    .mapNotNull { cell -> cell.dims["step"]?.toIntOrNull()?.let { step -> FunnelStepCell(step, cell.n) } }
+                val cells = if (funnel.source == "dashboard" && funnel.revision > 0) {
+                    counterV2Repo.readDashboardFunnelSteps(projectId, funnel.funnelKey, funnel.revision, fromDay, toDay)
+                } else {
+                    counterRepo.readCells(projectId, "funnel_step", fromDay, toDay)
+                        .filter { it.dims["f"] == funnel.funnelKey && it.dims["rev"] == funnel.revision.toString() }
+                        .mapNotNull { cell -> cell.dims["step"]?.toIntOrNull()?.let { step -> FunnelStepCell(step, cell.n) } }
+                }
 
                 val analyzed = FunnelCounterAnalyzer.analyze(
                     steps = funnel.steps,
@@ -206,7 +216,7 @@ fun Routing.configureFunnelRoutes() {
 
                 call.respond(
                     FunnelResultsResponse(
-                        funnel = FunnelSummaryDto(funnel.funnelKey, funnel.name, funnel.windowSeconds, funnel.steps, funnel.countMode, funnel.identityScope, funnel.correlationProperty),
+                        funnel = FunnelSummaryDto(funnel.funnelKey, funnel.name, funnel.windowSeconds, funnel.steps, funnel.countMode, funnel.identityScope, funnel.correlationProperty, funnel.revision),
                         range = FunnelRangeDto(fromJava.toString(), toJava.toString()),
                         countedBy = analyzed.countedBy,
                         entered = analyzed.entered,
@@ -240,7 +250,8 @@ fun Routing.configureFunnelRoutes() {
 
                 val request = try {
                     call.receive<CreateFunnelRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Request body is not valid JSON"))
                     return@post
                 }
@@ -289,7 +300,8 @@ fun Routing.configureFunnelRoutes() {
 
                 val request = try {
                     call.receive<UpdateFunnelRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Request body is not valid JSON"))
                     return@patch
                 }
@@ -364,7 +376,8 @@ fun Routing.configureFunnelRoutes() {
 
         val request = try {
             call.receive<RegisterFunnelsRequest>()
-        } catch (_: Exception) {
+        } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Request body is not valid JSON"))
             return@post
         }
@@ -384,5 +397,29 @@ fun Routing.configureFunnelRoutes() {
         }
         val result = registrationService.register(projectId, definitions)
         call.respond(RegisterFunnelsResponse(result.registered, result.skippedLocked, result.rejected))
+    }
+
+    get("/api/v2/sdk/funnels") {
+        val apiKey = call.request.header("X-QM-Api-Key")
+        if (apiKey.isNullOrBlank()) {
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Invalid or missing API key"))
+            return@get
+        }
+        val projectId = projectRepo.validateApiKey(apiKey)
+        if (projectId == null) {
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Invalid or missing API key"))
+            return@get
+        }
+        val clientIp = call.clientIp(config.trustedProxies)
+        if (config.ipRateLimit.enabled && !rateLimiter.tryConsume("funnels:config:ip:$clientIp")) {
+            call.response.header("Retry-After", "60")
+            call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("rate_limit_exceeded", "IP rate limit exceeded"))
+            return@get
+        }
+        call.response.header("Cache-Control", "private, max-age=300")
+        val definitions = funnelRepo.listActive(projectId)
+            .filter { it.source == "dashboard" && it.revision > 0 }
+            .map { FunnelSdkDefinitionDto(it.funnelKey, it.revision, it.steps, it.windowSeconds, it.countMode, it.identityScope, it.correlationProperty) }
+        call.respond(FunnelSdkConfigResponse(funnels = definitions))
     }
 }

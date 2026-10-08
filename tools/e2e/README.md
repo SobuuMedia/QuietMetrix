@@ -1,31 +1,17 @@
-# E2E Contract Tests
+# HTTP contract tests
 
-End-to-end contract tests that spin up each backend (Ktor, PHP) via Docker Compose,
-run the Postman collection against them, then tear everything down.
+`./gradlew :tools:e2e:e2eTest` (or `bash tools/e2e/run-e2e.sh`) checks both backends
+using Newman. Provision disposable Ktor and PHP instances and test projects first;
+set `QM_E2E_KTOR_URL`, `QM_E2E_KTOR_API_KEY`, `QM_E2E_PHP_URL`, and
+`QM_E2E_PHP_API_KEY`. Never point these write tests at customer projects.
 
-## Prerequisites
+The runner fails when prerequisites, readiness, or assertions fail. It does not destroy
+Docker volumes or silently skip a missing backend. The collection uses current aggregate
+schema-2 ingestion and verifies stable receipt replay.
 
-- [Docker](https://docs.docker.com/get-docker/) (running)
-- [newman](https://www.npmjs.com/package/newman) — install with `npm install -g newman`
-
-## Running
-
-**Via Gradle** (from the project root):
-
-```
-./gradlew e2eTest
-```
-
-**Via bash directly** (from `tools/e2e/`):
-
-```
-bash run-e2e.sh
-```
-
-## How it works
-
-1. Starts the Ktor stack (`docker-compose.ktor.yml`) and waits for `/api/v1/health` to return 200.
-2. Runs the Postman collection located at `tools/contract-tests/quietmetrix.postman_collection.json`.
-3. Tears down the Ktor stack.
-4. Repeats steps 1–3 for the PHP stack (`docker-compose.php.yml`).
-5. Prints a summary (pass/fail counts) and exits with a non-zero code if any backend failed.
+Build a current Ktor image, then run
+`QM_PROOF_IMAGE=quietmetrix-ktor python3 tools/e2e/production-deployment-proof.py`.
+This creates a randomly named, disposable production Compose stack and checks a locally
+trusted HTTPS certificate, private backend port, bounded database-outage readiness,
+recovery, and a quiesced backup/restore checksum comparison. It removes its own stack
+and volumes. It does not prove public-domain ACME issuance or configure host trust.

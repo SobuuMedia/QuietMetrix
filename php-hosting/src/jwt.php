@@ -20,7 +20,7 @@ function _b64url_decode(string $data): string {
  * Encode a JWT for the given subject (user id) and role.
  * `iss`, `aud`, `iat`, `exp` are populated automatically.
  */
-function jwt_encode(string $subject, string $email, string $role, string $secret): string {
+function jwt_encode(string $subject, string $email, string $role, string $secret, ?string $sessionId = null): string {
     $header  = _b64url_encode(json_encode(['typ' => 'JWT', 'alg' => 'HS256']));
     $payload = _b64url_encode(json_encode([
         'iss'   => JWT_ISSUER,
@@ -28,6 +28,8 @@ function jwt_encode(string $subject, string $email, string $role, string $secret
         'sub'   => $subject,
         'email' => $email,
         'role'  => $role,
+        'type'  => 'access',
+        'sessionId' => $sessionId,
         'iat'   => time(),
         'exp'   => time() + JWT_EXPIRY_HOURS * 3600,
     ]));
@@ -40,7 +42,7 @@ function jwt_encode(string $subject, string $email, string $role, string $secret
  * Encode a refresh JWT. Has a longer expiry (2 days by default) and a `type`
  * claim set to "refresh" so endpoints can distinguish it from an access token.
  */
-function jwt_encode_refresh(string $subject, string $secret): string {
+function jwt_encode_refresh(string $subject, string $secret, ?string $sessionId = null): string {
     $refreshDays = defined('JWT_REFRESH_EXPIRY_DAYS') ? JWT_REFRESH_EXPIRY_DAYS : 2;
     $header  = _b64url_encode(json_encode(['typ' => 'JWT', 'alg' => 'HS256']));
     $payload = _b64url_encode(json_encode([
@@ -48,6 +50,8 @@ function jwt_encode_refresh(string $subject, string $secret): string {
         'aud'   => JWT_AUDIENCE,
         'sub'   => $subject,
         'type'  => 'refresh',
+        'sessionId' => $sessionId,
+        'jti' => bin2hex(random_bytes(16)),
         'iat'   => time(),
         'exp'   => time() + $refreshDays * 24 * 3600,
     ]));

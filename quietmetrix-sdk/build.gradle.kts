@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.6.0"
+version = "0.7.0"
 
 kotlin {
     compilerOptions {
@@ -50,6 +50,8 @@ kotlin {
         target.binaries.framework {
             baseName = "QuietMetrix"
             isStatic = true
+            binaryOption("bundleShortVersionString", project.version.toString())
+            binaryOption("bundleVersion", project.version.toString())
             xcf.add(this)
         }
     }
@@ -133,9 +135,26 @@ val prepareNpmPackage by tasks.registering {
         require(pkgJson.exists()) {
             "package.json not found at ${pkgJson.path}; did jsBrowserProductionLibraryDistribution run?"
         }
-        val patched = pkgJson.readText()
+        var patched = pkgJson.readText()
             .replace(Regex("\"name\"\\s*:\\s*\"[^\"]*\""), "\"name\": \"$npmPackageName\"")
+            .replace(Regex("\"version\"\\s*:\\s*\"[^\"]*\""), "\"version\": \"${project.version}\"")
+        val npmMetadata = mapOf(
+            "license" to "\"MIT\"",
+            "description" to "\"Consent-aware aggregate analytics SDK for web and apps\"",
+            "homepage" to "\"https://github.com/SobuuMedia/QuietMetrix\"",
+            "repository" to "{\"type\":\"git\",\"url\":\"git+https://github.com/SobuuMedia/QuietMetrix.git\"}",
+        )
+        for ((key, value) in npmMetadata) {
+            if (!Regex("\"$key\"\\s*:").containsMatchIn(patched)) {
+                patched = patched.replaceFirst("{", "{\n  \"$key\": $value,")
+            }
+        }
         pkgJson.writeText(patched)
+        require(rootProject.file("LICENSE").readText().isNotBlank()) { "The release license must not be empty" }
+        rootProject.file("LICENSE").copyTo(npmDistDir.get().file("LICENSE").asFile, overwrite = true)
+        npmDistDir.get().file("README.md").asFile.writeText(
+            project.file("README.md").readText().replace("(../docs/", "(https://github.com/SobuuMedia/QuietMetrix/blob/sdk-v${project.version}/docs/")
+        )
         logger.lifecycle("npm package '$npmPackageName' prepared at ${npmDistDir.get().asFile.path}")
     }
 }
@@ -199,6 +218,10 @@ afterEvaluate {
 
         repositories {
             mavenLocal()
+            maven {
+                name = "releaseStaging"
+                url = rootProject.layout.buildDirectory.dir("sdk-release/maven").get().asFile.toURI()
+            }
 
             val ossrhUsername = System.getenv("OSSRH_USERNAME") ?: findProperty("ossrhUsername") as? String
             val ossrhToken = System.getenv("OSSRH_TOKEN")
@@ -236,10 +259,10 @@ afterEvaluate {
     }
 
     // KMP creates one signing task per publication, but Gradle does not automatically register
-    // those sign*Publication tasks as dependencies of the publish*ToSonatype/MavenLocal tasks that
-    // consume the generated .asc signatures. Without this, Gradle fails with an "implicit
-    // dependency" validation error. Make every publish task depend on every signing task.
+    // those sign*Publication tasks as dependencies of publication tasks. Depend on the owning
+    // signature; sibling ordering above avoids shared signing-output validation errors.
     tasks.withType<AbstractPublishToMaven>().configureEach {
-        dependsOn(tasks.withType<Sign>())
+        val publicationName = name.removePrefix("publish").substringBefore("PublicationTo")
+        dependsOn(tasks.withType<Sign>().matching { it.name == "sign${publicationName}Publication" })
     }
 }

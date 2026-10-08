@@ -1,38 +1,28 @@
-# Operations: Rate Limits
+# Operations: request budgets and rate limits
 
-## Default Limits (Self-hosted)
+Both backends bound aggregate bodies to 1 MiB and envelopes to 512 items. Hosted
+startup requires rate limiting. Login uses shared database limits of 20 attempts per
+source IP and five per account in a minute. Public API traffic has a shared IP budget
+of at least 120 requests per minute in Ktor, and 120 in PHP. Only explicitly trusted
+proxy addresses can supply the forwarded source IP.
 
-By default, rate limiting is disabled in self-hosted installations. You can enable it via environment variables:
+Ktor ingestion additionally uses bounded in-process token buckets. Configure
+`quietmetrix.rateLimit.enabled`, `requestsPerSecond`, and `burstPerMinute` in
+`application.conf`; configure `quietmetrix.ipRateLimit` there for source-IP limits.
+PHP uses shared database minute windows and reads `RATE_LIMIT_ENABLED`,
+`RATE_LIMIT_RPS`, `RATE_LIMIT_BURST`, `INGEST_IP_ENABLED`, `INGEST_IP_RPS`, and
+`INGEST_IP_BURST` from its protected configuration file. The PHP minute budget is
+`min(burst, rps * 60)`; APCu is not required. Neither backend receives an install ID
+for aggregate ingestion, so there is no per-install server limiter.
 
-**Ktor** (`application.conf`):
-```
-quietmetrix.rateLimit.enabled = true
-quietmetrix.rateLimit.requestsPerSecond = 100
-quietmetrix.rateLimit.burstPerMinute = 600
-```
+Cloud also defaults to 10,000 physical ingestion requests per project per UTC day.
+Set `QM_COUNTER_REQUESTS_PER_DAY` to a positive integer to override it. Retries consume
+this capacity budget even if receipts prevent duplicate analytics. Self-host defaults
+to no daily budget. These limits are capacity controls, not monthly event billing.
 
-**PHP** (`.env`):
-```
-QM_RATE_LIMIT_ENABLED=true
-QM_RATE_LIMIT_RPS=100
-QM_RATE_LIMIT_BURST=600
-```
+A rejected request returns HTTP 429 and `Retry-After`. Shared minute limits use 60
+seconds; the daily budget uses 86,400 seconds. Do not assume `X-RateLimit-*` response
+headers exist. SDK outboxes retain rejected delivery for later retry.
 
-## Cloud Plan Limits
-
-| Plan | Requests/sec | Burst/min | Events/month |
-|------|-------------|-----------|-------------|
-| Free | 10 | 60 | 10,000 |
-| Hobby | 50 | 300 | 100,000 |
-| Startup | 200 | 1,200 | 1,000,000 |
-| Business | 1,000 | 6,000 | 10,000,000 |
-
-When a rate limit is exceeded, the server returns `429 Too Many Requests` with a `Retry-After` header indicating when the client should retry.
-
-## Rate Limit Headers
-
-All responses include:
-
-- `X-RateLimit-Limit` — Maximum requests in the current window
-- `X-RateLimit-Remaining` — Remaining requests
-- `X-RateLimit-Reset` — Seconds until window resets
+See [public hosting](public-hosting.md) for project quotas, plan retention, deployment
+settings, and the production reverse proxy.

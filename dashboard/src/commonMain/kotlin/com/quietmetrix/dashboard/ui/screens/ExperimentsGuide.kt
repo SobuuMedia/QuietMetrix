@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -38,13 +37,13 @@ import com.quietmetrix.dashboard.ui.components.handCursor
 import com.quietmetrix.dashboard.viewmodel.DashboardState
 import com.quietmetrix.dashboard.viewmodel.DashboardViewModel
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
- * Step-by-step "how to set up an experiment" guide. Opens automatically the first time the
- * Experiments tab is visited (see [DashboardViewModel.navigateTo]'s use of
- * [shouldAutoOpenGuide]) and is always reopenable via the tab's help icon
- * ([DashboardViewModel.openExperimentsGuide]) — see [EXPERIMENTS_GUIDE_STEP_COUNT] for the
- * step count this must stay in sync with.
+ * Step-by-step "how to set up an experiment" guide. It opens on demand via the tab's help icon
+ * ([DashboardViewModel.openExperimentsGuide]) so the actual Experiments screen remains visible
+ * on first visit. See [EXPERIMENTS_GUIDE_STEP_COUNT] for the step count this must stay in sync with.
  */
 @Composable
 fun ExperimentsGuide(viewModel: DashboardViewModel, state: DashboardState) {
@@ -65,21 +64,21 @@ fun ExperimentsGuide(viewModel: DashboardViewModel, state: DashboardState) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (step > 0) {
                     TextButton(onClick = { viewModel.previousExperimentsGuideStep() }, modifier = Modifier.handCursor()) {
-                        Text(stringResource(Res.string.experiments_guide_back))
+                        MaterialText(stringResource(Res.string.experiments_guide_back))
                     }
                 }
                 TextButton(
                     onClick = { if (isLast) viewModel.closeExperimentsGuide() else viewModel.nextExperimentsGuideStep() },
                     modifier = Modifier.handCursor(),
                 ) {
-                    Text(stringResource(if (isLast) Res.string.experiments_guide_done else Res.string.experiments_guide_next))
+                    MaterialText(stringResource(if (isLast) Res.string.experiments_guide_done else Res.string.experiments_guide_next))
                 }
             }
         },
         dismissButton = {
             if (!isLast) {
                 TextButton(onClick = { viewModel.closeExperimentsGuide() }, modifier = Modifier.handCursor()) {
-                    Text(stringResource(Res.string.experiments_guide_skip))
+                    MaterialText(stringResource(Res.string.experiments_guide_skip))
                 }
             }
         },

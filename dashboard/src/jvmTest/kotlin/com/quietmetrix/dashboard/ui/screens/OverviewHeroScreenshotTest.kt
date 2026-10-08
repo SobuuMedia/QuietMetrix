@@ -9,7 +9,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.AggregatesResponse
@@ -38,8 +40,9 @@ import kotlin.test.Test
  *   "**1,284 sessions** opened Sobuu, **trending up this period**." — relabeled per a post-review
  *   decision (see Task 18's report "Relabeling" section): "people" would claim a distinct-device
  *   count this dashboard doesn't track (it's actually total sessions), and a numeric "18% more"
- *   would claim a real previous-period comparison this dashboard can't make (it's actually a
- *   same-window momentum signal) — both are now worded honestly instead of visually confident but
+ *   would claim a real previous-period comparison based on a same-window momentum signal. The report
+ *   now supplies an exact prior-period People measure independently of Compare. Earlier copy was
+ *   worded honestly instead of visually confident but
  *   misleading, per `OverviewHeroLogic.kt`'s KDoc. The lime `SpanStyle` highlight treatment itself
  *   still matches the source's two highlighted phrases. The golden is a self-consistent
  *   regression baseline recorded from the real composable, per the standing fallback ruling
@@ -71,6 +74,9 @@ class OverviewHeroScreenshotTest {
     @Test
     fun normalStateMatchesGolden() = runComposeUiTest {
         val agg = AggregatesResponse(
+            people = 1284,
+            peopleState = "available",
+            peopleSource = "v2",
             totals = Totals(events = 8734),
             daily = listOf(
                 DailyPoint(day = "d1", total = 900),
@@ -103,6 +109,8 @@ class OverviewHeroScreenshotTest {
         }
         waitForIdle()
         onRoot().captureToImage().assertMatchesGolden("overview/hero-normal.png")
+        onNodeWithText("Copy", substring = true).performClick()
+        onNodeWithText("Copied").assertExists()
     }
 
     @Suppress("DEPRECATION")

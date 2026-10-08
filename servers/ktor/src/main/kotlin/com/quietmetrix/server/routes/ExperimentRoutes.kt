@@ -4,6 +4,7 @@ import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.domain.ErrorResponse
 import com.quietmetrix.server.experiments.CreateExperimentRequest
 import com.quietmetrix.server.experiments.ExperimentConfigResponse
+import com.quietmetrix.server.experiments.ExperimentConfigV2Response
 import com.quietmetrix.server.experiments.ExperimentCounterAnalyzer
 import com.quietmetrix.server.experiments.ExperimentOutcome
 import com.quietmetrix.server.experiments.ExperimentRangeDto
@@ -12,9 +13,11 @@ import com.quietmetrix.server.experiments.ExperimentService
 import com.quietmetrix.server.experiments.ExperimentsResponse
 import com.quietmetrix.server.experiments.UpdateExperimentRequest
 import com.quietmetrix.server.experiments.toConfigDto
+import com.quietmetrix.server.experiments.toConfigV2Dto
 import com.quietmetrix.server.experiments.toDto
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
+import com.quietmetrix.server.persistence.CounterV2Repository
 import com.quietmetrix.server.persistence.ExperimentRepository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
@@ -28,7 +31,6 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.header
-import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
@@ -39,6 +41,9 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
+import java.time.LocalDate
+import java.time.ZoneOffset
+import com.quietmetrix.server.util.receiveBounded as receive
 
 /**
  * A/B testing experiment routes: dashboard CRUD + results (`/api/v1/projects/{id}/experiments…`,
@@ -51,6 +56,7 @@ fun Routing.configureExperimentRoutes() {
     val projectRepo by inject<ProjectRepository>()
     val memberRepo by inject<ProjectMemberRepository>()
     val counterRepo by inject<CounterRepository>()
+    val counterV2Repo by inject<CounterV2Repository>()
     val accessTokenRepo by inject<AccessTokenRepository>()
     val config by inject<AppConfig>()
     val rateLimiter by inject<RateLimiter>()
@@ -162,13 +168,28 @@ fun Routing.configureExperimentRoutes() {
             val fromDay = window.fromDay
             val toDay = window.toDay
 
-            val cells = counterRepo.readCells(projectId, "experiment", fromDay, toDay)
-            val analysis = ExperimentCounterAnalyzer.analyze(experiment, cells)
+            val v2 = experiment.mode in setOf("visibility", "variants")
+            val resultFrom = if (v2) experiment.startedAt?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: fromDay else fromDay
+            val resultTo = if (v2) LocalDate.now(ZoneOffset.UTC) else toDay
+            val analysis = if (v2) {
+                ExperimentCounterAnalyzer.analyzeV2(
+                    experiment,
+                    counterV2Repo.readExperimentCells(projectId, "experiment_exposure_v2", resultFrom, resultTo, experiment.experimentKey, experiment.revision),
+                    counterV2Repo.readExperimentCells(projectId, "experiment_goal_v2", resultFrom, resultTo, experiment.experimentKey, experiment.revision),
+                )
+            } else {
+                ExperimentCounterAnalyzer.analyze(experiment, counterRepo.readCells(projectId, "experiment", fromDay, toDay))
+            }
 
             call.respond(
                 ExperimentResultsResponse(
                     experiment = experiment.toDto(),
-                    range = ExperimentRangeDto(fromJava.toString(), toJava.toString()),
+                    range = ExperimentRangeDto(
+                        if (v2) (experiment.startedAt ?: fromJava.toString()) else fromJava.toString(),
+                        if (v2) resultTo.atStartOfDay().toInstant(ZoneOffset.UTC).toString() else toJava.toString(),
+                    ),
+                    unit = if (v2) "installations" else "sessions",
+                    basis = if (v2) "since_revision_started" else "selected_range",
                     variants = analysis.variants.map { it.toDto() },
                     comparison = analysis.comparison?.toDto(),
                 ),
@@ -186,7 +207,8 @@ fun Routing.configureExperimentRoutes() {
                 }
                 val request = try {
                     call.receive<CreateExperimentRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Request body is not valid JSON"))
                     return@post
                 }
@@ -209,7 +231,8 @@ fun Routing.configureExperimentRoutes() {
                 }
                 val request = try {
                     call.receive<UpdateExperimentRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_json", "Request body is not valid JSON"))
                     return@patch
                 }
@@ -262,6 +285,30 @@ fun Routing.configureExperimentRoutes() {
 
         call.response.header("Cache-Control", "public, max-age=300")
         val active = service.activeConfig(projectId)
-        call.respond(ExperimentConfigResponse(active.map { it.toConfigDto() }))
+        call.respond(ExperimentConfigResponse(active.filter { it.mode == "legacy" }.map { it.toConfigDto() }))
+    }
+
+    // Versioned config for app-element experiments. Kept separate from v1 so an older SDK
+    // cannot mistake direct B visibility for the legacy enrollment percentage.
+    get("/api/v2/sdk/experiments") {
+        val apiKey = call.request.header("X-QM-Api-Key")
+        if (apiKey.isNullOrBlank()) {
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Invalid or missing API key"))
+            return@get
+        }
+        val projectId = projectRepo.validateApiKey(apiKey)
+        if (projectId == null) {
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized", "Invalid or missing API key"))
+            return@get
+        }
+        val clientIp = call.clientIp(config.trustedProxies)
+        if (config.ipRateLimit.enabled && !ipRateLimiter.tryConsume("experiments:config:ip:$clientIp")) {
+            call.response.header("Retry-After", "60")
+            call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("rate_limit_exceeded", "IP rate limit exceeded. Retry after 60 seconds."))
+            return@get
+        }
+        call.response.header("Cache-Control", "public, max-age=300")
+        val active = service.activeConfig(projectId).filter { it.mode in setOf("visibility", "variants") }
+        call.respond(ExperimentConfigV2Response(experiments = active.map { it.toConfigV2Dto() }))
     }
 }

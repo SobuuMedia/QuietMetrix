@@ -25,6 +25,13 @@ class TableLogicTest {
     )
 
     @Test
+    fun screenLabelHumanizesProtocolKeysAndKeepsPlaceholderForBlankValues() {
+        assertEquals("Home shelf", screenLabel("home_shelf", "—"))
+        assertEquals("Book detail", screenLabel("book-detail", "—"))
+        assertEquals("—", screenLabel("  ", "—"))
+    }
+
+    @Test
     fun compareNullsLastPutsNullsAtEndForAscending() {
         // ascending: nulls last
         val cmp = compareNullsLast<String>(ascending = true)

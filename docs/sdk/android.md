@@ -9,7 +9,7 @@ Add the QuietMetrix dependency to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 }
 ```
 
@@ -23,6 +23,7 @@ class MyApp : Application() {
         super.onCreate()
         QuietMetrix.init(QuietMetrixConfig(
             storageKeyPrefix = "myapp_",
+            applicationContext = applicationContext,
             trackingEndpoint = "https://your-server.com/api/v1",
             apiKey = "qm_ak_your_api_key",
             flushIntervalMs = 30_000L,
@@ -106,3 +107,7 @@ Pending counters are in-memory only — there is no offline buffer, no connectiv
 ## Friction (Rage-tap Detection)
 
 QuietMetrix automatically detects "rage taps" — repeated fast taps in roughly the same spot, usually a sign the user is stuck or the UI didn't respond — and reports them as a `friction` counter, broken down by screen. No setup is required: the SDK wraps each `Activity`'s `Window.Callback` from the same lifecycle hook it already uses for screen-dwell tracking. (iOS requires a one-line opt-in — see [the iOS guide](ios.md#friction-rage-tap-detection); JVM/Linux/Windows/Web have no tap-capture signal at all.)
+The 0.7.0 artifacts are built with Kotlin 2.4.20. Use a compatible Kotlin compiler;
+AGP built-in Kotlin may otherwise select an older compiler. The standalone
+[Android consumer](../../tools/release-consumers/README.md) shows the tested compiler
+configuration and process-restart proof.

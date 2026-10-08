@@ -1,5 +1,59 @@
 # Experiments (A/B testing)
 
+> This page documents the legacy `getVariant` / `trackExperimentInteraction` API. New
+> app-element experiments created in the dashboard use the v2 API below. The two APIs coexist;
+> use the v2 placement API for Compose or SwiftUI elements and `trackEvent` goal events.
+>
+> See [Metric semantics and privacy](metrics-and-privacy.md) for fixed-window installation counts and limits.
+
+## App-element experiments (v2)
+
+Create an experiment in **Visibility** mode to show the tested element to the configured share
+of eligible installations (for example, 25% see B and 75% see the control/A view). The app
+chooses the placement key; the dashboard controls its percentage, optional country and language
+filters, whether both filters must match (`all`, the default) or either may match (`any`), and
+the optional goal event key. Country and language are independent app-supplied values. The SDK
+does not infer a country from the device locale and sends neither value with analytics events.
+
+Call `QuietMetrix.init` with `QuietMetrixConfig(..., countryCode = "FR", languageTag = "fr")`
+when those dimensions are available. Both are optional; pass `null` when unavailable. Country
+uses a two-letter ISO code and language accepts a two- or three-letter base language code.
+
+The v2 configuration is fetched asynchronously. Until it is available, or when the installation
+is ineligible, app code renders the control/A view. Once a Ready assignment reaches the UI render
+boundary, call `recordExperimentExposure`; this records at most one aggregate exposure per local
+installation, experiment revision and variant. Do not count `resolveExperiment` itself as an
+exposure because resolving is not proof the placement was displayed.
+
+```kotlin
+import com.quietmetrix.analytics.compose.ExperimentElement
+import com.quietmetrix.analytics.trackEvent
+
+ExperimentElement(
+    key = "login_message",
+    control = { /* normal login screen */ },
+    content = { /* challenger element */ },
+)
+
+Button(onClick = {
+    trackEvent("login_message_success") // configure this as the experiment goal
+}) { Text("Continue") }
+```
+
+`ExperimentVariants(key, variantA, variantB)` is available when both full views should be
+authored explicitly. The equivalent SwiftUI `ExperimentElement` and `ExperimentVariants` sample
+is in `samples/ios/QuietMetrixSample/ExperimentElement.swift`; include the SDK framework when
+building that sample. The wrappers pin the first Ready assignment
+while mounted, render the control/A fallback before resolution, and record exposure after the
+view appears. Variants should therefore remain safe to show for the full lifetime of that view.
+
+The v2 dashboard reports revision-scoped aggregate installations exposed and installations
+reaching the configured goal. It intentionally avoids device or user identifiers. Metrics are
+deduplicated locally, so deleting app data or reinstalling creates a new installation for these
+counts. Results are cumulative since that revision started; date comparison is unavailable for
+these metrics. Low-volume results remain marked as collecting evidence rather than presenting a
+misleading confidence claim.
+
 An experiment shows one of two versions of a screen, or a piece of a screen, to different
 devices, and reports how often people interact with each — without QuietMetrix ever learning
 which device saw which variant. It follows the same aggregate-only, on-device philosophy as the
@@ -82,12 +136,11 @@ existing sessions never change assignment. The endpoint may be cached for up to 
 
 ## Country targeting
 
-Country targeting uses the device's **language/locale region** (e.g. a device set to Spanish —
-Spain resolves to `ES`), read locally — it is never sent to the server, and it is not the
-device's physical location (a traveler's phone still reports their language setting, not their
-GPS position). If an experiment has a country list and the device's region isn't in it, or
-can't be determined, the device is not enrolled and `getVariant` returns `"none"` for that
-experiment — this is unrelated to the traffic percentage and doesn't consume a "slot" of it.
+Country targeting uses only the optional country code supplied by the app through
+`QuietMetrixConfig.countryCode` or `updateAudience(countryCode, languageTag)`. The SDK does not
+infer country from IP, GPS, or locale region, and it does not send this targeting value with
+analytics events. If an experiment has a country list and the app has not supplied a matching
+country, the device is not enrolled and `getVariant` returns `"none"` for that experiment.
 
 ## What gets measured
 

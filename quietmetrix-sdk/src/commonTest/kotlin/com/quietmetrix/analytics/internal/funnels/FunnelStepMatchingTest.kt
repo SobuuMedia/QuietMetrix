@@ -33,7 +33,7 @@ class FunnelStepMatchingTest {
     }
 
     @Test
-    fun `no declared screen accepts any screen, including null`() {
+    fun `no declared screen accepts any screen and including null`() {
         val step = FunnelStep(key = "view", event = "screen_view")
         assertTrue(funnelStepMatches(step, "screen_view", null, emptyMap()))
         assertTrue(funnelStepMatches(step, "screen_view", "whatever", emptyMap()))
@@ -60,7 +60,7 @@ class FunnelStepMatchingTest {
     }
 
     @Test
-    fun `all declared props must match, not just one of several`() {
+    fun `all declared props must match and not just one of several`() {
         val step = FunnelStep(key = "submit", event = "purchase", props = mapOf("plan" to "pro", "cycle" to "annual"))
         assertTrue(funnelStepMatches(step, "purchase", null, mapOf("plan" to "pro", "cycle" to "annual")))
         assertFalse(funnelStepMatches(step, "purchase", null, mapOf("plan" to "pro", "cycle" to "monthly")))

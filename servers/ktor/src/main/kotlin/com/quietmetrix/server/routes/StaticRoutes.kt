@@ -1,6 +1,7 @@
 package com.quietmetrix.server.routes
 
 import io.ktor.server.http.content.staticResources
+import io.ktor.server.request.queryString
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.Routing
 import io.ktor.server.routing.get
@@ -15,11 +16,19 @@ import io.ktor.server.routing.get
  * `/` redirects to `/dashboard/` so visiting the bare host opens the app.
  */
 fun Routing.configureStaticDashboardRoutes() {
+    // The index references assets relatively. Without this canonical redirect,
+    // `/dashboard` serves index.html but the browser requests `/dashboard.js`.
+    get("/dashboard") {
+        val query = call.request.queryString().takeIf { it.isNotEmpty() }?.let { "?$it" } ?: ""
+        call.respondRedirect("/dashboard/$query", permanent = false)
+    }
+
     staticResources(remotePath = "/dashboard", basePackage = "dashboard") {
         default("index.html")
     }
 
     get("/") {
-        call.respondRedirect("/dashboard/", permanent = false)
+        val query = call.request.queryString().takeIf { it.isNotEmpty() }?.let { "?$it" } ?: ""
+        call.respondRedirect("/dashboard/$query", permanent = false)
     }
 }

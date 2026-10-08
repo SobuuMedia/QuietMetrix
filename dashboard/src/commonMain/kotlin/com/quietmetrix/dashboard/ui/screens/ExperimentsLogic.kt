@@ -98,10 +98,6 @@ internal fun availableActions(status: String, canWrite: Boolean): List<Experimen
 internal fun usageLabelArgs(count: Int, limit: Int?): Pair<Int, Int>? =
     limit?.let { count to it }
 
-/** The Experiments tab should auto-open its setup guide on entry exactly when it has never
- *  been [seen] (dismissed) before. */
-internal fun shouldAutoOpenGuide(seen: Boolean): Boolean = !seen
-
 /** Number of steps in the Experiments setup guide (see ExperimentsGuide.kt). */
 internal const val EXPERIMENTS_GUIDE_STEP_COUNT = 5
 

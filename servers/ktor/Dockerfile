@@ -35,5 +35,5 @@ COPY --from=builder /app/servers/ktor/build/libs/ktor-all.jar app.jar
 USER quietmetrix
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO- http://localhost:8080/api/v1/health || exit 1
+  CMD wget -qO- http://localhost:8080/api/v1/ready || exit 1
 ENTRYPOINT ["java", "-jar", "app.jar"]

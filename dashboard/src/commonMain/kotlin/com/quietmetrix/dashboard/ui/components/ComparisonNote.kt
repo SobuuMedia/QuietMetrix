@@ -1,11 +1,13 @@
 package com.quietmetrix.dashboard.ui.components
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.quietmetrix.dashboard.resources.*
+import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.comparison_unavailable
+import com.quietmetrix.dashboard.resources.comparison_was
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import org.jetbrains.compose.resources.stringResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /** A measured previous value or explicit unavailability, with the shared comparison styling. */
 @Composable

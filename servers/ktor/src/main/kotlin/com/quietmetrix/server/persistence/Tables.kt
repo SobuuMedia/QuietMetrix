@@ -1,7 +1,8 @@
 package com.quietmetrix.server.persistence.tables
 
 import com.quietmetrix.server.funnels.FunnelValidation
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.javatime.date
 import org.jetbrains.exposed.v1.javatime.datetime
 import java.time.LocalDate
@@ -18,6 +19,8 @@ object Users : Table("users") {
     // Account lifecycle: active | invited. Invited users have no usable password
     // until they accept the invite and set one.
     val status = varchar("status", 20).default("active")
+    val tenantId = varchar("tenant_id", 64).clientDefault { java.util.UUID.randomUUID().toString() }.index()
+    val platformOperator = bool("platform_operator").default(false)
     val inviteToken = varchar("invite_token", 64).nullable()
     val inviteExpiresAt = datetime("invite_expires_at").nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
@@ -25,10 +28,27 @@ object Users : Table("users") {
     override val primaryKey = PrimaryKey(id)
 }
 
+object AuthSessions : Table("auth_sessions") {
+    val id = varchar("id", 64)
+    val userId = long("user_id").references(Users.id, onDelete = ReferenceOption.CASCADE)
+    val refreshHash = varchar("refresh_hash", 64)
+    val expiresAt = datetime("expires_at").index()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object RequestRateBuckets : Table("request_rate_buckets") {
+    val key = varchar("bucket_key", 64)
+    val attempts = integer("attempts").default(0)
+    val expiresAt = long("expires_at").index()
+    override val primaryKey = PrimaryKey(key)
+}
+
 object Projects : Table("projects") {
     val id = long("id").autoIncrement()
     val name = varchar("name", 255)
     val description = text("description").nullable()
+    val iconKey = varchar("icon_key", 32).default("book")
+    val declaredPlatforms = text("declared_platforms").default("[]")
     val ownerUserId = long("owner_user_id").references(Users.id)
     val apiKeyHash = varchar("api_key_hash", 255).index()
     val apiKeySha256 = varchar("api_key_sha256", 64).nullable().index()
@@ -95,6 +115,58 @@ object CountersQuarantine : Table("counters_quarantine") {
     }
 }
 
+/** Idempotency receipts for SDK counter batches. Receipt and aggregate writes share a transaction. */
+object CounterBatchReceipts : Table("counter_batch_receipts") {
+    val projectId = long("project_id").references(Projects.id)
+    val batchId = varchar("batch_id", 64)
+    val payloadHash = varchar("payload_hash", 64)
+    val claimToken = varchar("claim_token", 32)
+    val accepted = integer("accepted")
+    val quarantined = integer("quarantined")
+    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
+
+    override val primaryKey = PrimaryKey(projectId, batchId)
+
+    init { index(false, createdAt) }
+}
+
+/** Hour-capable v2 cells. `hour == -1` is a daily cell; 0..23 are UTC hours. */
+object CounterCellsV2 : Table("counter_cells_v2") {
+    val projectId = long("project_id").references(Projects.id)
+    val day = date("day")
+    val hour = short("hour").default((-1).toShort())
+    val metric = varchar("metric", 64)
+    val platform = varchar("platform", 20).default("unknown")
+    val sdkVersion = varchar("sdk_version", 32).default("unknown")
+    val appVersion = varchar("app_version", 32).default("")
+    val country = char("country", 2).default("  ")
+    val segmentKind = varchar("segment_kind", 20).default("global")
+    val segmentValue = varchar("segment_value", 128).default("all")
+    val dimsHash = char("dims_hash", 64)
+    val cardinalityHash = char("cardinality_hash", 64).nullable()
+    val dims = text("dims")
+    val n = long("n").default(0L)
+    val contributors = long("contributors").default(0L)
+    val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
+    override val primaryKey = PrimaryKey(projectId, day, hour, metric, platform, appVersion, country, dimsHash, segmentKind, segmentValue)
+    init {
+        index(false, projectId, metric, day, hour)
+        index(false, projectId, metric, cardinalityHash)
+    }
+}
+
+object CounterBatchReceiptsV2 : Table("counter_batch_receipts_v2") {
+    val projectId = long("project_id").references(Projects.id)
+    val batchId = varchar("batch_id", 64)
+    val payloadHash = char("payload_hash", 64)
+    val claimToken = char("claim_token", 32)
+    val accepted = integer("accepted").default(0)
+    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
+    val expiresAt = datetime("expires_at")
+    override val primaryKey = PrimaryKey(projectId, batchId)
+    init { index(false, createdAt); index(false, expiresAt) }
+}
+
 object EventCountsDaily : Table("event_counts_daily") {
     val projectId = long("project_id").references(Projects.id)
     val day = date("day").clientDefault { LocalDate.now() }
@@ -144,6 +216,7 @@ object Funnels : Table("funnels") {
     val countMode = varchar("count_mode", 16).default("actor")
     val identityScope = varchar("identity_scope", 32).default("install_or_session")
     val correlationProperty = varchar("correlation_property", 128).nullable()
+    val revision = integer("revision").default(0)
     val archivedAt = datetime("archived_at").nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
@@ -153,6 +226,20 @@ object Funnels : Table("funnels") {
     init {
         uniqueIndex(projectId, funnelKey)
     }
+}
+
+/** Immutable semantic snapshot for each funnel revision; mutable labels remain on Funnels. */
+object FunnelDefinitionRevisions : Table("funnel_definition_revisions") {
+    val projectId = long("project_id").references(Projects.id)
+    val funnelKey = varchar("funnel_key", 64)
+    val revision = integer("revision")
+    val steps = text("steps")
+    val windowSeconds = long("window_seconds")
+    val countMode = varchar("count_mode", 16)
+    val identityScope = varchar("identity_scope", 32)
+    val correlationProperty = varchar("correlation_property", 128).nullable()
+    val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
+    override val primaryKey = PrimaryKey(projectId, funnelKey, revision)
 }
 
 /**
@@ -178,6 +265,14 @@ object Experiments : Table("experiments") {
     val variants = text("variants")
     // JSON array of ISO-3166 alpha-2 country codes, or NULL = all countries.
     val countries = text("countries").nullable()
+    val mode = varchar("mode", 16).default("legacy")
+    val placementKey = varchar("placement_key", 64).nullable()
+    val revision = integer("revision").default(0)
+    val bPercent = integer("b_percent").nullable()
+    val languages = text("languages").nullable()
+    val matchMode = varchar("match_mode", 8).default("all")
+    val goalEvent = varchar("goal_event", 64).nullable()
+    val iconKey = varchar("icon_key", 32).nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val updatedAt = datetime("updated_at").clientDefault { LocalDateTime.now() }
     val startedAt = datetime("started_at").nullable()
@@ -223,4 +318,3 @@ object AccessTokens : Table("access_tokens") {
         index(false, userId, revokedAt)
     }
 }
-

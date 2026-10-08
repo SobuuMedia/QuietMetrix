@@ -8,7 +8,7 @@ import com.quietmetrix.dashboard.api.Transition
 // composables, and this file's own KDocs for the data-honesty findings behind the "platform
 // filter" and the 👋 exit option.
 //
-// **Data-honesty investigation (this task's main event):** the design handoff
+// **Data-honesty investigation:** the design handoff
 // (design_handoff_dashboard_redesign/README.md > Flow) describes a breadcrumb that extends up to
 // 5 screens deep and a platform filter row that "shifts the exit-vs-continue ratio". The only
 // real data this dashboard has for "where people go next" is `Transition`
@@ -16,17 +16,9 @@ import com.quietmetrix.dashboard.api.Transition
 // from `GET /projects/{id}/transitions`, server-side in
 // servers/ktor/.../DashboardRoutes.kt:190-198). That endpoint aggregates the `screen_transition`
 // counter into a flat list of (from, to, count) edges over the whole requested window — a
-// single-hop graph, not recorded multi-step user paths. Two gaps follow from that:
-//  1. **No platform dimension.** `TransitionItem`/`Transition` carry no platform field — the
-//     `screen_transition` counter cells were never tagged with platform, so there is no honest
-//     per-platform split to compute. (Telling sign: even the design prototype's own demo data
-//     doesn't compute this from real per-platform data either — `QuietMetrix Prototype.dc.html`'s
-//     `exitOff = { all: 0, android: 2, ios: -3, web: 6 }[s.flowPlat]` is a flat, hardcoded nudge
-//     applied for the demo, not a real breakdown.) [filterTransitionsByPlatform] is therefore the
-//     identity function for every platform — see its own KDoc — and `FlowScreen`'s platform pill
-//     row renders the other 3 pills visibly (matching the screenshot) but disabled rather than
-//     silently doing nothing when tapped.
-//  2. **No real "people" simulation across hops.** The prototype narrates each breadcrumb column
+// single-hop graph, not recorded multi-step user paths. The transition endpoint filters cells by
+// stored platform metadata server-side, applies k-anonymity, and keeps the response platform-neutral.
+// **No real "people" simulation across hops.** The prototype narrates each breadcrumb column
 //     as "After {screen} · {N} people" by multiplying a hardcoded per-start "people" count through
 //     the path's percentages — invented demo arithmetic, not a thing the backend tracks (it has
 //     no notion of a person following a path; only aggregate edge counts). This logic instead
@@ -43,19 +35,6 @@ import com.quietmetrix.dashboard.api.Transition
 
 /** A breadcrumb path may hold at most this many screens (design handoff README > Flow: "max 5 deep"). */
 const val FLOW_PATH_MAX_DEPTH = 5
-
-/**
- * Platform filter options for the Flow screen's filter row (design handoff README > Flow:
- * "🌈 All / 🤖 Android / 🍎 iOS / 🌐 Web"). See [filterTransitionsByPlatform]'s KDoc: only [All]
- * does anything real today — the backend has no platform dimension on transitions, so the other
- * 3 exist here purely so `FlowScreen` can render them (disabled) to match the design's pill row.
- */
-enum class FlowPlatform(val emoji: String) {
-    All("🌈"),
-    Android("🤖"),
-    Ios("🍎"),
-    Web("🌐"),
-}
 
 /**
  * One destination option in a breadcrumb column: a real next screen ([screen] non-null,
@@ -85,6 +64,12 @@ fun topStartScreens(transitions: List<Transition>, limit: Int = 6): List<String>
         .sortedByDescending { it.value }
         .take(limit)
         .map { it.key }
+
+/** Initial path is the highest-volume real root; later screens are user-selected from its real edges. */
+fun defaultFlowPath(transitions: List<Transition>): List<String> {
+    val start = topStartScreens(transitions, limit = 1).firstOrNull() ?: return emptyList()
+    return listOf(start)
+}
 
 /**
  * The real destination options recorded from [fromScreen] in [transitions], sorted by count
@@ -125,20 +110,6 @@ fun extendFlowPath(path: List<String>, option: FlowStepOption): List<String>? {
  */
 fun buildFlowBreadcrumb(path: List<String>, transitions: List<Transition>): List<FlowBreadcrumbColumn> =
     path.map { screen -> FlowBreadcrumbColumn(screen, nextStepOptions(transitions, screen)) }
-
-/**
- * Reshapes [transitions] for [platform] (design handoff README > Flow: "Platform filter row ...
- * shifts the exit-vs-continue ratio"). **Data-honesty finding (see this file's top-of-file
- * KDoc):** `Transition` (api/Models.kt:170) and the server's `TransitionItem`
- * (servers/ktor/.../Requests.kt:167, populated at
- * servers/ktor/.../DashboardRoutes.kt:190-198) carry no platform dimension — the
- * `screen_transition` counter was never tagged with platform, so there is nothing real to split
- * on. This function is therefore the identity function for every [FlowPlatform], [All] included:
- * it returns [transitions] unchanged rather than fabricating a breakdown. `FlowScreen`'s platform
- * pill row reflects this honestly — only [FlowPlatform.All] is selectable; the other 3 render
- * (to match the design's screenshot) but disabled.
- */
-fun filterTransitionsByPlatform(transitions: List<Transition>, platform: FlowPlatform): List<Transition> = transitions
 
 // ---------------------------------------------------------------------------
 // Task 23: Flow 3-card row (Countries/Platforms/Device types) — pure logic.

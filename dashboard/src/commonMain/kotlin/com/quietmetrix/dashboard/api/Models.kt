@@ -10,6 +10,9 @@ data class LoginRequest(val email: String, val password: String)
 data class RefreshRequest(@SerialName("refresh_token") val refreshToken: String)
 
 @Serializable
+data class RefreshResponse(val token: String, @SerialName("refresh_token") val refreshToken: String)
+
+@Serializable
 data class LoginResponse(
     val token: String,
     @SerialName("refresh_token") val refreshToken: String? = null,
@@ -17,7 +20,7 @@ data class LoginResponse(
 )
 
 @Serializable
-data class ApiUser(val id: String, val email: String, val role: String = "admin")
+data class ApiUser(val id: String, val email: String, val role: String = "admin", @SerialName("platform_operator") val platformOperator: Boolean = false)
 
 /** Global user roles. Drives what the dashboard shows and allows. */
 object UserRole {
@@ -40,7 +43,7 @@ data class ApiManagedUser(
 data class UsersResponse(val users: List<ApiManagedUser> = emptyList())
 
 @Serializable
-data class InviteUserRequest(val email: String, val role: String)
+data class InviteUserRequest(val email: String, val role: String, @SerialName("new_organization") val newOrganization: Boolean = false)
 
 @Serializable
 data class InviteResponse(
@@ -66,6 +69,7 @@ data class ApiMember(
     @SerialName("user_id") val userId: String,
     val email: String,
     @SerialName("user_role") val userRole: String? = null,
+    @SerialName("member_role") val memberRole: String? = null,
 )
 
 @Serializable
@@ -78,7 +82,7 @@ data class RegenerateKeyResponse(
 )
 
 @Serializable
-data class MetaResponse(val version: String = "0.0.0", val debug: Boolean = false)
+data class MetaResponse(val version: String = "0.0.0", val debug: Boolean = false, val ai_enabled: Boolean = false, val selfhost: Boolean = false)
 
 /** A personal access token (`qm_pat_…`) for an agent/CLI — see docs/agents/setup.md. Never carries the plaintext token. */
 @Serializable
@@ -134,13 +138,24 @@ data class ApiProject(
     @SerialName("api_key_last4") val apiKeyLast4: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("owner_user_id") val ownerUserId: String? = null,
+    @SerialName("last_received_at") val lastReceivedAt: String? = null,
+    val platforms: List<String> = emptyList(),
+    @SerialName("sdk_versions") val sdkVersions: List<String> = emptyList(),
+    @SerialName("activity_status") val activityStatus: String = "waiting_for_first_data",
+    @SerialName("icon_key") val iconKey: String = "book",
+    @SerialName("declared_platforms") val declaredPlatforms: List<String> = emptyList(),
 )
 
 @Serializable
 data class CreateProjectRequest(
     val name: String,
     val description: String? = null,
+    @SerialName("icon_key") val iconKey: String = "book",
+    @SerialName("declared_platforms") val declaredPlatforms: List<String> = emptyList(),
 )
+
+@Serializable
+data class UpdateProjectRequest(val name: String)
 
 @Serializable
 data class CreateProjectResponse(
@@ -155,6 +170,24 @@ data class CreateProjectResponse(
 data class AggregatesResponse(
     val demo: Boolean = false,
     @SerialName("window_days") val windowDays: Int = 30,
+    /** Distinct reported app installations for one exact fixed window; null when unavailable/suppressed. */
+    val people: Long? = null,
+    @SerialName("people_state") val peopleState: String? = null,
+    @SerialName("people_source") val peopleSource: String? = null,
+    @SerialName("people_comparison") val peopleComparison: Long? = null,
+    @SerialName("v2_visits") val v2Visits: Long? = null,
+    @SerialName("v2_visit_duration_ms") val v2VisitDurationMs: Long? = null,
+    @SerialName("v2_visit_duration_state") val v2VisitDurationState: String? = null,
+    @SerialName("v2_crashes") val v2Crashes: Long? = null,
+    @SerialName("v2_crashes_state") val v2CrashesState: String? = null,
+    /** Privacy-gated daily/hourly distinct-installation chart bins. */
+    @SerialName("daily_people") val dailyPeople: List<DailyPoint> = emptyList(),
+    /** Prior-period people bins returned with a report comparison. */
+    @SerialName("daily_people_previous") val dailyPeoplePrevious: List<DailyPoint> = emptyList(),
+    @SerialName("daily_visits_v2") val dailyVisitsV2: List<DailyPoint> = emptyList(),
+    @SerialName("daily_visits_v2_previous") val dailyVisitsV2Previous: List<DailyPoint> = emptyList(),
+    @SerialName("daily_actions_v2") val dailyActionsV2: List<DailyPoint> = emptyList(),
+    @SerialName("daily_actions_v2_previous") val dailyActionsV2Previous: List<DailyPoint> = emptyList(),
     val totals: Totals = Totals(),
     @SerialName("top_events")  val topEvents:  List<TopEvent>  = emptyList(),
     @SerialName("top_screens") val topScreens: List<TopScreen> = emptyList(),
@@ -164,6 +197,58 @@ data class AggregatesResponse(
     val countries: List<BreakdownItem> = emptyList(),
     val platforms: List<BreakdownItem> = emptyList(),
     @SerialName("device_classes") val deviceClasses: List<BreakdownItem> = emptyList(),
+)
+
+@Serializable
+data class ReportMeasureDto(
+    val value: Long? = null,
+    val state: String,
+    val unit: String,
+    val source: String,
+    val contributors: Long? = null,
+    val rate: Double? = null,
+)
+
+@Serializable
+data class ReportCoverageDto(
+    val source: String = "v2",
+    val resolution: String = "daily",
+    @SerialName("oldest_day") val oldestDay: String? = null,
+    @SerialName("newest_day") val newestDay: String? = null,
+    @SerialName("sdk_versions") val sdkVersions: List<String> = emptyList(),
+    @SerialName("legacy_present") val legacyPresent: Boolean = false,
+)
+
+@Serializable
+data class ReportBinDto(
+    @SerialName("start_day") val startDay: String,
+    @SerialName("end_day") val endDay: String,
+    val hour: Int? = null,
+    val measures: Map<String, ReportMeasureDto> = emptyMap(),
+)
+
+@Serializable
+data class ProjectReportDto(
+    val scope: Map<String, String> = emptyMap(),
+    @SerialName("generated_at") val generatedAt: String = "",
+    @SerialName("last_received_at") val lastReceivedAt: String? = null,
+    val coverage: ReportCoverageDto = ReportCoverageDto(),
+    val overview: Map<String, ReportMeasureDto> = emptyMap(),
+    val charts: Map<String, List<ReportBinDto>> = emptyMap(),
+    @SerialName("comparison_charts") val comparisonCharts: Map<String, List<ReportBinDto>> = emptyMap(),
+    val comparison: Map<String, ReportMeasureDto> = emptyMap(),
+    val flow: Map<String, ReportMeasureDto> = emptyMap(),
+    val retention: Map<String, ReportMeasureDto> = emptyMap(),
+    @SerialName("retention_cohorts") val retentionCohorts: List<ReportRetentionCohortDto> = emptyList(),
+    @SerialName("comparison_retention_cohorts") val comparisonRetentionCohorts: List<ReportRetentionCohortDto> = emptyList(),
+    val definitions: Map<String, List<String>> = emptyMap(),
+)
+
+@Serializable
+data class ReportRetentionCohortDto(
+    @SerialName("entry_day") val entryDay: String,
+    val size: ReportMeasureDto,
+    val days: Map<String, ReportMeasureDto> = emptyMap(),
 )
 
 @Serializable
@@ -222,6 +307,7 @@ data class SessionsResponse(
 @Serializable
 data class RetentionResponse(
     val cohorts: List<RetentionCohort> = emptyList(),
+    val source: String = "legacy",
 )
 
 /** [activationRate] is null when the project's app hasn't configured an activation event —
@@ -236,6 +322,8 @@ data class RetentionCohort(
     val day14: Double? = null,
     val day30: Double? = null,
     @SerialName("activation_rate") val activationRate: Double? = null,
+    @SerialName("day_states") val dayStates: Map<String, String> = emptyMap(),
+    @SerialName("size_state") val sizeState: String = "reported",
 )
 
 @Serializable
@@ -397,6 +485,14 @@ data class ExperimentDto(
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("ended_at") val endedAt: String? = null,
     @SerialName("selected_variant") val selectedVariant: String? = null,
+    val mode: String = "legacy",
+    @SerialName("placement_key") val placementKey: String? = null,
+    val revision: Int = 0,
+    @SerialName("b_percent") val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String = "all",
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("icon_key") val iconKey: String? = null,
 )
 
 /** `limit` is null when the project's plan has no cap on experiments (paid plan, or self-host). */
@@ -411,6 +507,13 @@ data class CreateExperimentRequest(
     @SerialName("traffic_percent") val trafficPercent: Int? = null,
     val variants: List<VariantDto>? = null,
     val countries: List<String>? = null,
+    val mode: String? = null,
+    @SerialName("placement_key") val placementKey: String? = null,
+    @SerialName("b_percent") val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String? = null,
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("icon_key") val iconKey: String? = null,
 )
 
 @Serializable
@@ -422,6 +525,13 @@ data class UpdateExperimentRequest(
     @SerialName("selected_variant") val selectedVariant: String? = null,
     val variants: List<VariantDto>? = null,
     val countries: List<String>? = null,
+    val mode: String? = null,
+    @SerialName("placement_key") val placementKey: String? = null,
+    @SerialName("b_percent") val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    @SerialName("match_mode") val matchMode: String? = null,
+    @SerialName("goal_event") val goalEvent: String? = null,
+    @SerialName("icon_key") val iconKey: String? = null,
 )
 
 @Serializable
@@ -450,6 +560,28 @@ data class ExperimentResultsResponse(
     val experiment: ExperimentDto,
     val range: ExperimentRangeDto = ExperimentRangeDto(),
     val unit: String = "sessions",
+    val basis: String = "selected_range",
     val variants: List<ExperimentVariantResultDto> = emptyList(),
     val comparison: ExperimentComparisonDto? = null,
 )
+
+/** Effective project entitlement contains no provider or consumption information. */
+@Serializable
+data class AiCapabilities(val enabled: Boolean = false, val available: Boolean = false, val reason: String? = null, val reset_date: String = "")
+
+/** AI conversation history is bounded and stays client-side between requests. */
+@Serializable
+data class AiHistory(val role: String, val content: String)
+
+/** AI requests use the same UTC anchor and comparison as analytics. */
+@Serializable
+data class AiRequest(val question: String = "", val language: String = "en", val range: String = "7d", val anchor: String? = null,
+    val compare: Boolean = false, val history: List<AiHistory> = emptyList(), val operation_id: String)
+
+/** Safe text-only AI response with aggregate source labels. */
+@Serializable
+data class AiAnswer(val answer: String, val sources: List<String> = emptyList())
+
+/** Summary mode distinguishes computed text from generated text. */
+@Serializable
+data class AiInsight(val text: String, val mode: String, val sources: List<String> = emptyList(), val generated_at: String)

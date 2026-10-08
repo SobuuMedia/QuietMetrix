@@ -4,9 +4,17 @@ import com.quietmetrix.server.experiments.ExperimentDefinition
 import com.quietmetrix.server.experiments.VariantSpec
 import com.quietmetrix.server.persistence.tables.Experiments
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import java.time.LocalDateTime
 
 /** A stored experiment definition, decoded from its row. */
@@ -23,6 +31,14 @@ data class ExperimentRecord(
     val startedAt: String?,
     val endedAt: String?,
     val selectedVariant: String? = null,
+    val mode: String = "legacy",
+    val placementKey: String? = null,
+    val revision: Int = 0,
+    val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    val matchMode: String = "all",
+    val goalEvent: String? = null,
+    val iconKey: String? = null,
 )
 
 /** Fields a [ExperimentRepository.update] call may change; a null field leaves it unchanged. */
@@ -35,6 +51,14 @@ data class ExperimentUpdate(
     val status: String? = null,
     val selectedVariant: String? = null,
     val expectedStatus: String? = null,
+    val mode: String? = null,
+    val placementKey: String? = null,
+    val revision: Int? = null,
+    val bPercent: Int? = null,
+    val languages: List<String>? = null,
+    val matchMode: String? = null,
+    val goalEvent: String? = null,
+    val iconKey: String? = null,
 )
 
 /**
@@ -59,6 +83,14 @@ class ExperimentRepository(private val database: Database) {
                 it[trafficPercent] = definition.trafficPercent
                 it[variants] = json.encodeToString(definition.variants)
                 it[countries] = definition.countries?.let { c -> json.encodeToString(c) }
+                it[mode] = definition.mode
+                it[placementKey] = definition.placementKey
+                it[revision] = definition.revision
+                it[bPercent] = definition.bPercent
+                it[languages] = definition.languages?.let(json::encodeToString)
+                it[matchMode] = definition.matchMode
+                it[goalEvent] = definition.goalEvent
+                it[iconKey] = definition.iconKey
                 it[createdAt] = now
                 it[updatedAt] = now
             }
@@ -115,6 +147,14 @@ class ExperimentRepository(private val database: Database) {
                 if (changes.countries != null) {
                     it[countries] = changes.countries.takeIf { c -> c.isNotEmpty() }?.let { c -> json.encodeToString(c) }
                 }
+                if (changes.mode != null) it[mode] = changes.mode
+                if (changes.placementKey != null) it[placementKey] = changes.placementKey
+                if (changes.revision != null) it[revision] = changes.revision
+                if (changes.bPercent != null) it[bPercent] = changes.bPercent
+                if (changes.languages != null) it[languages] = changes.languages.takeIf { c -> c.isNotEmpty() }?.let(json::encodeToString)
+                if (changes.matchMode != null) it[matchMode] = changes.matchMode
+                if (changes.goalEvent != null) it[goalEvent] = changes.goalEvent
+                if (changes.iconKey != null) it[iconKey] = changes.iconKey
                 if (changes.selectedVariant != null) it[selectedVariant] = changes.selectedVariant
                 if (changes.status != null) {
                     it[status] = changes.status
@@ -147,5 +187,13 @@ class ExperimentRepository(private val database: Database) {
         startedAt = row[Experiments.startedAt]?.toString(),
         endedAt = row[Experiments.endedAt]?.toString(),
         selectedVariant = row[Experiments.selectedVariant],
+        mode = row[Experiments.mode],
+        placementKey = row[Experiments.placementKey],
+        revision = row[Experiments.revision],
+        bPercent = row[Experiments.bPercent],
+        languages = row[Experiments.languages]?.let { json.decodeFromString(it) },
+        matchMode = row[Experiments.matchMode],
+        goalEvent = row[Experiments.goalEvent],
+        iconKey = row[Experiments.iconKey],
     )
 }

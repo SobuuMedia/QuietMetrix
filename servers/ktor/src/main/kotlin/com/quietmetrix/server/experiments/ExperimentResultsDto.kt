@@ -9,6 +9,7 @@ data class ExperimentResultsResponse(
     val experiment: ExperimentDto,
     val range: ExperimentRangeDto,
     val unit: String = "sessions",
+    val basis: String = "selected_range",
     val variants: List<ExperimentVariantResultDto>,
     val comparison: ExperimentComparisonDto? = null,
 )

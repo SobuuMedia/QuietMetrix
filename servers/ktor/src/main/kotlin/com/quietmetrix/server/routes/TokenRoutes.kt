@@ -10,7 +10,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
 import io.ktor.server.routing.delete
@@ -18,6 +17,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.koin.ktor.ext.inject
+import com.quietmetrix.server.util.receiveBounded as receive
 
 /**
  * Personal access tokens (`qm_pat_…`) for agents/CLIs to call the API without a user's
@@ -36,7 +36,8 @@ fun Routing.configureTokenRoutes() {
 
                 val request = try {
                     call.receive<CreateTokenRequest>()
-                } catch (_: Exception) {
+                } catch (exception: Exception) {
+                if (exception is com.quietmetrix.server.util.RequestTooLarge || exception is com.quietmetrix.server.util.RequestBodyTimedOut) throw exception
                     call.respond(
                         HttpStatusCode.BadRequest,
                         ErrorResponse("invalid_json", "Request body is not valid JSON")

@@ -6,7 +6,8 @@ import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.persistence.tables.Funnels
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,7 +17,7 @@ class FunnelRegistrationServiceTest {
 
     private fun freshRepo(): Pair<FunnelRepository, Long> {
         val db = Database.connect("jdbc:h2:mem:funnelreg_${java.util.UUID.randomUUID()};DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
-        transaction(db) { SchemaUtils.create(Users, Projects, Funnels) }
+        transaction(db) { SchemaUtils.create(Users, Projects, Funnels, com.quietmetrix.server.persistence.tables.FunnelDefinitionRevisions) }
         UserRepository(db).create("admin@test.com", "password")
         val projectRepo = ProjectRepository(db)
         val apiKey = projectRepo.create("demo", null, 1L)

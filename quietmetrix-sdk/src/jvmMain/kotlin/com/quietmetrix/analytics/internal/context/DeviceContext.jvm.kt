@@ -2,6 +2,7 @@ package com.quietmetrix.analytics.internal.context
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "jvm"
+    actual val deviceClass: String = "desktop"
     actual val language: String? = System.getProperty("user.language")
     actual val appVersion: String? = null
     actual val screenWidth: Int? = null

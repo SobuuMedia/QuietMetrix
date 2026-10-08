@@ -12,11 +12,14 @@ import com.quietmetrix.server.persistence.ProjectMemberRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.persistence.tables.AccessTokens
+import com.quietmetrix.server.persistence.tables.CounterCellsV2
+import com.quietmetrix.server.persistence.tables.Counters
 import com.quietmetrix.server.persistence.tables.ProjectMembers
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
 import com.quietmetrix.server.plugins.configureSecurity
 import com.quietmetrix.server.plugins.configureStatusPages
+import com.quietmetrix.server.plugins.configureTenantBoundary
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -32,7 +35,9 @@ import io.ktor.server.application.install
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
@@ -85,7 +90,10 @@ class AccessTokenAuthIntegrationTest {
         }
         configureStatusPages()
         configureSecurity(config)
+        configureTenantBoundary(config)
         routing {
+            configureAuthRoutes(config)
+            configureUserRoutes(config)
             configureProjectRoutes()
             configureTokenRoutes()
         }
@@ -95,10 +103,41 @@ class AccessTokenAuthIntegrationTest {
         val db = Database.connect("jdbc:h2:mem:$name;DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "")
         transaction(db) {
             SchemaUtils.create(
-                Users, Projects, ProjectMembers, AccessTokens,
+                Users, com.quietmetrix.server.persistence.tables.AuthSessions, com.quietmetrix.server.persistence.tables.RequestRateBuckets, Projects, ProjectMembers, AccessTokens, Counters, CounterCellsV2,
             )
         }
         return db
+    }
+
+    @Test
+    fun `hosted administrators cannot enumerate read mutate or invite into another organization`() = testApplication {
+        val config = testConfig().copy(profile = AppConfig.Profile.CLOUD)
+        val db = freshDb("tenant_boundary")
+        val users = UserRepository(db)
+        val alice = users.create("alice@one.example", "password")
+        val bob = users.create("bob@two.example", "password")
+        val projects = ProjectRepository(db)
+        projects.create("Alice project", null, alice)
+        projects.create("Bob private project", null, bob)
+        val bobProject = projects.findByOwnerId(bob).single()["id"].toString()
+        val token = jwtFor(alice, "admin")
+        application { testModule(config, db) }
+        val list = client.get("/api/v1/projects") { header("Authorization", "Bearer $token") }
+        assertEquals(HttpStatusCode.OK, list.status)
+        assertFalse(list.bodyAsText().contains("Bob private project"))
+        val team = client.get("/api/v1/users") { header("Authorization", "Bearer $token") }
+        assertFalse(team.bodyAsText().contains("bob@two.example"))
+        for (path in listOf("/api/v1/projects/$bobProject/members", "/api/v1/projects/$bobProject/events", "/api/v2/projects/$bobProject/report")) {
+            val result = client.get(path) { header("Authorization", "Bearer $token") }
+            assertEquals(HttpStatusCode.NotFound, result.status, path)
+        }
+        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/projects/$bobProject") { header("Authorization", "Bearer $token") }.status)
+        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/users/$bob") { header("Authorization", "Bearer $token") }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/users/invite") {
+            header("Authorization", "Bearer $token"); contentType(ContentType.Application.Json)
+            setBody("""{"email":"other@three.example","role":"admin","new_organization":true}""")
+        }.status)
+        assertTrue(projects.findById(bobProject.removePrefix("proj_").toLong()) != null)
     }
 
     @Test
@@ -150,6 +189,22 @@ class AccessTokenAuthIntegrationTest {
             setBody("""{"name":"Should Fail"}""")
         }
         assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `PAT creation permission follows current role after administrator demotion`() = testApplication {
+        val config = testConfig()
+        val db = freshDb("pat_demotion")
+        val users = UserRepository(db)
+        val id = users.create("demoted@auth.test", "password")
+        val pat = AccessTokenRepository(db).create(id, "old-admin", setOf("projects:create"))
+        users.updateRole(id, "developer")
+        application { testModule(config, db) }
+        assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/projects") {
+            contentType(ContentType.Application.Json)
+            header("Authorization", "Bearer ${pat.token}")
+            setBody("""{"name":"Should fail"}""")
+        }.status)
     }
 
     @Test
@@ -296,6 +351,7 @@ class AccessTokenAuthIntegrationTest {
         val config = testConfig()
         val db = freshDb("pat_auth9")
         val userId = UserRepository(db).create("dev@test.com", "password")
+        UserRepository(db).updateRole(userId, "developer")
         application { testModule(config, db) }
 
         val response = client.post("/api/v1/tokens") {
@@ -348,4 +404,71 @@ class AccessTokenAuthIntegrationTest {
         }
         assertEquals(HttpStatusCode.Unauthorized, createResponse.status)
     }
+    @Test
+    fun `real reviewer refresh token cannot access either session authentication path`() = testApplication {
+        val config = testConfig()
+        val db = freshDb("refresh_type_regression")
+        val users = UserRepository(db)
+        val id = users.create("reviewer@auth.test", "password")
+        users.updateRole(id, "reviewer")
+        application { testModule(config, db) }
+        val login = client.post("/api/v1/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"reviewer@auth.test","password":"password"}""")
+        }
+        assertEquals(HttpStatusCode.OK, login.status)
+        val body = Json.parseToJsonElement(login.bodyAsText()) as kotlinx.serialization.json.JsonObject
+        val refresh = (body.getValue("refresh_token") as kotlinx.serialization.json.JsonPrimitive).content
+        val access = (body.getValue("token") as kotlinx.serialization.json.JsonPrimitive).content
+        for (path in listOf("/api/v1/users", "/api/v1/projects")) {
+            assertEquals(HttpStatusCode.Unauthorized, client.get(path) { header("Authorization", "Bearer $refresh") }.status)
+        }
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/users") { header("Authorization", "Bearer $access") }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/projects") { header("Authorization", "Bearer $access") }.status)
+        users.updateRole(id, "developer")
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/projects") { header("Authorization", "Bearer $access") }.status)
+    }
+
+    @Test
+    fun `missing and unknown roles never become administrator sessions`() = testApplication {
+        val config = testConfig()
+        val db = freshDb("missing_role_regression")
+        val id = UserRepository(db).create("role@auth.test", "password")
+        application { testModule(config, db) }
+        for (role in listOf(null, "superuser")) {
+            val jwt = JWT.create().withAudience(audience).withIssuer(issuer)
+                .withClaim("userId", id.toString()).withClaim("role", role)
+                .withExpiresAt(Date(System.currentTimeMillis() + 3600_000L)).sign(Algorithm.HMAC256(secret))
+            for (path in listOf("/api/v1/users", "/api/v1/projects")) {
+                assertEquals(HttpStatusCode.Unauthorized, client.get(path) { header("Authorization", "Bearer $jwt") }.status)
+            }
+        }
+    }
+
+    @Test
+    fun `refresh rotates once and logout invalidates its access session`() = testApplication {
+        val config = testConfig()
+        val db = freshDb("rotation_logout_regression")
+        UserRepository(db).create("rotate@auth.test", "password")
+        application { testModule(config, db) }
+        val login = client.post("/api/v1/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"rotate@auth.test","password":"password"}""")
+        }
+        val body = Json.parseToJsonElement(login.bodyAsText()) as kotlinx.serialization.json.JsonObject
+        val refresh = (body.getValue("refresh_token") as kotlinx.serialization.json.JsonPrimitive).content
+        suspend fun rotate() = client.post("/api/v1/auth/refresh") {
+            contentType(ContentType.Application.Json); setBody("""{"refresh_token":"$refresh"}""")
+        }
+        val renewed = rotate()
+        assertEquals(HttpStatusCode.OK, renewed.status)
+        assertEquals(HttpStatusCode.Unauthorized, rotate().status)
+        val tokens = Json.parseToJsonElement(renewed.bodyAsText()) as kotlinx.serialization.json.JsonObject
+        val access = (tokens.getValue("token") as kotlinx.serialization.json.JsonPrimitive).content
+        val currentRefresh = (tokens.getValue("refresh_token") as kotlinx.serialization.json.JsonPrimitive).content
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/projects") { header("Authorization", "Bearer $access") }.status)
+        client.post("/api/v1/auth/logout") { contentType(ContentType.Application.Json); setBody("""{"refresh_token":"$currentRefresh"}""") }
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/projects") { header("Authorization", "Bearer $access") }.status)
+    }
+
 }

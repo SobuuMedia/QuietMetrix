@@ -1,61 +1,43 @@
 <?php
 
 /**
- * APCu-backed token-bucket rate limiter.
+ * Database-coordinated bounded fixed-window ingest limiter.
  *
- * Keyed by (apiKey, route), enforces requests-per-second with burst allowance.
- * Falls back to no-op if APCu is unavailable — a startup guard in index.php
- * refuses to boot when RATE_LIMIT_ENABLED=true but APCu is missing.
- *
- * Bucket structure stored in APCu:
- *   { tokens: float, lastRefill: float (microtime) }
+ * Keyed by (apiKey, route), shares a fixed-minute request budget across workers.
+ * Database failures propagate; the limiter never silently allows traffic.
  */
 
 /**
  * Enforce a rate limit. Responds 429 + exits if the bucket is exhausted.
  *
  * @param string $key  Unique identifier (e.g. "track:{$projectId}")
- * @param int    $rps  Requests per second (sustained rate)
- * @param int    $burst Maximum burst tokens
+ * @param int    $rps  Per-second configuration converted to a minute budget
+ * @param int    $burst Maximum requests in the minute window
  */
 function enforceLimit(string $key, int $rps, int $burst): void
 {
     if (!defined('RATE_LIMIT_ENABLED') || !RATE_LIMIT_ENABLED) {
         return;
     }
-    if (!function_exists('apcu_fetch')) {
-        // Guarded at startup — this is a safety belt
-        error_log('[QuietMetrix] Rate limit enabled but APCu unavailable — request allowed');
-        return;
-    }
+    enforceSharedLimit('ingest:' . $key, min($burst, $rps * 60));
+}
 
-    $bucket = apcu_fetch("qm_limit:$key");
-
-    $now = microtime(true);
-
-    if ($bucket === false) {
-        $bucket = [
-            'tokens'     => (float)$burst,
-            'lastRefill' => $now,
-        ];
-    }
-
-    // Refill tokens
-    $elapsed = $now - $bucket['lastRefill'];
-    $bucket['tokens'] = min((float)$burst, $bucket['tokens'] + $elapsed * (float)$rps);
-    $bucket['lastRefill'] = $now;
-
-    if ($bucket['tokens'] >= 1.0) {
-        $bucket['tokens'] -= 1.0;
-        apcu_store("qm_limit:$key", $bucket, max(60, (int)ceil($burst / max(1, $rps)) + 30));
-        return;
-    }
-
-    // Bucket exhausted
-    $retryAfter = max(1, (int)ceil((1.0 - $bucket['tokens']) / max(1, $rps)));
-    apcu_store("qm_limit:$key", $bucket, max(60, $retryAfter + 30));
-
-    header('Retry-After: ' . $retryAfter);
-    errorResponse(429, 'rate_limit_exceeded', 'Rate limit exceeded. Retry after ' . $retryAfter . ' seconds.');
-    exit;
+/** Shared across PHP workers/replicas; no raw IP or email is retained. */
+function enforceSharedLimit(string $key, int $limit, int $window = 60): void {
+    $db = getDb(); $now = time();
+    $bucket = hash_hmac('sha256', $key . ':' . intdiv($now, $window), JWT_SECRET);
+    $db->beginTransaction();
+    try {
+        $db->prepare('DELETE FROM request_rate_buckets WHERE expires_at<=?')->execute([$now]);
+        if ((int)$db->query('SELECT COUNT(*) FROM request_rate_buckets')->fetchColumn() >= 100000) {
+            $existing=$db->prepare('SELECT 1 FROM request_rate_buckets WHERE bucket_key=?'); $existing->execute([$bucket]);
+            if ($existing->fetchColumn() === false) { $db->rollBack(); header('Retry-After: 60'); errorResponse(429,'rate_limit_exceeded','Rate limiter capacity reached'); exit; }
+        }
+        $db->prepare('INSERT IGNORE INTO request_rate_buckets (bucket_key,attempts,expires_at) VALUES (?,0,?)')->execute([$bucket,(intdiv($now,$window)+2)*$window]);
+        $db->prepare('UPDATE request_rate_buckets SET attempts=attempts+1 WHERE bucket_key=?')->execute([$bucket]);
+        $stmt=$db->prepare('SELECT attempts FROM request_rate_buckets WHERE bucket_key=?'); $stmt->execute([$bucket]);
+        $allowed=(int)$stmt->fetchColumn() <= $limit;
+        $db->commit();
+    } catch (Throwable $e) { $db->rollBack(); throw $e; }
+    if (!$allowed) { header('Retry-After: ' . $window); errorResponse(429,'rate_limit_exceeded','Request budget exhausted'); exit; }
 }

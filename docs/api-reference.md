@@ -67,6 +67,10 @@ Response: `202 Accepted` with `{ "ok": true, "accepted": 1, "quarantined": 0 }`
 ### Projects CRUD
 
 - `GET /api/v1/projects` — List projects (supports `?owner_only=true`). Session or PAT auth.
+  Project rows include ingest-derived `activity_status` (`receiving_data`, `no_recent_data`, or
+  `waiting_for_first_data`) and `last_received_at`. `platforms` and `sdk_versions` are present only
+  when a project-level installation window has at least five contributors; empty lists mean the
+  metadata is unavailable or below that threshold, not that the project is configured for none.
 - `POST /api/v1/projects` — Create project (returns API key). Session (admin) or PAT auth.
   Accepts an optional `Idempotency-Key` header — a retried create with the same key returns
   the existing project (`200`) instead of minting a duplicate.
@@ -98,12 +102,18 @@ Roles: `owner` (full control), `admin` (manage members and settings), `viewer` (
 
 ### Plans
 
-| Plan | Events/Month | RPS | Retention | Max Projects |
-|------|-------------|-----|-----------|-------------|
-| Free | 10,000 | 10 | 30 days | 1 |
-| Hobby | 100,000 | 50 | 90 days | 3 |
-| Startup | 1,000,000 | 200 | 365 days | 10 |
-| Business | 10,000,000 | 1,000 | 730 days | 50 |
+| Hosted account plan | Retention | Organization projects |
+| --- | --- | --- |
+| Free | 30 days | 1 |
+| Hobby | 90 days | 3 |
+| Startup | 365 days | 10 |
+| Business | 730 days | 50 |
+
+Plans are operator-managed; a public billing integration is not supplied. The hosted
+physical ingestion budget defaults to 10,000 requests per project per UTC day and counts
+retries. Configured request-rate controls apply independently of plan. Self-hosted project
+counts and analytics retention remain unlimited unless configured. See
+[public hosting](operations/public-hosting.md).
 
 ### Dashboard
 
@@ -111,6 +121,12 @@ Roles: `owner` (full control), `admin` (manage members and settings), `viewer` (
 - `GET /api/v1/projects/:id/transitions` — Screen-to-screen navigation flow counts
 - `GET /api/v1/projects/:id/sessions` — Session counts and average duration
 - `GET /api/v1/projects/:id/retention` — Cohort retention (day 1/3/7/14/30)
+- `GET /api/v2/projects/:id/report?range=today|7d|30d|90d&anchor=YYYY-MM-DD&compare=true|false&platform=all|android|ios|web|desktop` — Authenticated typed report contract. Current implementation reports fixed-window v2 People with explicit state/source and coverage, plus `charts.people`: elapsed UTC-hour bins for the current Today, all 24 hours for a historical single day, daily bins for 7d/30d, and exact seven-day blocks (with a shorter final block) for 90d. With comparison enabled, `comparison_charts.people` returns the equal-length preceding bins; current-day hourly comparison stops at the same elapsed UTC hour. Chart-bin People values are distinct within each bin and are never summed into the range KPI. Adjacent full-window People KPI comparison is available for 7d/30d/90d. Today KPI comparison and other v2 report sections remain unsupported until their privacy witnesses and query projections are implemented.
+
+### SDK counter protocol
+
+- `GET /api/v1/sdk/capabilities` — API key auth (`X-QM-Api-Key`). Returns supported server capabilities and minimum SDK versions. SDKs cache the response for 24 hours; a missing route means legacy server compatibility mode.
+- `POST /api/v2/counters` — API key auth. Additive hourly/daily aggregate ingestion with idempotent batch receipts. The current v2 wire DTO uses `batch_id`, `day`, nullable UTC `hour`, `sdk`, `app`, and `counters`; it is not yet the complete segment-based envelope specified by the dashboard fidelity plan.
 
 ### Funnels
 

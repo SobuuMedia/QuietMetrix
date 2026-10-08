@@ -5,9 +5,11 @@ import platform.Foundation.NSLocale
 import platform.Foundation.currentLocale
 import platform.Foundation.languageCode
 import platform.UIKit.UIDevice
+import platform.UIKit.UIUserInterfaceIdiomPad
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "ios"
+    actual val deviceClass: String = if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) "tablet" else "phone"
     actual val language: String? = NSLocale.currentLocale.languageCode
     actual val appVersion: String? = NSBundle.mainBundle.infoDictionary?.get("CFBundleShortVersionString") as? String
     actual val screenWidth: Int? = null

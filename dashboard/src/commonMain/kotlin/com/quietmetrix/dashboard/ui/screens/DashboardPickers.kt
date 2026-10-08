@@ -2,16 +2,29 @@ package com.quietmetrix.dashboard.ui.screens
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.ApiProject
 import com.quietmetrix.dashboard.api.TimeRange
-import com.quietmetrix.dashboard.resources.*
+import com.quietmetrix.dashboard.resources.Res
+import com.quietmetrix.dashboard.resources.badge_demo
+import com.quietmetrix.dashboard.resources.picker_no_projects
+import com.quietmetrix.dashboard.resources.picker_select_project
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.ui.components.handCursor
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material3.Text as MaterialText
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 @Composable
 internal fun ProjectPicker(
@@ -28,12 +41,12 @@ internal fun ProjectPicker(
         enabled = projects.isNotEmpty(),
         modifier = Modifier.handCursor(),
     ) {
-        Text(current?.name ?: if (projects.isEmpty()) noProjects else selectProject)
+        MaterialText(current?.name ?: if (projects.isEmpty()) noProjects else selectProject)
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
         projects.forEach { p ->
             DropdownMenuItem(
-                text = { Text(p.name) },
+                text = { MaterialText(p.name) },
                 onClick = { onSelect(p.id); expanded = false },
                 modifier = Modifier.handCursor(),
             )
@@ -47,11 +60,11 @@ internal fun WindowPicker(range: TimeRange, onSelect: (TimeRange) -> Unit) {
     OutlinedButton(
         onClick = { expanded = true },
         modifier = Modifier.handCursor(),
-    ) { Text(stringResource(range.labelRes)) }
+    ) { MaterialText(stringResource(range.labelRes)) }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        TimeRange.entries.forEach { r ->
+        TimeRange.entries.filter { it != TimeRange.Hour1 }.forEach { r ->
             DropdownMenuItem(
-                text = { Text(stringResource(r.labelRes)) },
+                text = { MaterialText(stringResource(r.labelRes)) },
                 onClick = { onSelect(r); expanded = false },
                 modifier = Modifier.handCursor(),
             )

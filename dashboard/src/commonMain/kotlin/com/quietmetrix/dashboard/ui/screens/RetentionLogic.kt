@@ -89,6 +89,9 @@ private fun mostRecentObserved(
  */
 internal fun effectiveDayValue(cohort: RetentionCohort, dayNumber: Int, rawValue: Double?, todayEpochDay: Long): Double? {
     if (cohort.size <= 0) return null
+    if (cohort.sizeState == "suppressed") return null
+    val backendState = cohort.dayStates["day_$dayNumber"]
+    if (backendState == "suppressed" || backendState == "unsupported" || backendState == "insufficient_data" || backendState == "not_mature") return null
     return rawValue
 }
 

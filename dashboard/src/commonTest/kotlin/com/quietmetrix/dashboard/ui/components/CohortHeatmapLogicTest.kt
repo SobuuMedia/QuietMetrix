@@ -63,15 +63,10 @@ class CohortHeatmapLogicTest {
         assertEquals(1, rows.size)
     }
 
-    // ---- buildCohortHeatmapRows: ByWeek — epoch-anchored 7-day bucketing + weighted aggregation ----
+    // ---- buildCohortHeatmapRows: ByWeek — ISO calendar weeks + weighted aggregation ----
 
     @Test
-    fun byWeekGroupsCohortsInTheSameSevenDayEpochBucketIntoOneRow() {
-        // 2026-09-21 and 2026-09-22 are adjacent days; whether they land in the same epoch-anchored
-        // 7-day bucket depends only on floorDiv(7), asserted here rather than assumed.
-        val d1 = epochDayFromIsoOrNull("2026-09-21")!!
-        val d2 = epochDayFromIsoOrNull("2026-09-22")!!
-        assertTrue(d1.floorDiv(7) == d2.floorDiv(7), "test fixture assumes these two dates share a week bucket")
+    fun byWeekGroupsCohortsInTheSameIsoWeekIntoOneRow() {
         val cohorts = listOf(
             RetentionCohort(cohortDate = "2026-09-21", size = 50, day1 = 0.40),
             RetentionCohort(cohortDate = "2026-09-22", size = 50, day1 = 0.20),
@@ -79,14 +74,53 @@ class CohortHeatmapLogicTest {
         val rows = buildCohortHeatmapRows(cohorts, CohortGrouping.ByWeek, today)
         assertEquals(1, rows.size)
         assertEquals(100, rows[0].size) // sizes summed
-        assertEquals("2026-09-21", rows[0].label) // earliest date in the bucket
+        assertEquals("2026-09-21", rows[0].label) // Monday of the ISO week
+    }
+
+    @Test
+    fun byWeekKeepsSundayAndMondayInTheirDifferentIsoWeeks() {
+        val cohorts = listOf(
+            RetentionCohort(cohortDate = "2026-10-04", size = 3, day1 = 0.5),
+            RetentionCohort(cohortDate = "2026-10-05", size = 5, day1 = 0.8),
+        )
+        val rows = buildCohortHeatmapRows(
+            cohorts,
+            CohortGrouping.ByWeek,
+            epochDayFromIsoOrNull("2026-10-10")!!,
+        )
+        assertEquals(listOf("2026-10-05", "2026-09-28"), rows.map { it.label })
+        assertEquals(listOf(5, 3), rows.map { it.size })
+    }
+
+    @Test
+    fun byWeekPreservesAlreadyAggregatedLegacyWeekLabels() {
+        val cohorts = listOf(
+            RetentionCohort(cohortDate = "2026-W40", size = 20, day1 = 0.4),
+            RetentionCohort(cohortDate = "2026-W39", size = 10, day1 = 0.3),
+        )
+        val rows = buildCohortHeatmapRows(cohorts, CohortGrouping.ByWeek, today)
+        assertEquals(listOf("2026-W40", "2026-W39"), rows.map { it.label })
+        assertEquals(listOf(20, 10), rows.map { it.size })
+    }
+
+    @Test
+    fun byWeekUsesTheIsoWeekYearAcrossCalendarYearBoundary() {
+        val cohorts = listOf(
+            RetentionCohort(cohortDate = "2026-12-31", size = 4, day1 = 0.4),
+            RetentionCohort(cohortDate = "2027-01-01", size = 6, day1 = 0.6),
+        )
+        val rows = buildCohortHeatmapRows(
+            cohorts,
+            CohortGrouping.ByWeek,
+            epochDayFromIsoOrNull("2027-01-10")!!,
+        )
+        assertEquals(1, rows.size)
+        assertEquals("2026-12-28", rows.single().label)
+        assertEquals(10, rows.single().size)
     }
 
     @Test
     fun byWeekCellIsUnavailableWhenAMatureMemberHasNoReportedCount() {
-        val d1 = epochDayFromIsoOrNull("2026-09-21")!!
-        val d2 = epochDayFromIsoOrNull("2026-09-22")!!
-        assertTrue(d1.floorDiv(7) == d2.floorDiv(7))
         // One mature member's count is hidden; averaging only the visible cohort would misstate the week.
         val cohorts = listOf(
             RetentionCohort(cohortDate = "2026-09-21", size = 30, day1 = null, day7 = 0.40),
@@ -101,9 +135,6 @@ class CohortHeatmapLogicTest {
 
     @Test
     fun byWeekCellExcludesTooYoungMembersFromTheWeightedAverageRatherThanTreatingThemAsZero() {
-        val d1 = epochDayFromIsoOrNull("2026-09-21")!!
-        val d2 = epochDayFromIsoOrNull("2026-09-22")!!
-        assertTrue(d1.floorDiv(7) == d2.floorDiv(7))
         // One real 40% cohort + one cohort too young to have reached day30 yet (only 10-11 days old).
         val cohorts = listOf(
             RetentionCohort(cohortDate = "2026-09-21", size = 30, day30 = 0.40),
@@ -142,8 +173,8 @@ class CohortHeatmapLogicTest {
         )
         val rows = buildCohortHeatmapRows(cohorts, CohortGrouping.ByWeek, today)
         assertEquals(2, rows.size)
-        assertEquals("2026-09-20", rows[0].label)
-        assertEquals("2026-08-01", rows[1].label)
+        assertEquals("2026-09-14", rows[0].label)
+        assertEquals("2026-07-27", rows[1].label)
     }
 
     // ---- cohortHeatmapCellAlpha / cohortHeatmapCellTextIsDark: intensity mapping ----

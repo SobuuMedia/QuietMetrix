@@ -6,11 +6,14 @@ import com.quietmetrix.server.domain.CounterItem
 import com.quietmetrix.server.persistence.CounterRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
+import com.quietmetrix.server.persistence.tables.CounterBatchReceipts
+import com.quietmetrix.server.persistence.tables.CounterCellsV2
 import com.quietmetrix.server.persistence.tables.Counters
 import com.quietmetrix.server.persistence.tables.CountersQuarantine
 import com.quietmetrix.server.persistence.tables.Projects
 import com.quietmetrix.server.persistence.tables.Users
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.LocalDate
 import kotlin.test.Test
@@ -26,9 +29,9 @@ class CounterIngestProcessorTest {
 
     private fun freshRepo(): Pair<CounterRepository, Long> {
         val db = Database.connect(
-            "jdbc:h2:mem:counteringest_${java.util.UUID.randomUUID()};DB_CLOSE_DELAY=-1", "org.h2.Driver", "sa", "",
+            "jdbc:h2:mem:counteringest_${java.util.UUID.randomUUID()};DB_CLOSE_DELAY=-1;MODE=MYSQL", "org.h2.Driver", "sa", "",
         )
-        transaction(db) { SchemaUtils.create(Users, Projects, Counters, CountersQuarantine) }
+        transaction(db) { SchemaUtils.create(Users, Projects, Counters, CountersQuarantine, CounterBatchReceipts, CounterCellsV2) }
         val userRepo = UserRepository(db)
         val projectRepo = ProjectRepository(db)
         userRepo.create("admin@quietmetrix.com", "password123")
@@ -60,6 +63,26 @@ class CounterIngestProcessorTest {
     }
 
     @Test
+    fun `fixed-window people count is gated on distinct contribution witnesses`() {
+        val (repo, pid) = freshRepo()
+        val dims = mapOf("scope_kind" to "project", "scope_key" to "all", "days" to "7", "end_day" to today.toString())
+        val contribution = CounterRepository.CounterDelta(
+            metric = "unique_window_v2", dims = dims, platform = "android", n = 1, isNewDevice = true,
+        )
+        repeat(4) { repo.upsert(pid, today, contribution) }
+        assertEquals(emptyList(), repo.readCells(pid, "unique_window_v2", today.minusDays(6), today, k = 5))
+        repo.upsert(pid, today, contribution)
+        val reportable = repo.readCells(pid, "unique_window_v2", today.minusDays(6), today, k = 5).single()
+        assertEquals(dims, reportable.dims)
+        assertEquals(5L, reportable.n)
+        assertEquals(5L, reportable.devices)
+        assertEquals(listOf(CounterRepository.FacetTotal("android", 5L)),
+            repo.uniqueWindowByFacet(pid, today.minusDays(6), today, 7, today, "platform", k = 5))
+        assertEquals(listOf(CounterRepository.FacetTotal("unknown", 5L)),
+            repo.uniqueWindowByFacet(pid, today.minusDays(6), today, 7, today, "country", k = 5))
+    }
+
+    @Test
     fun `an invalid item is quarantined without failing the rest of the batch`() {
         val (repo, pid) = freshRepo()
         val request = CounterBatchRequest(
@@ -72,6 +95,45 @@ class CounterIngestProcessorTest {
         val response = CounterIngestProcessor.process(pid, request, today, platform = "ios", repository = repo)
         assertEquals(1, response.accepted)
         assertEquals(1, response.quarantined)
+    }
+
+    @Test
+    fun `receipt makes retries idempotent and rejects a changed payload`() {
+        val (repo, pid) = freshRepo()
+        val request = CounterBatchRequest(
+            batchId = "0123456789abcdef0123456789abcdef",
+            day = today.toString(),
+            sdk = com.quietmetrix.server.domain.SdkInfo("android", "1.0"),
+            app = CounterAppInfo(version = "2.4", country = null),
+            counters = listOf(CounterItem(m = "event", d = mapOf("name" to "open_book"), n = 7, u = 1)),
+        )
+        assertEquals("4cfdd303c5dbfbd0cf513c6ceb5e24a4650c214d077a345e13dae9513a3aa5e7", CounterIngestProcessor.payloadHash(request))
+        val first = CounterIngestProcessor.processIdempotent(pid, request, today, "android", repo, "a".repeat(32))
+        val retry = CounterIngestProcessor.processIdempotent(pid, request, today, "android", repo, "b".repeat(32))
+        assertEquals(CounterIngestProcessor.IdempotentResult.Accepted(com.quietmetrix.server.domain.CounterBatchResponse(accepted = 1), false), first)
+        assertEquals(CounterIngestProcessor.IdempotentResult.Accepted(com.quietmetrix.server.domain.CounterBatchResponse(accepted = 1), true), retry)
+        assertEquals(7L, repo.readCells(pid, "event", today, today, k = 0).single().n)
+
+        val changed = request.copy(counters = listOf(CounterItem(m = "event", d = mapOf("name" to "open_book"), n = 8, u = 1)))
+        assertEquals(CounterIngestProcessor.IdempotentResult.Conflict,
+            CounterIngestProcessor.processIdempotent(pid, changed, today, "android", repo, "c".repeat(32)))
+        assertEquals(7L, repo.readCells(pid, "event", today, today, k = 0).single().n)
+    }
+
+    @Test
+    fun `invalid idempotent batch applies none of its valid siblings`() {
+        val (repo, pid) = freshRepo()
+        val request = CounterBatchRequest(
+            batchId = "abcdef0123456789abcdef0123456789",
+            day = today.toString(),
+            counters = listOf(
+                CounterItem(m = "unknown_metric", d = emptyMap(), n = 1, u = 1),
+                CounterItem(m = "event", d = mapOf("name" to "open_book"), n = 10, u = 1),
+            ),
+        )
+        val result = CounterIngestProcessor.processIdempotent(pid, request, today, "android", repo, "d".repeat(32))
+        assertEquals(CounterIngestProcessor.IdempotentResult.Accepted(com.quietmetrix.server.domain.CounterBatchResponse(accepted = 0, quarantined = 2), false), result)
+        assertEquals(emptyList(), repo.readCells(pid, "event", today, today, k = 0))
     }
 
     @Test

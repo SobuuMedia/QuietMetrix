@@ -7,13 +7,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.BreakdownItem
@@ -75,13 +80,46 @@ class FlowScreenshotTest {
 
     @Suppress("DEPRECATION")
     @Test
+    fun platformFilterSelectsAndReportsTheChosenPlatform() = runComposeUiTest {
+        var selected = "all"
+        setContent { QuietMetrixTheme(ThemeMode.Dark) {
+            PlatformFilterRow(selected = selected, onSelect = { selected = it })
+        } }
+        onNodeWithText("iOS").performClick()
+        assertEquals("ios", selected)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun platformFiltersAndCopyPathFitCompactWidth() = runComposeUiTest {
+        setContent { QuietMetrixTheme(ThemeMode.Dark) {
+            Column(Modifier.width(328.dp)) {
+                PlatformFilterRow(selected = "all", onSelect = {})
+                StartFromRow(
+                    screens = listOf("home_shelf", "book_detail", "search"),
+                    selected = "home_shelf",
+                    path = listOf("home_shelf"),
+                    copyScope = "Demo project · Last 7 days",
+                    onPick = {},
+                )
+            }
+        } }
+        listOf("All", "Android", "iOS", "Web", "Copy path").forEach { onNodeWithText(it).assertIsDisplayed() }
+        val webRight = onNodeWithText("Web").fetchSemanticsNode().boundsInRoot.right
+        val copyRight = onNodeWithText("Copy path").fetchSemanticsNode().boundsInRoot.right
+        assert(webRight <= 360f) { "Flow Web filter extends past its 360dp viewport: $webRight" }
+        assert(copyRight <= 360f) { "Flow Copy path action extends past its 360dp viewport: $copyRight" }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
     fun headerMatchesGolden() = runComposeUiTest {
         setContent {
             QuietMetrixTheme(ThemeMode.Dark) {
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp)) {
                     Column(modifier = Modifier.width(465.dp)) {
                         FlowHero()
-                        PlatformFilterRow(modifier = Modifier.padding(top = 16.dp))
+                        PlatformFilterRow(selected = "all", onSelect = {}, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
             }
@@ -126,6 +164,31 @@ class FlowScreenshotTest {
         }
         waitForIdle()
         onRoot().captureToImage().assertMatchesGolden("flow/breadcrumb-with-path.png")
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun copyPathIncludesReadablePathAndSelectedScope() = runComposeUiTest {
+        var copied: AnnotatedString? = null
+        val clipboard = object : ClipboardManager {
+            override fun getText(): AnnotatedString? = copied
+            override fun setText(annotatedString: AnnotatedString) { copied = annotatedString }
+        }
+        setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                QuietMetrixTheme(ThemeMode.Dark) {
+                    StartFromRow(
+                        screens = listOf("home"),
+                        selected = "home",
+                        path = listOf("home", "search"),
+                        copyScope = "Project: Demo · Range: Last 7 days · Platform: All",
+                        onPick = {},
+                    )
+                }
+            }
+        }
+        onNodeWithText("Copy path").performClick()
+        assertEquals("Path: Home → Search\nProject: Demo · Range: Last 7 days · Platform: All", copied?.text)
     }
 
     // -- 3-card row (Task 23) -------------------------------------------------------------
@@ -286,7 +349,7 @@ class FlowScreenshotTest {
             }
         }
         waitForIdle()
-        onNodeWithText("search").performClick()
+        onNodeWithText("Search").performClick()
         waitForIdle()
         assertEquals("search", picked?.screen)
     }
@@ -314,7 +377,7 @@ class FlowScreenshotTest {
         // as a raw pointer event at the node's position rather than invoking a semantics action,
         // so the tap itself never throws; the real assertion is that it has nothing to hit —
         // [onPick] never fires for it.
-        onNodeWithText("👋 Left the app").performClick()
+        onNodeWithText("Left the app").performClick()
         waitForIdle()
         assertEquals(null, picked)
     }

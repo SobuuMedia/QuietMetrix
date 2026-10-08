@@ -2,6 +2,7 @@ package com.quietmetrix.dashboard
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
 import com.quietmetrix.dashboard.theme.ThemeMode
 import com.quietmetrix.dashboard.theme.getThemeMode
+import com.quietmetrix.dashboard.theme.observeSystemThemeMode
 import com.quietmetrix.dashboard.theme.resolveSystemThemeMode
 import com.quietmetrix.dashboard.theme.saveThemeMode
 import com.quietmetrix.dashboard.ui.screens.AcceptInviteScreen
@@ -30,7 +32,12 @@ fun App(apiBaseUrl: String, inviteToken: String? = null) {
         savedMode = newMode
         saveThemeMode(newMode)
     }
-    val effective = if (savedMode == ThemeMode.System) resolveSystemThemeMode() else savedMode
+    var systemMode by remember { mutableStateOf(resolveSystemThemeMode()) }
+    DisposableEffect(Unit) {
+        val stopObserving = observeSystemThemeMode { systemMode = it }
+        onDispose { stopObserving() }
+    }
+    val effective = if (savedMode == ThemeMode.System) systemMode else savedMode
 
     CompositionLocalProvider(
         LocalThemeMode provides savedMode,

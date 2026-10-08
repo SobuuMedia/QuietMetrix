@@ -10,31 +10,30 @@ class BreakpointTest {
     fun tinyWidthIsCompact() {
         assertEquals(WindowSizeClass.Compact, classifyWindow(0.dp))
         assertEquals(WindowSizeClass.Compact, classifyWindow(320.dp))
-        assertEquals(WindowSizeClass.Compact, classifyWindow(598.dp))
+        assertEquals(WindowSizeClass.Compact, classifyWindow(599.dp))
     }
 
     @Test
     fun exactlyCompactMaxIsMedium() {
-        // boundary: widthDp < compactMax -> Compact; 599 is not < 599 -> Medium
-        assertEquals(WindowSizeClass.Medium, classifyWindow(599.dp))
+        assertEquals(WindowSizeClass.Medium, classifyWindow(600.dp))
     }
 
     @Test
     fun mediumRange() {
-        assertEquals(WindowSizeClass.Medium, classifyWindow(600.dp))
-        assertEquals(WindowSizeClass.Medium, classifyWindow(720.dp))
-        assertEquals(WindowSizeClass.Medium, classifyWindow(838.dp))
+        assertEquals(WindowSizeClass.Medium, classifyWindow(601.dp))
+        assertEquals(WindowSizeClass.Medium, classifyWindow(768.dp))
+        assertEquals(WindowSizeClass.Medium, classifyWindow(1023.dp))
     }
 
     @Test
     fun exactlyMediumMaxIsExpanded() {
-        assertEquals(WindowSizeClass.Expanded, classifyWindow(839.dp))
+        assertEquals(WindowSizeClass.Expanded, classifyWindow(1024.dp))
     }
 
     @Test
     fun expandedRange() {
-        assertEquals(WindowSizeClass.Expanded, classifyWindow(840.dp))
-        assertEquals(WindowSizeClass.Expanded, classifyWindow(1024.dp))
+        assertEquals(WindowSizeClass.Expanded, classifyWindow(1025.dp))
+        assertEquals(WindowSizeClass.Expanded, classifyWindow(1280.dp))
         assertEquals(WindowSizeClass.Expanded, classifyWindow(1920.dp))
     }
 }

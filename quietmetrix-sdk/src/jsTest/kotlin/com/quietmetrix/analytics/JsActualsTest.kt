@@ -60,6 +60,6 @@ class JsActualsTest {
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "qm_device_", trackingEndpoint = null))
         val ctx = DeviceContext()
         assertEquals("js", ctx.platform)
-        assertTrue(ctx.anonymousId.startsWith("qm_aid_"))
+        assertEquals("", ctx.anonymousId)
     }
 }

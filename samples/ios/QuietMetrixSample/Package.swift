@@ -7,16 +7,17 @@ let package = Package(
     products: [
         .library(name: "QuietMetrixSample", targets: ["QuietMetrixSample"])
     ],
-    dependencies: [
-        // The QuietMetrix XCFramework is produced by the KMP build:
-        //   ./gradlew :quietmetrix-sdk:assembleQuietMetrixXCFramework
-        // Copy the framework into Frameworks/ or link it from the output path.
-    ],
+    dependencies: [],
     targets: [
+        .binaryTarget(
+            name: "QuietMetrix",
+            path: "Frameworks/QuietMetrix.xcframework"
+        ),
         .target(
             name: "QuietMetrixSample",
-            dependencies: [],
-            path: "."
+            dependencies: ["QuietMetrix"],
+            path: ".",
+            exclude: ["Frameworks", "README.md"]
         )
     ]
 )

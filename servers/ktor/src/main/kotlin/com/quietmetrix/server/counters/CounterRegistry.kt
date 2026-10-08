@@ -37,6 +37,9 @@ object CounterRegistry {
         MetricSpec("search_zero_result", setOf("screen")),
         MetricSpec("friction", setOf("screen", "kind")),
         MetricSpec("experiment", setOf("exp", "variant", "action")),
+        MetricSpec("experiment_exposure_v2", setOf("exp", "rev", "variant")),
+        MetricSpec("experiment_goal_v2", setOf("exp", "rev", "variant")),
+        MetricSpec("unique_window_v2", setOf("scope_kind", "scope_key", "days", "end_day")),
     ).associateBy { it.name }
 
     private val KEY_REGEX = Regex("^[a-z0-9_]{1,32}$")
@@ -60,6 +63,18 @@ object CounterRegistry {
         for ((key, value) in dims) {
             if (!KEY_REGEX.matches(key)) return ValidationResult.Invalid("dim_key_invalid")
             if (!VALUE_REGEX.matches(value)) return ValidationResult.Invalid("dim_value_invalid")
+        }
+        if (metric == "unique_window_v2") {
+            val days = dims.getValue("days").toIntOrNull()
+            val scopeKind = dims.getValue("scope_kind")
+            val scopeKey = dims.getValue("scope_key")
+            val endDay = runCatching { java.time.LocalDate.parse(dims.getValue("end_day")).toString() }.getOrNull()
+            if (days !in (1..7).toList() + listOf(30, 90) ||
+                scopeKind !in setOf("project", "screen") ||
+                (scopeKind == "project" && scopeKey != "all") ||
+                (scopeKind == "screen" && scopeKey == "all") ||
+                endDay != dims.getValue("end_day")
+            ) return ValidationResult.Invalid("unique_window_invalid")
         }
         val canonical = canonicalize(dims)
         return ValidationResult.Valid(canonical, sha256Hex(canonical))

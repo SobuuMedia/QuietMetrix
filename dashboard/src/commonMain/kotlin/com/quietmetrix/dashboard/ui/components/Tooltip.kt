@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -26,6 +25,7 @@ import com.quietmetrix.dashboard.resources.ic_info
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
 import com.quietmetrix.dashboard.theme.QmShapeTokens
 import org.jetbrains.compose.resources.painterResource
+import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 
 /**
  * Where a [Tooltip] bubble renders relative to its anchor (the ⓘ icon):

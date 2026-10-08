@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Task 4 — new models deserialize the backends' snake_case JSON. */
 class ApiModelsTest {
@@ -16,6 +17,30 @@ class ApiModelsTest {
             """{"id":"p1","name":"App","plan_id":null,"api_key_last4":"abcd","created_at":"2026-01-01"}"""
         )
         assertEquals("abcd", p.apiKeyLast4)
+    }
+
+    @Test
+    fun projectDecodesRealIngestSummaryAndOlderServersDefaultSafely() {
+        val p = json.decodeFromString<ApiProject>(
+            """{"id":"p1","name":"App","last_received_at":"2026-10-05T10:00:00Z","platforms":["android"],"sdk_versions":["1.2.0"],"activity_status":"receiving_data"}"""
+        )
+        assertEquals(listOf("android"), p.platforms)
+        assertEquals(listOf("1.2.0"), p.sdkVersions)
+        assertEquals("receiving_data", p.activityStatus)
+        val configured = json.decodeFromString<ApiProject>(
+            """{"id":"p3","name":"Configured","icon_key":"fitness","declared_platforms":["ios","web"]}"""
+        )
+        assertEquals("fitness", configured.iconKey)
+        assertEquals(listOf("ios", "web"), configured.declaredPlatforms)
+        val older = json.decodeFromString<ApiProject>("""{"id":"p2","name":"Legacy"}""")
+        assertEquals("waiting_for_first_data", older.activityStatus)
+    }
+
+    @Test
+    fun projectCreateRequestUsesTheSharedSnakeCaseFields() {
+        val encoded = json.encodeToString(CreateProjectRequest("Store", iconKey = "shopping", declaredPlatforms = listOf("android")))
+        assertTrue(encoded.contains("\"icon_key\":\"shopping\""))
+        assertTrue(encoded.contains("\"declared_platforms\":[\"android\"]"))
     }
 
     @Test
@@ -53,6 +78,17 @@ class ApiModelsTest {
         )
         assertEquals("u9", m.members[0].userId)
         assertEquals("dev@x.c", m.members[0].email)
+        assertEquals("developer", m.members[0].userRole)
+        assertEquals("viewer", m.members[0].memberRole)
+    }
+
+    @Test
+    fun ktorMemberListUsesTheSharedSnakeCaseContract() {
+        val m = json.decodeFromString<MembersResponse>(
+            """{"members":[{"id":"17","project_id":"proj_2","user_id":"u9","email":"dev@x.c","user_role":"developer","member_role":"viewer","created_at":"2026-10-05T00:00:00Z"}],"total":1}"""
+        )
+        assertEquals("u9", m.members.single().userId)
+        assertEquals("viewer", m.members.single().memberRole)
     }
 
     @Test

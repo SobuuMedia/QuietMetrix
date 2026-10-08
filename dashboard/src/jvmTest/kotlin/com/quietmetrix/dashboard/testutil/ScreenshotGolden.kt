@@ -53,6 +53,7 @@ private const val CHANNEL_TOLERANCE = 2
  * suffix) for human inspection; the failure message names that file.
  */
 fun ImageBitmap.assertMatchesGolden(path: String, thresholdPct: Double = 2.0) {
+    if (System.getProperty("golden.record") == "true") writeAsGolden(path)
     val goldenFile = File(GOLDENS_DIR, path)
     check(goldenFile.exists()) {
         "Golden file not found at ${goldenFile.path}. " +

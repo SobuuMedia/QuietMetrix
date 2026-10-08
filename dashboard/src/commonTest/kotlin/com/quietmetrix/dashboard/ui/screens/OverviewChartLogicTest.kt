@@ -2,6 +2,8 @@ package com.quietmetrix.dashboard.ui.screens
 
 import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.DailyPoint
+import com.quietmetrix.dashboard.api.ReportBinDto
+import com.quietmetrix.dashboard.api.ReportMeasureDto
 import com.quietmetrix.dashboard.api.SessionsResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -10,6 +12,31 @@ import kotlin.test.assertNull
 class OverviewChartLogicTest {
 
     // -- dailyVolumeBars -------------------------------------------------------
+
+    @Test
+    fun peopleMetricReadsPrivacyGatedDailyPeopleBins() {
+        val agg = AggregatesResponse(dailyPeople = listOf(
+            DailyPoint(day = "2026-06-28", total = 12),
+            DailyPoint(day = "2026-06-29", total = 18),
+        ))
+        assertEquals(
+            listOf(DailyVolumeBar("2026-06-28", 12), DailyVolumeBar("2026-06-29", 18)),
+            dailyVolumeBars(agg, null, DailyVolumeMetric.People, hourly = false),
+        )
+    }
+
+    @Test
+    fun reportPeoplePointsKeepHourlyBucketsAndDropSuppressedValues() {
+        val points = listOf(
+            ReportBinDto("2026-06-28", "2026-06-28", hour = 9, measures = mapOf(
+                "people" to ReportMeasureDto(value = 12, state = "reported", unit = "installations", source = "v2"),
+            )),
+            ReportBinDto("2026-06-28", "2026-06-28", hour = 10, measures = mapOf(
+                "people" to ReportMeasureDto(state = "suppressed", unit = "installations", source = "v2"),
+            )),
+        ).chartMeasurePoints("people")
+        assertEquals(listOf(DailyPoint("2026-06-28T09", 12)), points)
+    }
 
     @Test
     fun visitsMetricReadsDailySessions() {

@@ -19,7 +19,7 @@ object ExperimentStatus {
      * `traffic_percent` can change any time up to `ended`; nothing changes once `ended`.
      */
     fun editableFields(status: String): Set<String> = when (status) {
-        "draft" -> setOf("name", "screen", "traffic_percent", "variants", "countries")
+        "draft" -> setOf("name", "screen", "traffic_percent", "variants", "countries", "mode", "placement_key", "b_percent", "languages", "match_mode", "goal_event", "icon_key")
         "active", "paused" -> setOf("name", "screen", "traffic_percent")
         else -> emptySet()
     }

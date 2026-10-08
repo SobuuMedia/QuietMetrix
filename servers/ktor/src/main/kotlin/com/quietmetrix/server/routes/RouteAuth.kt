@@ -2,18 +2,19 @@ package com.quietmetrix.server.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.quietmetrix.server.auth.acceptsSession
 import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.persistence.AccessTokenRepository
+import com.quietmetrix.server.persistence.UserRepository
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.jwt.JWTPrincipal
+import org.koin.ktor.ext.inject
 
 /**
- * Global role carried in the JWT (admin | developer | reviewer). Legacy tokens
- * issued before roles existed default to admin (tokens are short-lived and all
- * pre-existing users were admins).
+ * Validated global role. Missing roles never acquire privileges.
  */
 internal fun JWTPrincipal.roleClaim(): String =
-    payload.getClaim("role").asString() ?: "admin"
+    payload.getClaim("role").asString() ?: ""
 
 /**
  * Scope slugs a personal access token (`qm_pat_…`) can carry. Deliberately least-privilege:
@@ -80,7 +81,11 @@ fun resolveApiPrincipal(
 
     if (raw.startsWith("qm_pat_")) {
         val validated = accessTokenRepo.validate(raw) ?: return null
-        return ApiPrincipal.Token(validated.userId, validated.scopes)
+        val users by call.application.inject<UserRepository>()
+        val user = users.findById(validated.userId) ?: return null
+        if (user["status"] != "active") return null
+        val scopes = if (user["role"] == "admin") validated.scopes else validated.scopes - TokenScopes.PROJECTS_CREATE
+        return ApiPrincipal.Token(validated.userId, scopes)
     }
 
     return try {
@@ -89,8 +94,10 @@ fun resolveApiPrincipal(
             .withIssuer(config.auth.jwtIssuer)
             .build()
         val decoded = verifier.verify(raw)
+        val users by call.application.inject<UserRepository>()
+        if (!users.acceptsSession(decoded)) return null
         val userId = decoded.getClaim("userId").asString()?.toLongOrNull() ?: return null
-        val role = decoded.getClaim("role").asString() ?: "admin"
+        val role = decoded.getClaim("role").asString() ?: return null
         ApiPrincipal.Session(userId, role)
     } catch (_: Exception) {
         null

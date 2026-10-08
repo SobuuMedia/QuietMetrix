@@ -210,12 +210,6 @@ class ExperimentsLogicTest {
     }
 
     @Test
-    fun shouldAutoOpenGuideOnlyWhenNotSeen() {
-        assertTrue(shouldAutoOpenGuide(seen = false))
-        assertFalse(shouldAutoOpenGuide(seen = true))
-    }
-
-    @Test
     fun guideStepAfterClampsAtTheLastStep() {
         assertEquals(1, guideStepAfter(0, EXPERIMENTS_GUIDE_STEP_COUNT))
         assertEquals(EXPERIMENTS_GUIDE_STEP_COUNT - 1, guideStepAfter(EXPERIMENTS_GUIDE_STEP_COUNT - 1, EXPERIMENTS_GUIDE_STEP_COUNT))

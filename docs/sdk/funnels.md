@@ -1,5 +1,7 @@
 # Funnels
 
+> Funnel definitions are evaluated on-device. Funnel counters contain no installation identifier.
+
 A funnel answers a question your raw event log can't: *of everyone who started X, how many
 finished, and where did the rest leave?* QuietMetrix funnels are an ordered list of steps —
 each step is an event you already track — plus a conversion window. They analyze retroactively
@@ -15,6 +17,14 @@ optionally a screen or exact-match props) that your app already sends. This mean
 - A funnel can be defined *after* the events it analyzes already exist in your data.
 - Declaring or editing a funnel costs nothing in event volume or quota.
 - You can iterate on step definitions from the dashboard without shipping an app update.
+
+Dashboard-created definitions are delivered through the authenticated `/api/v2/sdk/funnels`
+endpoint. The SDK uses its cached definition immediately and refreshes it in the background while
+analytics consent is active. Semantic edits create a new immutable revision for new entries;
+entries already in progress continue on the original revision. The dashboard queries each
+revision separately, so old results are not reinterpreted using the newest step order. On a fresh
+install, dashboard funnels become available after the first successful config fetch; offline
+installs use the most recently cached definition.
 
 ## Define a funnel
 
@@ -130,7 +140,7 @@ re-registers it unlocked.
 
 ## Reading the results
 
-Given a funnel `view → submit` over the last 7 days with 1,000 people reaching `view`, 230
+Given a funnel `view → submit` over the last 7 days with 1,000 reported actors reaching `view`, 230
 finishing `submit`:
 
 | Field | Meaning | Example |

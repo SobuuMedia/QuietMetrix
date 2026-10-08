@@ -15,6 +15,7 @@ data class FunnelResponse(
     @SerialName("count_mode") val countMode: String = "actor",
     @SerialName("identity_scope") val identityScope: String = "install_or_session",
     @SerialName("correlation_property") val correlationProperty: String? = null,
+    val revision: Int = 0,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
 )
@@ -22,6 +23,25 @@ data class FunnelResponse(
 @Serializable
 data class FunnelsResponse(
     val funnels: List<FunnelResponse> = emptyList(),
+)
+
+/** Minimal publishable-key response for SDK evaluation; admin descriptions and ownership stay private. */
+@Serializable
+data class FunnelSdkConfigResponse(
+    val namespace: String = "dashboard",
+    @SerialName("cache_ttl_seconds") val cacheTtlSeconds: Int = 300,
+    val funnels: List<FunnelSdkDefinitionDto> = emptyList(),
+)
+
+@Serializable
+data class FunnelSdkDefinitionDto(
+    @SerialName("funnel_key") val funnelKey: String,
+    val revision: Int,
+    val steps: List<FunnelStepDefinition>,
+    @SerialName("window_seconds") val windowSeconds: Long,
+    @SerialName("count_mode") val countMode: String,
+    @SerialName("identity_scope") val identityScope: String,
+    @SerialName("correlation_property") val correlationProperty: String? = null,
 )
 
 @Serializable
@@ -68,6 +88,7 @@ data class FunnelSummaryDto(
     @SerialName("count_mode") val countMode: String = "actor",
     @SerialName("identity_scope") val identityScope: String = "install_or_session",
     @SerialName("correlation_property") val correlationProperty: String? = null,
+    val revision: Int = 0,
 )
 
 @Serializable

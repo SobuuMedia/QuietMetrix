@@ -1,0 +1,42 @@
+CREATE TABLE ai_plans (
+    plan_id VARCHAR(100) PRIMARY KEY,
+    ai_enabled BOOLEAN NOT NULL,
+    generation_limit BIGINT NOT NULL CHECK (generation_limit >= 0),
+    cost_limit BIGINT NOT NULL CHECK (cost_limit >= 0)
+);
+CREATE TABLE ai_assignments (
+    account_id VARCHAR(100) PRIMARY KEY,
+    plan_id VARCHAR(100) NOT NULL,
+    active BOOLEAN NOT NULL,
+    expires_at BIGINT
+);
+CREATE TABLE ai_monthly_usage (
+    account_id VARCHAR(100) NOT NULL,
+    month VARCHAR(10) NOT NULL,
+    generations BIGINT NOT NULL DEFAULT 0,
+    cost BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (account_id, month)
+);
+CREATE TABLE ai_operations (
+    operation_id VARCHAR(64) PRIMARY KEY,
+    account_id VARCHAR(100) NOT NULL,
+    project_id VARCHAR(100) NOT NULL,
+    month VARCHAR(10) NOT NULL,
+    fingerprint VARCHAR(64) NOT NULL,
+    state VARCHAR(20) NOT NULL,
+    reserved_cost BIGINT NOT NULL,
+    created_at BIGINT NOT NULL,
+    result TEXT,
+    result_expires BIGINT NOT NULL
+);
+CREATE INDEX ai_operations_account_time ON ai_operations(account_id, created_at);
+CREATE TABLE ai_summary_cache (
+    cache_key VARCHAR(64) PRIMARY KEY,
+    result TEXT,
+    expires_at BIGINT NOT NULL DEFAULT 0,
+    operation_id VARCHAR(64),
+    lease_until BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX ai_operations_expiry ON ai_operations(result_expires);
+CREATE INDEX ai_summary_expiry ON ai_summary_cache(expires_at);
