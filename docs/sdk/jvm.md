@@ -9,7 +9,7 @@ Add the QuietMetrix dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 }
 ```
 
@@ -19,7 +19,7 @@ For Maven projects, add to your `pom.xml`:
 <dependency>
     <groupId>com.quietmetrix</groupId>
     <artifactId>quietmetrix-sdk-jvm</artifactId>
-    <version>0.4.0</version>
+    <version>0.7.0</version>
 </dependency>
 ```
 
@@ -97,6 +97,21 @@ QuietMetrix.init(QuietMetrixConfig(
     apiKey = "qm_ak_your_api_key",
     funnels = listOf(signupFunnel),
 ))
+```
+
+## Experiments (A/B testing)
+
+Create an experiment in the dashboard's Experiments tab, then branch on it in code — no
+config to declare here, unlike funnels. See the [Experiments guide](experiments.md) for the
+full concept, timing, and country-targeting details.
+
+```kotlin
+import com.quietmetrix.analytics.getVariant
+import com.quietmetrix.analytics.trackExperimentInteraction
+
+val variant = getVariant("checkout_cta") // "a", "b", or "none"
+// ... on the interaction you're measuring:
+trackExperimentInteraction("checkout_cta")
 ```
 
 ## Force Flush

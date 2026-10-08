@@ -43,12 +43,14 @@ internal object ScreenTracker {
      * (unlike the `screen_dwell`/`screen_view` emission below, which needs positive dwell).
      */
     suspend fun enter(screen: String, props: Map<String, Any?> = emptyMap(), now: Instant = Clock.System.now()) {
+        if (!Gate.shouldTrack()) return
         val previousScreen = flush(now)
         mutex.withLock {
             currentScreen = screen
             enteredAt = now
             currentProps = props
         }
+        MetricGateway.record("screen_view_v2", mapOf("screen" to screen), now = now)
         if (previousScreen != null && previousScreen != screen) {
             MetricGateway.record("screen_transition", mapOf("from" to previousScreen, "to" to screen), now = now)
         }
@@ -72,9 +74,12 @@ internal object ScreenTracker {
             currentProps = emptyMap()
         }
         if (screen == null || entered == null) return null
+        if (!Gate.shouldTrack()) return screen
         val durationMs = (now - entered).inWholeMilliseconds
         if (durationMs > 0) {
             MetricGateway.record("screen_dwell", mapOf("screen" to screen, "bucket" to dwellBucket(durationMs)), now = now)
+            MetricGateway.record("screen_dwell_ms_v2", mapOf("screen" to screen), n = durationMs, now = now)
+            MetricGateway.record("screen_dwell_sample_v2", mapOf("screen" to screen), now = now)
             trackEvent(SCREEN_VIEW_EVENT, screen, props + (DURATION_PROP to durationMs))
         }
         return screen

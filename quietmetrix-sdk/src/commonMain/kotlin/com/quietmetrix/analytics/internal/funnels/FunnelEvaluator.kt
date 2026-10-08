@@ -6,6 +6,7 @@ import com.quietmetrix.analytics.FunnelManifest
 import com.quietmetrix.analytics.QuietMetrixConfig
 import com.quietmetrix.analytics.internal.PersistentStore
 import com.quietmetrix.analytics.internal.counters.MetricGateway
+import com.quietmetrix.analytics.internal.counters.civilDateFromEpochDay
 import com.quietmetrix.analytics.internal.createPersistentStore
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -46,7 +47,7 @@ internal object FunnelEvaluator {
 
     private val json = Json { encodeDefaults = true }
 
-    private var manifest: FunnelManifest? = null
+    private var manifests: List<FunnelManifest> = emptyList()
     private var storageKeyPrefix: String = ""
     private var store: PersistentStore? = null
 
@@ -55,8 +56,9 @@ internal object FunnelEvaluator {
     private const val MAX_ATTEMPTS_PER_FUNNEL = 1_000
 
     fun configure(config: QuietMetrixConfig) {
-        manifest = config.funnelManifest
+        val local = config.funnelManifest
             ?: config.funnels.takeIf { it.isNotEmpty() }?.let { FunnelManifest("legacy", 0, it) }
+        manifests = listOfNotNull(local) + FunnelRemoteClient.cachedManifests(config)
         if (storageKeyPrefix != config.storageKeyPrefix) {
             actorProgressCache.clear()
             attemptProgress.clear()
@@ -65,9 +67,23 @@ internal object FunnelEvaluator {
         store = createPersistentStore(config.storageKeyPrefix)
     }
 
+    internal fun replaceRemoteManifests(remote: List<FunnelManifest>) {
+        val local = manifests.filterNot { it.namespace == "dashboard" }
+        val activeRevisions = remote.associate { it.funnels.singleOrNull()?.key to it.revision }
+        val inProgressOld = manifests.filter { it.namespace == "dashboard" && it.funnels.any { funnel ->
+            activeRevisions[funnel.key] != it.revision && hasProgress(it, funnel)
+        } }
+        manifests = local + inProgressOld + remote
+    }
+
+    private fun hasProgress(manifest: FunnelManifest, funnel: Funnel): Boolean {
+        val key = progressKey(manifest, funnel)
+        return funnel.countMode == FunnelCountMode.ACTOR && store?.get(key) != null ||
+            funnel.countMode == FunnelCountMode.ATTEMPT && attemptProgress[attemptKey(manifest, funnel)]?.isNotEmpty() == true
+    }
+
     suspend fun onEvent(event: String, screen: String?, props: Map<String, Any?>, now: Instant = Clock.System.now()) {
-        val current = manifest ?: return
-        for (funnel in current.funnels) {
+        for (current in manifests) for (funnel in current.funnels) {
             if (funnel.steps.isEmpty()) continue
             when (funnel.countMode) {
                 FunnelCountMode.ACTOR -> evaluateActor(current, funnel, event, screen, props, now)
@@ -80,23 +96,23 @@ internal object FunnelEvaluator {
         // No storageKeyPrefix here: createPersistentStore(config.storageKeyPrefix) already
         // namespaces every key by that prefix internally (see FileBasedPersistentStore) --
         // repeating it here would just double it in the backing filename.
-        val storageKey = "funnel_progress_${funnel.key}_r${manifest.revision}"
+        val storageKey = progressKey(manifest, funnel)
         val current = loadActorProgress(storageKey)
         val advanced = tryAdvance(funnel, current, event, screen, props, now) ?: return
         saveActorProgress(storageKey, advanced)
-        emitStep(manifest, funnel, advanced.reachedStepIndex, now)
+        emitStep(manifest, funnel, advanced, now)
     }
 
     private suspend fun evaluateAttempt(manifest: FunnelManifest, funnel: Funnel, event: String, screen: String?, props: Map<String, Any?>, now: Instant) {
         val correlationKey = funnel.correlationProperty ?: return
         val correlationValue = props[correlationKey]?.toString() ?: return
-        val byCorrelation = attemptProgress.getOrPut(funnel.key) { mutableMapOf() }
+        val byCorrelation = attemptProgress.getOrPut(attemptKey(manifest, funnel)) { mutableMapOf() }
 
         val current = byCorrelation[correlationValue]
         val advanced = tryAdvance(funnel, current, event, screen, props, now) ?: return
         byCorrelation[correlationValue] = advanced
         pruneAttempts(byCorrelation, funnel.steps.size, now)
-        emitStep(manifest, funnel, advanced.reachedStepIndex, now)
+        emitStep(manifest, funnel, advanced, now)
     }
 
     /** Null if [event] doesn't advance this funnel from [current] (wrong next step, already
@@ -114,10 +130,24 @@ internal object FunnelEvaluator {
         return Progress(entryMs, deadlineMs, nextIndex + 1)
     }
 
-    private suspend fun emitStep(manifest: FunnelManifest, funnel: Funnel, reachedStepIndex: Int, now: Instant) {
-        MetricGateway.record(
+    private suspend fun emitStep(manifest: FunnelManifest, funnel: Funnel, progress: Progress, now: Instant) {
+        val reachedStepIndex = progress.reachedStepIndex
+        if (manifest.namespace != "dashboard") MetricGateway.record(
             "funnel_step",
             mapOf("f" to funnel.key, "rev" to manifest.revision.toString(), "step" to reachedStepIndex.toString()),
+            now = now,
+        )
+        val (year, month, date) = civilDateFromEpochDay(progress.entryMs / 86_400_000L)
+        val entryDay = "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${date.toString().padStart(2, '0')}"
+        MetricGateway.record(
+            "funnel_step_v2",
+            mapOf(
+                "namespace" to manifest.namespace,
+                "f" to funnel.key,
+                "revision" to manifest.revision.toString(),
+                "step" to reachedStepIndex.toString(),
+                "entry_day" to entryDay,
+            ),
             now = now,
         )
     }
@@ -127,6 +157,14 @@ internal object FunnelEvaluator {
         val nowMs = now.toEpochMilliseconds()
         byCorrelation.entries.removeAll { (_, p) -> p.reachedStepIndex >= stepCount || nowMs > p.deadlineMs }
     }
+
+    private fun progressKey(manifest: FunnelManifest, funnel: Funnel): String =
+        if (manifest.namespace == "dashboard") "funnel_progress_${manifest.namespace}_${funnel.key}_r${manifest.revision}"
+        else "funnel_progress_${funnel.key}_r${manifest.revision}"
+
+    private fun attemptKey(manifest: FunnelManifest, funnel: Funnel): String =
+        if (manifest.namespace == "dashboard") "${manifest.namespace}_${funnel.key}_r${manifest.revision}"
+        else funnel.key
 
     private fun loadActorProgress(storageKey: String): Progress? {
         if (actorProgressCache.containsKey(storageKey)) return actorProgressCache[storageKey]
@@ -143,7 +181,7 @@ internal object FunnelEvaluator {
     /** Test-only: clears in-memory state (not the persisted store — ACTOR-mode progress is
      *  meant to survive exactly this). */
     internal fun reset() {
-        manifest = null
+        manifests = emptyList()
         storageKeyPrefix = ""
         store = null
         actorProgressCache.clear()

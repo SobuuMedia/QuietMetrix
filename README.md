@@ -89,7 +89,7 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 // 1. Add dependency (KMP project, build.gradle.kts)
 implementation(project(":quietmetrix-sdk"))
 // or from Maven Central when published:
-// implementation("com.quietmetrix:quietmetrix-sdk:0.5.0")
+// implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 
 // 2. Initialize once at app startup
 import com.quietmetrix.analytics.*
@@ -335,9 +335,18 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
 curl -X POST http://localhost:8080/api/v1/projects \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"My First Project"}'
+  -d '{"name":"QuietMetrix Demo Local"}'
 # Response: {"api_key":"qm_ak_abc123...",
 #             "message":"Project created. Store it securely — it will not be shown again."}
+
+# Optional local-only fixture: three project cards, rich multi-platform screen data,
+# v2 People windows/witnesses, mature install-based retention cohorts, revision-pinned
+# funnel results, experiment results,
+# and reserved-domain invited users with project access examples
+# Repeatable; replaces only aggregate rows tagged to this named local fixture.
+# Writes only to the guarded local Compose database (never production startup).
+tools/demo/seed-local-dashboard
+# Expected aggregate totals and local-only projects/users: tools/demo/expected-dashboard-fixture.json
 
 # Send a test counter batch
 curl -X POST http://localhost:8080/api/v1/counters \
@@ -523,13 +532,13 @@ repositories { mavenCentral() }
 
 // module build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.5.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 }
 ```
 
 #### iOS (Swift Package / XCFramework)
 
-Add the `QuietMetrix.xcframework` produced by `./gradlew :quietmetrix-sdk:assembleXCFramework` to your Xcode project, or include the KMP shared module directly.
+Add the `QuietMetrix.xcframework` produced by `./gradlew :quietmetrix-sdk:assembleQuietMetrixXCFramework` to your Xcode project, or include the KMP shared module directly.
 
 ```swift
 import QuietMetrix
@@ -548,7 +557,7 @@ QuietMetrix.shared.trackEvent(event: "page_view", screen: "home")
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.5.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 }
 ```
 
@@ -692,9 +701,10 @@ QuietMetrix.init(QuietMetrixConfig(
 
 The SDK auto-registers the funnel with the server on `init` (fingerprint-gated, so a
 launch registers nothing when the definition hasn't changed) and matches it against
-your existing event stream — no code change needed at tracking call sites. Funnels are
-counted per **install** (a per-project, salted, non-reversible hash of a device-local id)
-— never by user ID, matching QuietMetrix's no-PII design.
+your existing event stream — no code change needed at tracking call sites. The SDK evaluates
+funnel progress on-device and emits anonymous aggregate counter deltas; it does not send an
+installation identifier or raw event trail. See [SDK metric semantics and privacy](docs/sdk/metrics-and-privacy.md)
+for the limits of reported installation counts.
 
 See the [Funnels developer guide](docs/sdk/funnels.md) for matching rules, the dashboard
 editing/locking workflow, and a worked example of the results payload.
@@ -983,7 +993,7 @@ Projects are soft-deleted — `deleted_at` is set, events are preserved. The pro
 ./gradlew :quietmetrix-sdk:publishToMavenLocal
 
 # Build XCFramework for iOS
-./gradlew :quietmetrix-sdk:assembleXCFramework
+./gradlew :quietmetrix-sdk:assembleQuietMetrixXCFramework
 ```
 
 ### Running the Ktor Server Locally
@@ -1160,3 +1170,5 @@ All code is MIT-licensed. No feature gating, no closed-source components. You ca
 ---
 
 **Get started:** `docker compose up --build` → `curl localhost:8080/api/v1/health`
+
+Optional AI summaries and questions: [configuration, hosted allowances and operator API](docs/ai.md).

@@ -14,10 +14,10 @@ class ValueCounterBridgeTest {
     }
 
     @Test
-    fun `records a value counter keyed by name, with n set to the amount`() = runTest {
+    fun `records a value counter keyed by name and with n set to the amount`() = runTest {
         recordValueCounter("purchase", amountMinorUnits = 499, debug = false)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "value" }
         assertEquals(1, pending.size)
         assertEquals("value", pending[0].metric)
         assertEquals(mapOf("name" to "purchase"), pending[0].dims)
@@ -29,17 +29,17 @@ class ValueCounterBridgeTest {
         recordValueCounter("purchase", amountMinorUnits = 499, debug = false)
         recordValueCounter("purchase", amountMinorUnits = 999, debug = false)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "value" }
         assertEquals(1, pending.size)
         assertEquals(1498L, pending[0].n)
     }
 
     @Test
-    fun `a negative amount is accepted, for refunds or adjustments`() = runTest {
+    fun `a negative amount is accepted and for refunds or adjustments`() = runTest {
         recordValueCounter("purchase", amountMinorUnits = 499, debug = false)
         recordValueCounter("purchase", amountMinorUnits = -499, debug = false)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "value" }
         assertEquals(1, pending.size)
         assertEquals(0L, pending[0].n)
     }
@@ -56,7 +56,7 @@ class ValueCounterBridgeTest {
         recordValueCounter("purchase", amountMinorUnits = 499, debug = false)
         recordValueCounter("subscription", amountMinorUnits = 999, debug = false)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "value" }
         assertEquals(2, pending.size)
         assertEquals(setOf(mapOf("name" to "purchase"), mapOf("name" to "subscription")), pending.map { it.dims }.toSet())
     }

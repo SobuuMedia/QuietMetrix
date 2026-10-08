@@ -78,4 +78,21 @@ class JsFacadeTest {
         init(options)
         assertTrue(QuietMetrix.isInitialized)
     }
+
+    @Test
+    fun getVariant_unknownExperiment_returnsNoneBeforeInit() {
+        assertTrue(getVariant("unknown_experiment") == "none")
+    }
+
+    @Test
+    fun getVariant_unknownExperiment_returnsNoneAfterInit() {
+        init(offlineOptions("qm_facade_variant_"))
+        assertTrue(getVariant("unknown_experiment") == "none")
+    }
+
+    @Test
+    fun trackExperimentInteraction_doesNotThrowWithoutAPriorImpression() {
+        init(offlineOptions("qm_facade_interaction_"))
+        trackExperimentInteraction("unknown_experiment")
+    }
 }

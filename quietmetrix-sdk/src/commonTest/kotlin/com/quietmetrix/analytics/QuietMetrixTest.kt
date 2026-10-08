@@ -14,14 +14,14 @@ class QuietMetrixTest {
     @BeforeTest
     fun setUp() {
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
     }
 
     @AfterTest
     fun tearDown() {
         QuietMetrix.stop()
         ConfigHolder.reset()
-        InMemoryStore.clear()
+        com.quietmetrix.analytics.internal.resetTestPreferences()
     }
 
     @Test
@@ -85,6 +85,19 @@ class QuietMetrixTest {
         // appA's value is still there in storage; switching back proves prefix-keyed isolation.
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "appA_"))
         assertTrue(hasCookieConsent())
-        assertEquals("1", InMemoryStore.get("appA_cookie_consent"))
+        assertEquals("1", com.quietmetrix.analytics.internal.PersistentPreferences.get("cookie_consent"))
     }
+    @Test
+    fun refusal_and_disable_survive_configuration_restart() {
+        val config = QuietMetrixConfig(storageKeyPrefix = "restart_", trackingAllowedByDefault = true)
+        QuietMetrix.init(config)
+        setCookieConsent(false)
+        QuietMetrix.setAnalyticsEnabled(false)
+        ConfigHolder.reset()
+        QuietMetrix.init(config)
+        assertTrue(hasCookieConsent())
+        assertFalse(isTrackingAllowed())
+        assertFalse(QuietMetrix.isAnalyticsEnabled)
+    }
+
 }

@@ -16,17 +16,17 @@ class EventCounterBridgeTest {
     fun `records an event counter keyed by name only`() = runTest {
         recordEventCounter("button_click", screen = null, props = mapOf("button_id" to "save"), debug = false)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "event" }
         assertEquals(1, pending.size)
         assertEquals("event", pending[0].metric)
         assertEquals(mapOf("name" to "button_click"), pending[0].dims)
     }
 
     @Test
-    fun `props are never present in the recorded cell, debug or not`() = runTest {
+    fun `props are never present in the recorded cell and debug or not`() = runTest {
         recordEventCounter("button_click", screen = null, props = mapOf("button_id" to "save"), debug = true)
 
-        val dims = MetricGateway.drain().single().dims
+        val dims = MetricGateway.drain().single { it.metric == "event" }.dims
         assertEquals(setOf("name"), dims.keys)
     }
 
@@ -35,7 +35,7 @@ class EventCounterBridgeTest {
         recordEventCounter("page_view", screen = null, props = emptyMap(), debug = false)
         recordEventCounter("page_view", screen = null, props = emptyMap(), debug = false)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "event" }
         assertEquals(1, pending.size)
         assertEquals(2L, pending[0].n)
     }

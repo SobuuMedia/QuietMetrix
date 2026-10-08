@@ -7,6 +7,8 @@ internal object StorageKeys {
     fun sessionId(prefix: String): String = "${prefix}session_id"
     fun anonymousId(prefix: String): String = "${prefix}anonymous_id"
     fun sessionNumber(prefix: String): String = "${prefix}session_number"
+    /** Local-only A/B testing assignment id — see [com.quietmetrix.analytics.internal.context.loadOrCreateBucketingId]. */
+    fun bucketingId(prefix: String): String = "${prefix}bucketing_id"
 }
 
 internal fun generateSid(storageKeyPrefix: String): String {

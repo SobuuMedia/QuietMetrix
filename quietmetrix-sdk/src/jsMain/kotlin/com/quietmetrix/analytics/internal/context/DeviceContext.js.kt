@@ -13,6 +13,9 @@ private fun jsScreenWidth(): Int? =
 private fun jsScreenHeight(): Int? =
     js("(typeof window !== 'undefined' && typeof window.innerHeight === 'number') ? window.innerHeight : null")
 
+private fun jsDeviceClass(): String? =
+    js("(typeof window !== 'undefined' && typeof window.innerWidth === 'number') ? (window.innerWidth < 600 ? 'phone' : (window.innerWidth < 1024 ? 'tablet' : 'desktop')) : 'unknown'")
+
 private fun jsUserAgent(): String? =
     js("(typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : null")
 
@@ -37,6 +40,7 @@ private fun jsBrowserName(): String? =
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "js"
+    actual val deviceClass: String = jsDeviceClass() ?: "unknown"
     actual val language: String? = jsLanguage()
     actual val appVersion: String? = null
     actual val screenWidth: Int? = jsScreenWidth()

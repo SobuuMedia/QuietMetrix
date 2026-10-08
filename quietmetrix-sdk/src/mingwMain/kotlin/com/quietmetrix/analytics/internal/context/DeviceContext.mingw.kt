@@ -9,6 +9,7 @@ private fun envValue(name: String): String? = getenv(name)?.toKString()?.ifEmpty
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "windows"
+    actual val deviceClass: String = "desktop"
     actual val language: String? = envValue("LANG")?.substringBefore('.')?.substringBefore('_')
     actual val appVersion: String? = null
     actual val screenWidth: Int? = null

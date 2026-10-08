@@ -1,5 +1,9 @@
 package com.quietmetrix.analytics.internal.counters
 
+import com.quietmetrix.analytics.internal.grantAnalyticsForTest
+import com.quietmetrix.analytics.internal.resetAnalyticsTestGate
+import kotlin.test.BeforeTest
+
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -10,22 +14,31 @@ import kotlin.time.Instant
 
 class SessionTrackerTest {
 
+    private suspend fun setUp() {
+        com.quietmetrix.analytics.QuietMetrix.awaitPendingWorkForTest()
+        MetricGateway.reset()
+        SessionTracker.reset()
+        grantAnalyticsForTest("session_test_")
+    }
+
     @AfterTest
     fun tearDown() {
         SessionTracker.reset()
         MetricGateway.reset()
+        resetAnalyticsTestGate()
     }
 
     @OptIn(ExperimentalTime::class)
     @Test
     fun `stop records a session counter bucketed from the elapsed time`() = runTest {
+        setUp()
         val start = Instant.fromEpochMilliseconds(20700L * 86_400_000L)
         val end = start.plus(kotlin.time.Duration.parse("PT45S"))
 
         SessionTracker.start(start)
         SessionTracker.stop(end)
 
-        val pending = MetricGateway.drain()
+        val pending = MetricGateway.drain().filter { it.metric == "session" }
         assertEquals(1, pending.size)
         assertEquals("session", pending[0].metric)
         assertEquals(mapOf("bucket" to "30_60s"), pending[0].dims)
@@ -33,6 +46,7 @@ class SessionTrackerTest {
 
     @Test
     fun `stop without a prior start records nothing`() = runTest {
+        setUp()
         SessionTracker.stop()
         assertTrue(MetricGateway.drain().isEmpty())
     }
@@ -40,6 +54,7 @@ class SessionTrackerTest {
     @OptIn(ExperimentalTime::class)
     @Test
     fun `stop is a no-op the second time until start is called again`() = runTest {
+        setUp()
         val start = Instant.fromEpochMilliseconds(20700L * 86_400_000L)
         SessionTracker.start(start)
         SessionTracker.stop(start)

@@ -5,28 +5,21 @@
 
 ## Installation
 
-### Swift Package Manager
+### XCFramework and local Swift Package Manager
 
-Add the QuietMetrix package to your project via Xcode:
+Build the framework from this repository:
 
-1. File → Add Package Dependencies
-2. Enter the repository URL: `https://github.com/sobuumedia/quietmetrix-sdk-swift`
-3. Select the latest version and add the `QuietMetrix` library target
-
-Or add it to your `Package.swift`:
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/sobuumedia/quietmetrix-sdk-swift", from: "0.4.0"),
-],
-targets: [
-    .target(name: "YourApp", dependencies: ["QuietMetrix"]),
-]
+```sh
+./gradlew :quietmetrix-sdk:assembleQuietMetrixXCFramework
 ```
 
-### XCFramework (Manual)
-
-If you prefer not to use SPM, download the `QuietMetrix.xcframework` from the [GitHub releases](https://github.com/sobuumedia/quietmetrix-sdk-swift/releases) page and drag it into your Xcode project's **Frameworks, Libraries, and Embedded Content** section.
+The release artifact is at
+`quietmetrix-sdk/build/XCFrameworks/release/QuietMetrix.xcframework`.
+Add it to Xcode's Frameworks, Libraries, and Embedded Content. This static framework
+should use **Do Not Embed**. The [iOS sample](../../samples/ios/QuietMetrixSample/README.md)
+includes a working local Swift package and SwiftUI experiment wrappers. Follow its copy
+and type-check commands. A remote Swift package is not currently published; do not use
+an unverified package URL.
 
 ### Objective-C
 
@@ -51,8 +44,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             trackingEndpoint: "https://your-server.com/api/v1",
             apiKey: "qm_ak_your_api_key",
             flushIntervalMs: 30_000,
+            autoTrackInitialPageView: false,
+            trackingAllowedByDefault: false,
+            userAgent: nil,
+            applicationContext: nil,
+            debug: false,
+            funnels: [],
+            funnelManifest: nil,
+            collectAnonymousId: false,
+            activationEvent: nil,
+            activationWindowDays: 3,
+            countryCode: nil,
+            languageTag: nil
         )
-        QuietMetrix.shared.initialize(config: config)
+        QuietMetrix.shared.doInit(config: config)
         return true
     }
 }
@@ -61,15 +66,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 ## Track Events
 
 ```swift
-QuietMetrix.shared.trackEvent(event: "button_click", screen: "settings")
-QuietMetrix.shared.trackEvent(event: "page_view", screen: "home", props: ["tab": "featured"])
+EventsKt.trackEvent(event: "button_click", screen: "settings", props: [:]) { _ in }
+EventsKt.trackEvent(event: "page_view", screen: "home", props: ["tab": "featured"]) { _ in }
 ```
 
 ### Objective-C
 
 ```objc
-[[QuietMetrix shared] trackEventWithEvent:@"button_click" screen:@"settings" props:nil];
-[[QuietMetrix shared] trackEventWithEvent:@"page_view" screen:@"home" props:@{@"tab": @"featured"}];
+[QuietMetrixEventsKt trackEventEvent:@"button_click" screen:@"settings" props:@{} completionHandler:^(NSError *error) {}];
+[QuietMetrixEventsKt trackEventEvent:@"page_view" screen:@"home" props:@{@"tab": @"featured"} completionHandler:^(NSError *error) {}];
 ```
 
 ## Funnels
@@ -83,31 +88,64 @@ let signupFunnel = Funnel(
     key: "signup",
     name: "Signup",
     steps: [
-        FunnelStep(key: "view", event: "screen_view", screen: "signup"),
-        FunnelStep(key: "submit", event: "signup_submitted"),
-    ]
+        FunnelStep(key: "view", event: "screen_view", name: nil, screen: "signup", props: [:]),
+        FunnelStep(key: "submit", event: "signup_submitted", name: nil, screen: nil, props: [:]),
+    ],
+    windowSeconds: 86_400,
+    description: nil,
+    countMode: .actor,
+    identityScope: .installOrSession,
+    correlationProperty: nil
 )
 
 let config = QuietMetrixConfig(
     storageKeyPrefix: "myapp_",
     trackingEndpoint: "https://your-server.com/api/v1",
     apiKey: "qm_ak_your_api_key",
-    funnels: [signupFunnel]
+    flushIntervalMs: 30_000,
+    autoTrackInitialPageView: false,
+    trackingAllowedByDefault: false,
+    userAgent: nil,
+    applicationContext: nil,
+    debug: false,
+    funnels: [signupFunnel],
+    funnelManifest: nil,
+    collectAnonymousId: false,
+    activationEvent: nil,
+    activationWindowDays: 3,
+    countryCode: nil,
+    languageTag: nil
 )
-QuietMetrix.shared.initialize(config: config)
+QuietMetrix.shared.doInit(config: config)
+```
+
+## Experiments (A/B testing)
+
+Create an experiment in the dashboard's Experiments tab, then branch on it in code — no
+config to declare here, unlike funnels. See the [Experiments guide](experiments.md) for the
+full concept, timing, and country-targeting details. The functions are exposed as top-level
+Kotlin functions, so Swift/Objective-C sees them namespaced on `ExperimentsKt`:
+
+```swift
+switch ExperimentsKt.getVariant(experimentKey: "checkout_cta") {
+case "b":
+    NewCheckoutButton { ExperimentsKt.trackExperimentInteraction(experimentKey: "checkout_cta") }
+default:
+    OldCheckoutButton() // "a", or "none" if not enrolled
+}
 ```
 
 ## Consent
 
 ```swift
 // After user accepts cookie consent
-QuietMetrix.shared.setCookieConsent(true)
+CookieConsentKt.setCookieConsent(accepted: true)
 
 // Master kill switch — separate from cookie consent
 QuietMetrix.shared.setAnalyticsEnabled(false)
 
 // Check consent state
-if QuietMetrix.shared.isTrackingAllowed() {
+if CookieConsent_iosKt.isTrackingAllowed() {
     // Safe to track
 }
 ```
@@ -126,7 +164,10 @@ func applicationDidEnterBackground(_ application: UIApplication) {
 
 ## Offline Support
 
-Pending counters are in-memory only — there is no offline buffer, no connectivity detection, and no retry backoff. A flush that fails (offline, 5xx, timeout) simply drops that batch rather than queuing it; the next scheduled flush tries again with whatever has accumulated since. An app killed between flushes loses whatever was recorded since the last successful one.
+Pending counters and immutable retry batches use NSUserDefaults-backed persistence.
+A failed request retains the same receipt for retry. Visits are recorded at foreground
+start; completed duration is recorded on background. Unfinished duration after an OS kill
+is omitted. Consent and analytics opt-out persist across launches.
 
 ## Friction (Rage-tap Detection)
 

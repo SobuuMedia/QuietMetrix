@@ -13,6 +13,9 @@ private external fun jsScreenWidth(): Int
 @JsFun("() => window.innerHeight")
 private external fun jsScreenHeight(): Int
 
+@JsFun("() => { const w=window.innerWidth; return w<600?'phone':(w<1024?'tablet':'desktop'); }")
+private external fun jsDeviceClass(): String
+
 @JsFun("() => navigator.userAgent || null")
 private external fun jsUserAgent(): String?
 
@@ -37,6 +40,7 @@ private external fun jsBrowserName(): String?
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "wasmJs"
+    actual val deviceClass: String = jsDeviceClass()
     actual val language: String? = jsLanguage()
     actual val appVersion: String? = null
     actual val screenWidth: Int? = jsScreenWidth()

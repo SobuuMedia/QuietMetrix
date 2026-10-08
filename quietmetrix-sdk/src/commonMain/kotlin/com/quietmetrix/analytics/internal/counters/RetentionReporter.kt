@@ -41,6 +41,7 @@ internal object RetentionReporter {
         if (firstLaunch.isFirstCall) {
             val cohort = weekCohort(epochDayFromIso(firstLaunchDay))
             MetricGateway.record("retention", mapOf("cohort" to cohort, "day" to "0"), now = now)
+            MetricGateway.record("retention_entry_v2", mapOf("entry_day" to firstLaunchDay), now = now)
         }
 
         val daysSince = epochDayFromIso(today) - epochDayFromIso(firstLaunchDay)
@@ -51,6 +52,7 @@ internal object RetentionReporter {
             if (store.get(reportedKey) == "1") continue
             store.set(reportedKey, "1")
             MetricGateway.record("retention", mapOf("cohort" to cohort, "day" to bucket.toString()), now = now)
+            MetricGateway.record("retention_return_v2", mapOf("entry_day" to firstLaunchDay, "age_day" to bucket.toString()), now = now)
         }
     }
 }

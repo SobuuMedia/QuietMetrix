@@ -12,6 +12,11 @@ class DeviceContextTest {
     }
 
     @Test
+    fun `device class is coarse and allowlisted`() {
+        assertTrue(DeviceContext().deviceClass in setOf("phone", "tablet", "desktop", "unknown"))
+    }
+
+    @Test
     fun `language is non-blank when present`() {
         val language = DeviceContext().language
         if (language != null) {

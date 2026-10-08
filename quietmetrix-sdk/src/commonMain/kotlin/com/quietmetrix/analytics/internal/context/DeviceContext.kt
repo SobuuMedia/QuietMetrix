@@ -2,6 +2,7 @@ package com.quietmetrix.analytics.internal.context
 
 expect class DeviceContext() {
     val platform: String
+    val deviceClass: String
     val language: String?
     val appVersion: String?
     val screenWidth: Int?

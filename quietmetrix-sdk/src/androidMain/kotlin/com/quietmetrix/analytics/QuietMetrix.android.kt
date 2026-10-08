@@ -33,7 +33,7 @@ private val frictionScope = CoroutineScope(Dispatchers.Default + SupervisorJob()
  */
 private fun registerForegroundCallbacks(ctx: Context) {
     val app = ctx.applicationContext as? Application ?: return
-    val counter = ForegroundCounter { ScreenTracker.closeOutAsync() }
+    val counter = ForegroundCounter(onForeground = { QuietMetrix.onForeground() }, onBackground = { QuietMetrix.onBackground() })
     try {
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) = counter.onStart()

@@ -4,6 +4,7 @@ import com.quietmetrix.analytics.Funnel
 import com.quietmetrix.analytics.FunnelManifest
 import com.quietmetrix.analytics.QuietMetrixConfig
 import com.quietmetrix.analytics.internal.createPersistentStore
+import com.quietmetrix.analytics.internal.Gate
 import com.quietmetrix.analytics.internal.transport.platformPost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,7 @@ internal object FunnelRegistrar {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     fun registerIfChanged(config: QuietMetrixConfig) {
+        if (!Gate.shouldTrack()) return
         val manifest = config.funnelManifest
             ?: config.funnels.takeIf { it.isNotEmpty() }?.let { FunnelManifest("legacy", 0, it) }
             ?: return

@@ -18,12 +18,9 @@ package com.quietmetrix.analytics
  *   meaningful change (see [com.quietmetrix.analytics.internal.funnels.FunnelRegistrar]) —
  *   they then appear in the dashboard with no further setup. Declaring a funnel emits no
  *   events by itself.
- * @param collectAnonymousId Whether to generate and send a persistent per-install pseudonymous
- *   id (`ctx.anonymous_id`, salt-hashed server-side into a never-rotated `install_hash`). This
- *   id is what lets funnels and retention be counted per-install rather than per-session —
- *   without it, funnels spanning more than one app session under-report. Default `true`. Set
- *   `false` for a stricter anonymous posture with no persistent identifier of any kind; no id is
- *   generated or written to storage, and `ctx.anonymous_id` is omitted from every event.
+ * @param collectAnonymousId Legacy source-compatibility parameter. Installation identifiers are
+ *   no longer generated or transmitted; this flag is ignored. Anonymous fixed-window counts use
+ *   local deduplication and aggregate contributions instead.
  * @param activationEvent The event name that marks a device as "activated" — e.g. completing
  *   onboarding, or a use-case-specific milestone that predicts retention. Null (the default)
  *   disables activation tracking entirely: no `activation` counter is ever recorded. Reported
@@ -47,7 +44,12 @@ data class QuietMetrixConfig(
     @Deprecated("Use funnelManifest so older app releases cannot overwrite newer definitions")
     val funnels: List<Funnel> = emptyList(),
     val funnelManifest: FunnelManifest? = null,
-    val collectAnonymousId: Boolean = true,
+    @Deprecated("Installation identifiers are no longer collected; this compatibility setting is ignored")
+    val collectAnonymousId: Boolean = false,
     val activationEvent: String? = null,
     val activationWindowDays: Long = 3L,
+    /** Optional ISO alpha-2 country from the host app; never inferred from locale region. */
+    val countryCode: String? = null,
+    /** Optional BCP-47 app language; targeting uses its normalized primary subtag. */
+    val languageTag: String? = null,
 )

@@ -26,7 +26,7 @@ Compose tree, the same as any other Composable.
 
 ```kotlin
 // build.gradle.kts, alongside the existing quietmetrix-sdk dependency
-implementation("io.github.sobuumedia:quietmetrix-sdk-debug:0.1.0")
+implementation("io.github.sobuumedia:quietmetrix-sdk-debug:0.7.0")
 ```
 
 ## Usage

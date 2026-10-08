@@ -73,6 +73,34 @@ class FunnelEvaluatorTest {
     private fun List<MetricRecorder.PendingCounter>.funnelSteps() = filter { it.metric == "funnel_step" }
 
     @Test
+    fun `dashboard funnel emits only its pinned v2 namespace and revision`() = runTest {
+        FunnelEvaluator.configure(QuietMetrixConfig(storageKeyPrefix = "dashboard_${runId}_"))
+        FunnelEvaluator.replaceRemoteManifests(listOf(FunnelManifest("dashboard", 7, listOf(twoStepFunnel("signup")))))
+
+        FunnelEvaluator.onEvent("screen_view", "signup", emptyMap(), now = t0)
+        val counters = pending()
+        assertTrue(counters.none { it.metric == "funnel_step" })
+        val v2 = counters.single { it.metric == "funnel_step_v2" }
+        assertEquals(mapOf("namespace" to "dashboard", "f" to "signup", "revision" to "7", "step" to "1", "entry_day" to "1970-01-12"), v2.dims)
+    }
+
+    @Test
+    fun `in-progress dashboard entry finishes on its original revision after refresh`() = runTest {
+        FunnelEvaluator.configure(QuietMetrixConfig(storageKeyPrefix = "dashboard_revision_${runId}_"))
+        val funnel = twoStepFunnel("signup")
+        FunnelEvaluator.replaceRemoteManifests(listOf(FunnelManifest("dashboard", 7, listOf(funnel))))
+        FunnelEvaluator.onEvent("screen_view", "signup", emptyMap(), now = t0)
+        pending()
+
+        FunnelEvaluator.replaceRemoteManifests(listOf(FunnelManifest("dashboard", 8, listOf(funnel))))
+        FunnelEvaluator.onEvent("signup_submitted", null, emptyMap(), now = t0.plus(1.seconds))
+
+        val reached = pending().single { it.metric == "funnel_step_v2" }
+        assertEquals("7", reached.dims["revision"])
+        assertEquals("2", reached.dims["step"])
+    }
+
+    @Test
     fun `the first matching event for step 0 advances to step 1`() = runTest {
         val funnel = twoStepFunnel("signup_ft1")
         configure(funnel, "ft1_")
@@ -95,7 +123,7 @@ class FunnelEvaluatorTest {
     }
 
     @Test
-    fun `reaching step 2 out of order (before step 1) does not advance`() = runTest {
+    fun `reaching step 2 out of order before step 1 does not advance`() = runTest {
         val funnel = twoStepFunnel("signup_ft3")
         configure(funnel, "ft3_")
 
@@ -144,7 +172,7 @@ class FunnelEvaluatorTest {
     }
 
     @Test
-    fun `progress survives a fresh configure with the same prefix (persisted across restarts)`() = runTest {
+    fun `progress survives a fresh configure with the same prefix persisted across restarts`() = runTest {
         val funnel = twoStepFunnel("signup_ft7")
         configure(funnel, "ft7_")
         FunnelEvaluator.onEvent("screen_view", "signup", emptyMap(), now = t0)

@@ -9,11 +9,11 @@ Add the QuietMetrix dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.quietmetrix:quietmetrix-sdk:0.4.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
 }
 ```
 
-The KMP SDK publishes multiplatform artifacts for `macosArm64`, `macosX64`, `windowsX64`, and `linuxX64`. Gradle resolves the correct variant automatically based on your target.
+The KMP SDK publishes multiplatform artifacts for `macosArm64`, `mingwX64` (Windows), and `linuxX64`; JVM desktop apps use the `jvm` artifact. Gradle resolves the correct variant automatically based on your target.
 
 ### Platform-specific notes
 
@@ -72,6 +72,24 @@ QuietMetrix.init(QuietMetrixConfig(
     apiKey = "qm_ak_your_api_key",
     funnels = listOf(signupFunnel),
 ))
+```
+
+## Experiments (A/B testing)
+
+Create an experiment in the dashboard's Experiments tab, then branch on it in code — no
+config to declare here, unlike funnels. See the [Experiments guide](experiments.md) for the
+full concept, timing, and country-targeting details. Note: on macOS/Windows/Linux there's no
+reliable locale-region signal without a GeoIP dependency this SDK doesn't have, so
+country-targeted experiments never enroll a desktop device — untargeted experiments work
+normally.
+
+```kotlin
+import com.quietmetrix.analytics.getVariant
+import com.quietmetrix.analytics.trackExperimentInteraction
+
+val variant = getVariant("checkout_cta") // "a", "b", or "none"
+// ... on the interaction you're measuring:
+trackExperimentInteraction("checkout_cta")
 ```
 
 ## Force Flush

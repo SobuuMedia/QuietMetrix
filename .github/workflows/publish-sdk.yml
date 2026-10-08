@@ -1,58 +1,166 @@
-name: Publish SDK
+name: Prepare and Publish SDK
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*", "sdk-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish to Maven Central
-    # The SDK has Apple (macOS/iOS) Kotlin/Native targets, which can only be
-    # compiled on a macOS runner. publishAllPublications... builds every target,
-    # so the whole job must run on macOS.
-    runs-on: macos-latest
+  prepare:
+    name: Build SDK (${{ matrix.host }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: macos
+            os: macos-15
+          - host: linux
+            os: ubuntu-latest
+          - host: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
     env:
-      # Names the build reads: quietmetrix-sdk/build.gradle.kts resolves
-      # OSSRH_* for the Sonatype credentials and GPG_SIGNING_* for signing.
-      OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-      OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
       GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
       GPG_SIGNING_PASSWORD: ${{ secrets.GPG_SIGNING_PASSWORD }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+      - uses: actions/setup-python@v5
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Verify tag matches SDK version
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check release version and signing credentials
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
-          echo "tag=$tag  build.gradle.kts version=$version"
-          if [ "$tag" != "$version" ]; then
-            echo "::error::Tag '$GITHUB_REF_NAME' does not match SDK version '$version' in quietmetrix-sdk/build.gradle.kts. Bump the version before tagging."
-            exit 1
+          python tools/release/prepare-sdk.py --check
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            python tools/release/prepare-sdk.py --check --tag "$GITHUB_REF_NAME"
           fi
+          test -n "$GPG_SIGNING_KEY"
+          test -n "$GPG_SIGNING_PASSWORD"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-37'
+      - name: Prepare Linux native transport
+        if: matrix.host == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Verify macOS, mobile and browser SDKs
+        if: matrix.host == 'macos'
+        run: ./gradlew :quietmetrix-sdk:jvmTest :quietmetrix-sdk:jsNodeTest :quietmetrix-sdk:iosSimulatorArm64Test :quietmetrix-sdk:macosArm64Test :quietmetrix-sdk-compose:compileKotlinJvm :quietmetrix-sdk-debug:compileKotlinJvm
+      - name: Verify Linux SDK
+        if: matrix.host == 'linux'
+        run: ./gradlew :quietmetrix-sdk:linuxX64Test
+      - name: Verify Windows SDK
+        if: matrix.host == 'windows'
+        run: ./gradlew :quietmetrix-sdk:mingwX64Test
+      - name: Stage signed host publications
+        run: python tools/release/prepare-sdk.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-maven-${{ matrix.host }}
+          path: build/sdk-release/maven/
+          if-no-files-found: error
+      - name: Build web and iOS release assets
+        if: matrix.host == 'macos'
+        run: |
+          ./gradlew :quietmetrix-sdk:prepareNpmPackage :quietmetrix-sdk:assembleQuietMetrixXCFramework
+          mkdir -p build/sdk-release/assets
+          npm pack ./quietmetrix-sdk/build/dist/js/productionLibrary --pack-destination build/sdk-release/assets
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
+          ditto -c -k --keepParent quietmetrix-sdk/build/XCFrameworks/release/QuietMetrix.xcframework "build/sdk-release/assets/QuietMetrix-$version.xcframework.zip"
+          cp samples/ios/QuietMetrixSample/ExperimentElement.swift build/sdk-release/assets/
+          cp "docs/releases/sdk-$version.md" build/sdk-release/assets/RELEASE_NOTES.md
+          cp LICENSE build/sdk-release/assets/
+          (cd build/sdk-release/assets && shasum -a 256 ExperimentElement.swift LICENSE QuietMetrix-*.zip *.tgz RELEASE_NOTES.md) > build/sdk-release/assets/SHA256SUMS
+          python tools/release/check-sdk-assets.py build/sdk-release/assets
+      - name: Verify independent app and WASM consumers
+        if: matrix.host == 'macos'
+        run: |
+          python tools/release/prepare-sdk.py --local
+          ./gradlew -p tools/release-consumers/jvm compileKotlin
+          ./gradlew -p tools/release-consumers/android assembleDebug
+          ./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution
+          swiftc -typecheck -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -target "$(uname -m)-apple-ios17.0-simulator" -F quietmetrix-sdk/build/XCFrameworks/release/QuietMetrix.xcframework/ios-arm64_x86_64-simulator -framework QuietMetrix samples/ios/QuietMetrixSample/App.swift samples/ios/QuietMetrixSample/ContentView.swift samples/ios/QuietMetrixSample/ExperimentElement.swift
+          npm install --prefix "$RUNNER_TEMP/qm-browser" playwright@1.60.0
+          "$RUNNER_TEMP/qm-browser/node_modules/.bin/playwright" install chromium
+          npm install --prefix "$RUNNER_TEMP/qm-npm-consumer" --ignore-scripts --no-audit --no-fund "$GITHUB_WORKSPACE"/build/sdk-release/assets/*.tgz
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
+          QM_EXPECTED_SDK_VERSION="$version" QM_SDK_DIST_DIR="$RUNNER_TEMP/qm-npm-consumer/node_modules/@sobuumedia/quietmetrix-sdk" QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" node tools/e2e/browser-sdk-proof.cjs
+          QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" node tools/e2e/wasm-consumer-proof.cjs
+      - uses: actions/upload-artifact@v4
+        if: matrix.host == 'macos'
+        with:
+          name: sdk-release-assets
+          path: build/sdk-release/assets/
+          if-no-files-found: error
 
-      - name: Smoke-test the publication (Maven Local)
-        run: ./gradlew :quietmetrix-sdk:publishToMavenLocal
+  bundle:
+    name: Verify all platform artifacts
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sdk-maven-*
+          path: build/sdk-release/merged
+          merge-multiple: true
+      - name: Require every signed platform component
+        run: |
+          python3 -m unittest discover -s tools/release -p 'test_*.py'
+          python3 tools/release/bundle-sdk.py --repository build/sdk-release/merged --output build/sdk-release/quietmetrix-central.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-central-bundle
+          path: build/sdk-release/quietmetrix-central.zip
+          if-no-files-found: error
 
-      - name: Publish to Maven Central (Sonatype Central Portal)
-        if: env.OSSRH_USERNAME != ''
-        run: ./gradlew :quietmetrix-sdk:publishAllPublicationsToSonatypeRepository
+  publish:
+    name: Publish Maven Central and npm
+    if: github.event_name == 'push'
+    needs: bundle
+    runs-on: ubuntu-latest
+    env:
+      OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+      OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk-central-bundle
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk-release-assets
+          path: release/assets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Require registry credentials
+        run: |
+          test -n "$OSSRH_USERNAME"
+          test -n "$OSSRH_PASSWORD"
+          test -n "$NODE_AUTH_TOKEN"
+      - name: Publish complete Central bundle and await completion
+        run: python3 tools/release/publish-central.py release/quietmetrix-central.zip --publish
+      - name: Publish tested npm archive
+        run: npm publish release/assets/*.tgz --access public
 
   release:
     name: Create GitHub Release
@@ -61,10 +169,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/download-artifact@v4
         with:
-          generate_release_notes: true
+          name: sdk-release-assets
+          path: release
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: release/RELEASE_NOTES.md
+          files: release/*
+          fail_on_unmatched_files: true
           draft: false

@@ -7,10 +7,11 @@ package com.quietmetrix.analytics.internal
  * Used by the Android lifecycle glue to close out the current screen's dwell time. The counter
  * never goes negative, so a stray "stopped" callback can't fire [onBackground] spuriously.
  */
-internal class ForegroundCounter(private val onBackground: () -> Unit) {
+internal class ForegroundCounter(private val onForeground: () -> Unit = {}, private val onBackground: () -> Unit) {
     private var startedCount = 0
 
     fun onStart() {
+        if (startedCount == 0) onForeground()
         startedCount++
     }
 

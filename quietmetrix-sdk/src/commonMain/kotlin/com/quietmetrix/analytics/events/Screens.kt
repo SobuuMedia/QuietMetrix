@@ -1,6 +1,7 @@
 package com.quietmetrix.analytics
 
 import com.quietmetrix.analytics.internal.ScreenTracker
+import com.quietmetrix.analytics.internal.Gate
 
 /**
  * Reports that the user navigated to [screen] and starts measuring time-on-screen.
@@ -10,5 +11,5 @@ import com.quietmetrix.analytics.internal.ScreenTracker
  * out automatically when the app is backgrounded or the SDK is stopped.
  */
 suspend fun trackScreen(screen: String, props: Map<String, Any?> = emptyMap()) {
-    ScreenTracker.enter(screen, props)
+    if (Gate.shouldTrack()) ScreenTracker.enter(screen, props)
 }

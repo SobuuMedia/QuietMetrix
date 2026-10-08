@@ -5,6 +5,7 @@ import platform.Foundation.NSProcessInfo
 
 actual class DeviceContext actual constructor() {
     actual val platform: String = "macos"
+    actual val deviceClass: String = "desktop"
     actual val language: String? = NSProcessInfo.processInfo.hostName
     actual val appVersion: String? = NSBundle.mainBundle.infoDictionary?.get("CFBundleShortVersionString") as? String
     actual val screenWidth: Int? = null
