@@ -54,7 +54,7 @@ jobs:
           test -n "$GPG_SIGNING_PASSWORD"
       - uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-37'
+          packages: 'platform-tools platforms;android-37.0'
       - name: Prepare Linux native transport
         if: matrix.host == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
