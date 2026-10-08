@@ -15,7 +15,6 @@ import platform.posix.ftell
 import platform.posix.fwrite
 import platform.posix.getenv
 import platform.posix.mkdir
-import platform.posix.remove
 import platform.posix.errno
 import platform.posix.ENOENT
 import platform.windows.MoveFileExW
@@ -76,6 +75,6 @@ internal class FileBasedPersistentStore(private val prefix: String) : Persistent
     }
 
     override fun remove(key: String) {
-        remove(pathFor(key))
+        platform.posix.remove(pathFor(key))
     }
 }
