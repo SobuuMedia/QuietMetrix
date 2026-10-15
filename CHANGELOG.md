@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-15
+
+### Release
+- Align core, Compose, debug, npm and iOS XCFramework distributions at 0.8.0.
+- Refresh web/Android installation examples and independent release consumers for 0.8.0.
+- Retain the existing aggregate protocol, consent persistence, remote funnels and experiment APIs.
+- Validate signed Maven publications on macOS/Linux/Windows plus browser and iOS release assets.
+- See [SDK 0.8.0 release notes](docs/releases/sdk-0.8.0.md) for installation and compatibility.
+
 ## [0.7.0] - 2026-10-08
 
 ### Added

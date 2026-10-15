@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.7.0"
+version = "0.8.0"
 
 // A separate, optional artifact from quietmetrix-sdk on purpose: the core SDK has zero UI
 // dependencies, and pulling in Compose Multiplatform for every consumer — even ones who never

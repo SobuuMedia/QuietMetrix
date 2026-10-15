@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:allowBackup="false" android:label="QuietMetrix release proof">
+    <activity android:name=".MainActivity" android:exported="true" />
+  </application>
+</manifest>

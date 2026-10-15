@@ -14,7 +14,7 @@ not throw — tracking simply becomes a no-op until it runs in the browser.
 ## Installation
 
 ```bash
-npm install @sobuumedia/quietmetrix-sdk@0.7.0
+npm install @sobuumedia/quietmetrix-sdk@0.8.0
 ```
 
 ```javascript
@@ -233,7 +233,7 @@ included in `quietmetrix-sdk`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.8.0")
 }
 ```
 

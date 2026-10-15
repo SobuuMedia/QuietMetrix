@@ -89,7 +89,7 @@ Both backends implement the same OpenAPI 3.1 contract (`docs/openapi.yaml`). Any
 // 1. Add dependency (KMP project, build.gradle.kts)
 implementation(project(":quietmetrix-sdk"))
 // or from Maven Central when published:
-// implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
+// implementation("io.github.sobuumedia:quietmetrix-sdk:0.8.0")
 
 // 2. Initialize once at app startup
 import com.quietmetrix.analytics.*
@@ -532,7 +532,7 @@ repositories { mavenCentral() }
 
 // module build.gradle.kts
 dependencies {
-    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.8.0")
 }
 ```
 
@@ -557,7 +557,7 @@ QuietMetrix.shared.trackEvent(event: "page_view", screen: "home")
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.8.0")
 }
 ```
 
