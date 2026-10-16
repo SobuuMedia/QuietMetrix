@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*", "sdk-v*"]
   workflow_dispatch:
+    inputs:
+      resume_after_central:
+        description: "Resume npm and GitHub release after Maven Central is already published"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -131,7 +136,7 @@ jobs:
 
   publish:
     name: Publish Maven Central and npm
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.resume_after_central)
     needs: bundle
     runs-on: ubuntu-latest
     env:
@@ -158,6 +163,7 @@ jobs:
           test -n "$OSSRH_PASSWORD"
           test -n "$NODE_AUTH_TOKEN"
       - name: Publish complete Central bundle and await completion
+        if: github.event_name == 'push'
         run: python3 tools/release/publish-central.py release/quietmetrix-central.zip --publish
       - name: Publish tested npm archive
         run: npm publish release/assets/*.tgz --access public
