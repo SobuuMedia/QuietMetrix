@@ -14,7 +14,7 @@ not throw — tracking simply becomes a no-op until it runs in the browser.
 ## Installation
 
 ```bash
-npm install @sobuumedia/quietmetrix-sdk@0.7.0
+npm install @sobuumedia/quietmetrix-sdk@0.8.0
 ```
 
 ```javascript
@@ -24,6 +24,7 @@ init({
     storageKeyPrefix: "myapp_",
     trackingEndpoint: "https://your-server.com/api/v1", // your ingest URL
     apiKey: "qm_ak_your_api_key",                              // your API key
+    countryCode: "DE",                                         // optional, visitor-specific ISO alpha-2 country
 });
 ```
 
@@ -52,8 +53,14 @@ init({
     autoTrackInitialPageView: true,     // default true
     trackingAllowedByDefault: false,    // default false
     debug: false,                       // default false
+    countryCode: "DE",                 // optional; set only when the host knows this visitor's country
 });
 ```
+
+Browser traffic is sent as the `web` platform. The SDK marks browser automation and recognized
+crawler user agents as detected bots; browsers without those signals are marked likely human.
+This is an estimate, not proof of a person. The Overview bot filter keeps unclassified and older
+traffic visible.
 
 `trackingEndpoint` must be `https://` (or omitted for offline-only mode).
 
@@ -233,7 +240,7 @@ included in `quietmetrix-sdk`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.8.0")
 }
 ```
 

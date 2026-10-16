@@ -107,6 +107,7 @@ object QuietMetrix {
         // Cancellation is immediate even when the lifecycle queue or host is shutting down.
         CounterFlusher.pause()
         ConfigHolder.configOrNull?.let { lifecycleEvents.trySend(LifecycleEvent(it, foreground = false, shutdown = true)) }
+        platformStop()
     }
 
     internal fun onForeground() {
@@ -120,3 +121,4 @@ object QuietMetrix {
 }
 
 internal expect fun platformInit(config: QuietMetrixConfig)
+internal expect fun platformStop()

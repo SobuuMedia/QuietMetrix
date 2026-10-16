@@ -16,6 +16,7 @@ internal fun resolveOverviewDuration(v2Milliseconds: Long?, v2State: String?, le
         (v2Milliseconds / 1_000L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(), OverviewMeasureSource.ReportedV2,
     )
     v2State == "suppressed" -> OverviewDurationValue(null, OverviewMeasureSource.Suppressed)
+    v2State != null -> OverviewDurationValue(null, OverviewMeasureSource.Unavailable)
     legacySeconds != null -> OverviewDurationValue(legacySeconds, OverviewMeasureSource.LegacyApproximate)
     else -> OverviewDurationValue(null, OverviewMeasureSource.Unavailable)
 }

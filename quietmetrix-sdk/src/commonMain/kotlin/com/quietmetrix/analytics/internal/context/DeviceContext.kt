@@ -8,6 +8,7 @@ expect class DeviceContext() {
     val screenWidth: Int?
     val screenHeight: Int?
     val userAgent: String?
+    val trafficClass: String
     val osName: String?
     val osVersion: String?
     val browserName: String?

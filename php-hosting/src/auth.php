@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/errorDiagnostics.php';
 
 /**
  * Validate the Bearer JWT on the Authorization header. On failure responds 401
@@ -176,6 +177,7 @@ function requireAnalyticsAccess(string $projectId): array {
         exit;
     }
     requireProjectAccess($session, $projectId);
+    enableOperatorErrorDiagnostics($session);
     return $session;
 }
 

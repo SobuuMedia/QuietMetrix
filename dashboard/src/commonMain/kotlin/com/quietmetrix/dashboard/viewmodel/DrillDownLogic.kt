@@ -60,7 +60,12 @@ internal fun selectDrillDown(state: DashboardState, kind: String, key: String): 
     val days = ((state.range.seconds + 86399) / 86400).coerceAtLeast(1)
     val previousKey = if (kind.startsWith("day-")) {
         val day = epochDayFromIsoOrNull(key)
-        val raw = if (kind == "day-visits") previous.sessions?.dailySessions else previous.aggregates?.daily
+        val raw = when {
+            state.excludeDetectedBots && kind == "day-visits" -> previous.aggregates?.dailyVisitsV2
+            state.excludeDetectedBots && kind == "day-actions" -> previous.aggregates?.dailyActionsV2
+            kind == "day-visits" -> previous.sessions?.dailySessions
+            else -> previous.aggregates?.daily
+        }
         val points = analyticsChartPoints(raw.orEmpty(), state.range, state.analyticsAnchor, previous = true)
         points.orEmpty().firstOrNull { epochDayFromIsoOrNull(it.day) == day?.minus(days) }?.day ?: ""
     } else if (kind == "cohort") {
@@ -159,7 +164,12 @@ private fun resolveDrillDown(state: DashboardState, kind: String, key: String, p
         "day-actions", "day-visits" -> {
             explanation = if (state.range == TimeRange.Day90) Res.string.drill_week_detail else Res.string.drill_day_detail
             breakdownTitle = Res.string.drill_daily
-            val raw = if (kind == "day-visits") state.sessions?.dailySessions else state.aggregates?.daily
+            val raw = when {
+                state.excludeDetectedBots && kind == "day-visits" -> state.aggregates?.dailyVisitsV2
+                state.excludeDetectedBots && kind == "day-actions" -> state.aggregates?.dailyActionsV2
+                kind == "day-visits" -> state.sessions?.dailySessions
+                else -> state.aggregates?.daily
+            }
             val points = analyticsChartPoints(raw.orEmpty(), state.range, state.analyticsAnchor, previousPeriod)
             rows = points.orEmpty().map { DrillDownRow(it.day, formatCount(it.total), it.total.toFloat()) }
             points.firstOrNull { it.day == key }?.total

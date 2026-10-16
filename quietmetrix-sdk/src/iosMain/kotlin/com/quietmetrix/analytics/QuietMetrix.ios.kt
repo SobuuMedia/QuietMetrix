@@ -19,3 +19,5 @@ internal actual fun platformInit(config: QuietMetrixConfig) {
         QuietMetrix.onBackground()
     }
 }
+
+internal actual fun platformStop() = Unit

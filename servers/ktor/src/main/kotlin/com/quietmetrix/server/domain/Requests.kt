@@ -72,6 +72,7 @@ data class CounterV2EnvelopeItem(
     val segment: CounterV2Segment,
     val dimensions: Map<String, String> = emptyMap(),
     val n: Long,
+    @SerialName("traffic_class") val trafficClass: String? = null,
 )
 
 @Serializable

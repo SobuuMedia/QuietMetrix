@@ -20,6 +20,8 @@ internal actual fun platformInit(config: QuietMetrixConfig) {
     }
 }
 
+internal actual fun platformStop() = Unit
+
 /** Off the UI thread, dedicated to feeding tap samples into [FrictionCounterBridge] — touch
  *  dispatch must never block on a suspend call. */
 private val frictionScope = CoroutineScope(Dispatchers.Default + SupervisorJob())

@@ -19,6 +19,9 @@ private external fun jsDeviceClass(): String
 @JsFun("() => navigator.userAgent || null")
 private external fun jsUserAgent(): String?
 
+@JsFun("() => { if (typeof navigator === 'undefined') return 'unclassified'; var ua = navigator.userAgent || ''; return navigator.webdriver === true || /(^|[^a-z])(bot|crawler|spider|slurp|bingpreview|facebookexternalhit|headlesschrome|phantomjs|playwright|puppeteer)([^a-z]|$)/i.test(ua) ? 'detected_bot' : 'likely_human'; }")
+private external fun jsTrafficClass(): String
+
 @JsFun(
     "() => { var ua = navigator.userAgent; " +
         "if (/Windows/.test(ua)) return 'Windows'; " +
@@ -39,13 +42,14 @@ private external fun jsOsName(): String?
 private external fun jsBrowserName(): String?
 
 actual class DeviceContext actual constructor() {
-    actual val platform: String = "wasmJs"
+    actual val platform: String = "web"
     actual val deviceClass: String = jsDeviceClass()
     actual val language: String? = jsLanguage()
     actual val appVersion: String? = null
     actual val screenWidth: Int? = jsScreenWidth()
     actual val screenHeight: Int? = jsScreenHeight()
     actual val userAgent: String? = jsUserAgent()
+    actual val trafficClass: String = jsTrafficClass()
     actual val osName: String? = jsOsName()
     actual val osVersion: String? = null
     actual val browserName: String? = jsBrowserName()

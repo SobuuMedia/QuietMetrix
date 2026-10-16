@@ -4,10 +4,16 @@ require_once __DIR__ . '/../counterRegistryV2.php';
 /** Select exactly one counter projection, with cell-by-cell fallback for rows written before
  * the projection protocol was enabled. */
 function selectCounterProjectionRows(array $rows, string|array $platform): array {
+    $trafficScope = is_array($platform) ? ($platform[2] ?? 'all') : 'all';
+    if (is_array($platform) && count($platform) > 2) $platform = [$platform[0], $platform[1]];
     if (is_array($platform)) {
         [$kind, $value] = $platform;
-        if ($kind === 'country') return array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? '') === 'country' && ($row['segment_value'] ?? '') === $value));
-        if ($kind === 'screen') return array_values(array_filter(selectCounterProjectionRows($rows, 'all'), static function($row) use ($value) {
+        if ($kind === 'country') {
+            $base = array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? '') === 'country' && ($row['segment_value'] ?? '') === $value));
+            return $trafficScope === 'all' ? $base : selectTrafficClassRowsV2($rows, $base, $trafficScope);
+        }
+        if ($kind === 'screen') {
+            $base = array_values(array_filter(selectCounterProjectionRows($rows, 'all'), static function($row) use ($value) {
             $d = json_decode($row['dims'], true) ?: [];
             return match ($row['metric'] ?? '') {
                 'unique_window_v2', 'unique_hour_v2' => ($d['scope_kind'] ?? '') === 'screen' && ($d['scope_key'] ?? '') === $value,
@@ -15,16 +21,47 @@ function selectCounterProjectionRows(array $rows, string|array $platform): array
                 'witness_window_v2' => true,
                 default => false,
             };
-        }));
-        return [];
+            }));
+            return $trafficScope === 'all' ? $base : selectTrafficClassRowsV2($rows, $base, $trafficScope);
+        }
+        if ($kind === 'platform') {
+            $base = selectCounterProjectionRows($rows, $value);
+            return $trafficScope === 'all' ? $base : selectTrafficClassRowsV2($rows, $base, $trafficScope);
+        }
+        $base = [];
+        if ($trafficScope === 'all') return $base;
+        return selectTrafficClassRowsV2($rows, $base, $trafficScope);
     }
     $global = array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? 'global') === 'global' && ($row['segment_value'] ?? 'all') === 'all'));
-    if ($platform === 'all') return $global;
+    if ($platform === 'all') return $trafficScope === 'all' ? $global : selectTrafficClassRowsV2($rows, $global, $trafficScope);
     $specific = array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? 'global') === 'platform' && ($row['segment_value'] ?? '') === $platform));
     $key = static fn($row) => implode("\0", [$row['metric'] ?? '', $row['day'] ?? '', $row['hour'] ?? '', $row['dims_hash'] ?? '']);
     $keys = array_fill_keys(array_map($key, $specific), true);
     $fallback = array_values(array_filter($global, static fn($row) => ($row['platform'] ?? '') === $platform && !isset($keys[$key($row)])));
-    return array_merge($specific, $fallback);
+    $base = array_merge($specific, $fallback);
+    return $trafficScope === 'all' ? $base : selectTrafficClassRowsV2($rows, $base, $trafficScope);
+}
+
+function selectTrafficClassRowsV2(array $rows, array $base, string $scope): array {
+    $key = static fn($row) => implode("\0", [$row['metric'] ?? '', $row['day'] ?? '', $row['hour'] ?? '', $row['platform'] ?? '', $row['app_version'] ?? '', $row['country'] ?? '', $row['dims_hash'] ?? '']);
+    $baseKeys = array_fill_keys(array_map($key, $base), true);
+    $known = [];
+    $selected = [];
+    foreach ($rows as $row) {
+        if (($row['segment_kind'] ?? '') !== 'traffic_class') continue;
+        $cellKey = $key($row);
+        $known[$cellKey] = true;
+        $class = $row['segment_value'] ?? '';
+        $include = match ($scope) {
+            'non_bot' => in_array($class, ['likely_human', 'unclassified'], true),
+            'detected_bot' => $class === 'detected_bot',
+            'likely_human', 'unclassified' => $class === $scope,
+            default => false,
+        };
+        if ($include && isset($baseKeys[$cellKey])) $selected[] = $row;
+    }
+    if (in_array($scope, ['non_bot', 'unclassified'], true)) foreach ($base as $row) if (!isset($known[$key($row)])) $selected[] = $row;
+    return $selected;
 }
 
 function reportPlatformV2(string|array $selection): string { return is_array($selection) ? 'all' : $selection; }
@@ -85,18 +122,22 @@ function readProjectReportV2(string $projectId, array $query): array {
     if (!in_array($platform, ['all','android','ios','web','desktop'], true)) { throw new InvalidArgumentException('Invalid platform'); }
     $kind = $query['filter_kind'] ?? 'platform'; $value = $query['filter_value'] ?? $platform;
     if (!validReportFilterV2($kind, $value)) throw new InvalidArgumentException('Invalid report filter');
-    $platform = $kind === 'platform' ? $value : [$kind, $value];
+    $trafficScope = $query['traffic_scope'] ?? 'all';
+    if (!in_array($trafficScope, ['all','non_bot','detected_bot','likely_human','unclassified'], true)) throw new InvalidArgumentException('Invalid traffic scope');
+    $platform = [$kind, $value, $trafficScope];
     $compareRaw = $query['compare'] ?? 'false';
     if (!in_array($compareRaw, ['true', 'false'], true)) { throw new InvalidArgumentException('compare must be true or false'); }
     $compare = $compareRaw === 'true';
     $from = $range === 'today' ? $anchor : $anchor->modify('-' . ($days - 1) . ' days');
     $db = getDb();
-    $peopleForWindow = static function (DateTimeImmutable $end, int $length) use ($db, $projectId, $platform): array {
+    $peopleForWindow = static function (DateTimeImmutable $end, int $length, ?string $trafficScope = null) use ($db, $projectId, $platform): array {
+        $selection = $platform;
+        if ($trafficScope !== null && is_array($selection)) $selection[2] = $trafficScope;
         $start = $end->modify('-' . ($length - 1) . ' days');
         $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric='unique_window_v2' AND hour=-1 AND day BETWEEN ? AND ? AND (?='all' OR platform=?)");
         $stmt->execute([$projectId, $start->format('Y-m-d'), $end->format('Y-m-d'), reportPlatformV2($platform), reportPlatformV2($platform)]);
         $rows = [];
-        foreach (selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform) as $row) {
+        foreach (selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $selection) as $row) {
             $dims = json_decode($row['dims'], true);
             if (is_array($dims) && reportUniqueScopeV2($dims, $platform) &&
                 (int)($dims['days'] ?? 0) === $length && ($dims['end_day'] ?? null) === $end->format('Y-m-d')) $rows[] = $row;
@@ -110,6 +151,8 @@ function readProjectReportV2(string $projectId, array $query): array {
                 : ['value' => $value, 'state' => $value === 0 ? 'zero' : 'reported', 'unit' => 'installations', 'source' => 'v2', 'contributors' => $witnesses]);
     };
     $people = $peopleForWindow($anchor, $days);
+    $traffic = [];
+    foreach (['detected_bot','likely_human','unclassified'] as $class) $traffic[$class] = $peopleForWindow($anchor, $days, $class);
     $activityCells = static function (string $metric, DateTimeImmutable $start, DateTimeImmutable $end, string $resolution, ?int $hour = null) use ($db, $projectId, $platform): array {
         $hourCondition = $resolution === 'today' ? ($hour === null ? 'hour >= 0' : 'hour = ?') : 'hour = -1';
         $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric=? AND day BETWEEN ? AND ? AND $hourCondition AND (?='all' OR platform=?)");
@@ -241,7 +284,7 @@ function readProjectReportV2(string $projectId, array $query): array {
             : $peopleForWindow($from->modify('-1 day'), $days),
     ];
     if ($compare) $comparison['visit_duration'] = $range === 'today' ? ['value'=>null,'state'=>'unsupported','unit'=>'milliseconds','source'=>'v2'] : $durationMeasure($previousFrom,$previousTo);
-    $coverageQuery = $db->prepare('SELECT MIN(day) AS oldest_day, MAX(day) AS newest_day, MAX(updated_at) AS last_received_at, MAX(hour >= 0) AS has_hourly, GROUP_CONCAT(DISTINCT sdk_version ORDER BY sdk_version) AS sdk_versions FROM counter_cells_v2 WHERE project_id=? AND day BETWEEN ? AND ?');
+    $coverageQuery = $db->prepare("SELECT MIN(day) AS oldest_day, MAX(day) AS newest_day, MAX(updated_at) AS last_received_at, MAX(hour >= 0) AS has_hourly, MAX(segment_kind='traffic_class') AS traffic_class_available, GROUP_CONCAT(DISTINCT sdk_version ORDER BY sdk_version) AS sdk_versions FROM counter_cells_v2 WHERE project_id=? AND day BETWEEN ? AND ?");
     $coverageQuery->execute([$projectId, $from->format('Y-m-d'), $anchor->format('Y-m-d')]);
     $coverage = $coverageQuery->fetch(PDO::FETCH_ASSOC) ?: [];
     $legacy = $db->prepare('SELECT 1 FROM counters WHERE project_id=? LIMIT 1');
@@ -250,11 +293,11 @@ function readProjectReportV2(string $projectId, array $query): array {
     $v2Present = $coverage['newest_day'] !== null;
     $coverageSource = $v2Present && $legacyPresent ? 'mixed' : ($v2Present ? 'v2' : ($legacyPresent ? 'legacy' : 'v2'));
     return [
-        'scope' => ['range' => $range, 'anchor' => $anchor->format('Y-m-d'), 'platform' => reportPlatformV2($platform), 'filter_kind' => $kind, 'filter_value' => $value, 'timezone' => 'UTC', 'compare' => $compareRaw],
+        'scope' => ['range' => $range, 'anchor' => $anchor->format('Y-m-d'), 'platform' => reportPlatformV2($platform), 'filter_kind' => $kind, 'filter_value' => $value, 'traffic_scope' => $trafficScope, 'timezone' => 'UTC', 'compare' => $compareRaw],
         'generated_at' => gmdate('Y-m-d\\TH:i:s\\Z'),
         'last_received_at' => $coverage['last_received_at'] ?: null,
-        'coverage' => ['source' => $coverageSource, 'resolution' => ($range === 'today' && (int)($coverage['has_hourly'] ?? 0) === 1 ? 'hourly' : 'daily'), 'oldest_day' => $coverage['oldest_day'] ?: null, 'newest_day' => $coverage['newest_day'] ?: null, 'sdk_versions' => array_values(array_filter(explode(',', $coverage['sdk_versions'] ?? ''), static fn($v) => $v !== '' && $v !== 'unknown')), 'legacy_present' => $legacyPresent],
-        'overview' => $overview, 'charts' => $charts, 'comparison_charts' => $comparisonCharts, 'comparison' => $comparison,
+        'coverage' => ['source' => $coverageSource, 'resolution' => ($range === 'today' && (int)($coverage['has_hourly'] ?? 0) === 1 ? 'hourly' : 'daily'), 'oldest_day' => $coverage['oldest_day'] ?: null, 'newest_day' => $coverage['newest_day'] ?: null, 'sdk_versions' => array_values(array_filter(explode(',', $coverage['sdk_versions'] ?? ''), static fn($v) => $v !== '' && $v !== 'unknown')), 'legacy_present' => $legacyPresent, 'traffic_class_available' => (bool)($coverage['traffic_class_available'] ?? false), 'traffic_class_supported' => true],
+        'overview' => $overview, 'traffic' => $traffic, 'charts' => $charts, 'comparison_charts' => $comparisonCharts, 'comparison' => $comparison,
         'flow' => [
             'screen_views' => $activityMeasure('screen_view_v2', 'views'),
             'transitions' => $activityMeasure('screen_transition_v2', 'transitions'),

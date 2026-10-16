@@ -58,7 +58,10 @@ set_exception_handler(function (Throwable $e): void {
         header('Content-Type: application/json');
     }
     $payload = ['error' => 'internal_error', 'message' => 'Internal server error'];
-    if (defined('DEBUG') && DEBUG) {
+    if (($GLOBALS['qm_operator_error_diagnostics'] ?? false) === true) {
+        header('Cache-Control: no-store');
+        $payload['diagnostics'] = operatorErrorDiagnostics($e);
+    } elseif (defined('DEBUG') && DEBUG) {
         $payload['debug'] = [
             'exception' => get_class($e),
             'message'   => $e->getMessage(),

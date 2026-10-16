@@ -58,7 +58,9 @@ internal fun analyticsSections(destination: com.quietmetrix.dashboard.nav.NavDes
 }
 
 /** One selected stored segment; no approximate scaling or unsupported intersections. */
-data class OverviewFilter(val kind: String, val value: String)
+data class OverviewFilter(val kind: String, val value: String, val trafficScope: String = "all")
 internal fun DashboardState.reportFilter(): OverviewFilter =
-    if (activeDestination == com.quietmetrix.dashboard.nav.NavDestination.Overview) overviewFilter ?: OverviewFilter("platform", "all")
+    if (activeDestination == com.quietmetrix.dashboard.nav.NavDestination.Overview) {
+        (overviewFilter ?: OverviewFilter("platform", "all")).copy(trafficScope = if (excludeDetectedBots) "non_bot" else "all")
+    }
     else OverviewFilter("platform", if (activeDestination == com.quietmetrix.dashboard.nav.NavDestination.Flow) flowPlatform else "all")

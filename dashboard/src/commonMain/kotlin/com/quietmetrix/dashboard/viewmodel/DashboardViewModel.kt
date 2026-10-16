@@ -52,6 +52,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +76,7 @@ data class DashboardState(
     val aggregates: AggregatesResponse? = null,
     val overviewBaseAggregates: AggregatesResponse? = null,
     val overviewFilter: OverviewFilter? = null,
+    val excludeDetectedBots: Boolean = false,
     val range: TimeRange = TimeRange.Default,
     val loading: Boolean = false,
     val refreshing: Boolean = false,
@@ -323,10 +325,12 @@ class DashboardViewModel(
         runCatching { TokenStorage.saveUser(json.encodeToString(ApiUser.serializer(), user)) }
     }
 
-    suspend fun init(apiBaseUrl: String) {
+    /** Restores local credentials before the first render; network discovery runs independently. */
+    fun init(apiBaseUrl: String) {
         api = ApiClient(apiBaseUrl)
         _state.update { it.copy(serverBaseUrl = apiBaseUrl.trimEnd('/')) }
-        checkServerConnectionOnce()
+        TokenStorage.get()?.let { restoreSession(it) }
+        checkServerConnection()
     }
 
     /** Refreshes the public API metadata; this does not probe a local MCP process. */
@@ -444,13 +448,7 @@ class DashboardViewModel(
                 }
                 _state.update { it.copy(projects = res.projects, currentProjectId = currentId, loading = false) }
                 if (currentId != null) {
-                    loadAggregates()
-                    loadTransitions()
-                    loadSearch()
-                    loadFriction()
-                    loadSessions()
-                    loadRetentionOnce()
-                    loadFunnelsOnce()
+                    loadActive(_state.value.activeDestination)
                 }
             } catch (e: ApiException) {
                 if (e.status == 401) {
@@ -466,12 +464,7 @@ class DashboardViewModel(
                             }
                             _state.update { it.copy(projects = res.projects, currentProjectId = currentId, loading = false) }
                             if (currentId != null) {
-                                loadAggregates()
-                                loadTransitions()
-                                loadSearch()
-                                loadFriction()
-                                loadSessions()
-                                loadRetentionOnce()
+                                loadActive(_state.value.activeDestination)
                             }
                         } catch (e: Throwable) {
                             _state.update { it.copy(error = e.toUiError("GET /projects (after token refresh)"), loading = false) }
@@ -520,10 +513,12 @@ class DashboardViewModel(
     /** Suspending fetch for a destination, shared by navigation and refresh. */
     private suspend fun loadActive(destination: NavDestination) {
         when (destination) {
-            // Task 19 fix round 1: loadRetentionOnce() added so the Overview vitals grid's
-            // "Came back next day" card has real data without requiring a separate visit to the
-            // Retention tab first (see OverviewVitalsLogic.kt's computeVitalsNumbers KDoc).
-            NavDestination.Overview  -> { loadAggregates(); loadSessions(); loadRetentionOnce() }
+            // Independent home-screen panels must not wait for one another's network requests.
+            NavDestination.Overview  -> coroutineScope {
+                launch { loadAggregates() }
+                launch { loadSessions() }
+                launch { loadRetentionOnce() }
+            }
             NavDestination.Flow      -> { loadAggregates(); loadTransitions(); loadSearch(); loadFriction() }
             NavDestination.Retention -> loadRetentionOnce()
             NavDestination.Projects  -> loadProjects()
@@ -541,7 +536,7 @@ class DashboardViewModel(
         askRequest.value = null
         _state.update {
             it.copy(
-                currentProjectId = projectId, overviewFilter = null, overviewBaseAggregates = null, askDrawer = AskDrawerState(), ai = AiCapabilities(), aiInsight = null, aggregates = null, sessions = null, retention = null, transitions = null,
+                currentProjectId = projectId, overviewFilter = null, excludeDetectedBots = false, overviewBaseAggregates = null, askDrawer = AskDrawerState(), ai = AiCapabilities(), aiInsight = null, aggregates = null, sessions = null, retention = null, transitions = null,
                 search = null, friction = null, comparison = ComparisonData(), comparisonErrors = emptyMap(),
                 sectionErrors = emptyMap(), analyticsRevision = it.analyticsRevision + 1, drillDown = null, funnels = emptyList(), selectedFunnelKey = null, selectedFunnelRevision = null, funnelCatalog = emptyMap(), funnelSaveError = null, funnelResults = null,
                 experiments = emptyList(), experimentLimit = null, selectedExperimentKey = null, experimentResults = null,
@@ -560,6 +555,15 @@ class DashboardViewModel(
         _state.update { it.copy(overviewFilter = filter, aggregates = null, sessions = null, retention = null,
             comparison = ComparisonData(), analyticsRevision = it.analyticsRevision + 1,
             aiInsight = null, askDrawer = AskDrawerState(), drillDown = null) }
+        scope.launch { loadAggregates(); loadSessions(); loadRetentionOnce() }
+    }
+
+    fun setExcludeDetectedBots(exclude: Boolean) {
+        val current = _state.value
+        if (current.excludeDetectedBots == exclude) return
+        _state.update { it.copy(excludeDetectedBots = exclude, aggregates = null, sessions = null, retention = null,
+            comparison = ComparisonData(), analyticsRevision = it.analyticsRevision + 1, aiInsight = null,
+            askDrawer = AskDrawerState(), drillDown = null) }
         scope.launch { loadAggregates(); loadSessions(); loadRetentionOnce() }
     }
 
@@ -1059,11 +1063,11 @@ class DashboardViewModel(
         loadAnalytics(DataSection.Aggregates, "GET /projects/{id}/aggregates", snapshot,
             fetch = { previous, anchor ->
                 val filter = snapshot.reportFilter()
-                val filtered = filter != OverviewFilter("platform", "all")
+                val filtered = filter.kind != "platform" || filter.value != "all" || filter.trafficScope != "all"
                 val legacy = if (filtered) AggregatesResponse() else api.aggregates(snapshot.currentProjectId.orEmpty(), snapshot.range, snapshot.demoMode, previous = previous, anchor = anchor)
                 if (snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
-                    val report = if (filtered) api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare, filter.kind, filter.value)
-                        else runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare) }.getOrNull()
+                    val report = if (filtered) api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare, filter.kind, filter.value, filter.trafficScope)
+                        else runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare, trafficScope = filter.trafficScope) }.getOrNull()
                     report?.toAggregates(legacy, previous) ?: legacy
                 }
             },
@@ -1128,7 +1132,7 @@ class DashboardViewModel(
         val snapshot = _state.value
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Sessions, "GET /projects/{id}/sessions", snapshot,
-            fetch = { previous, anchor -> if (snapshot.reportFilter() != OverviewFilter("platform", "all")) SessionsResponse() else api.sessions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            fetch = { previous, anchor -> if (snapshot.reportFilter().let { it.kind != "platform" || it.value != "all" || it.trafficScope != "all" }) SessionsResponse() else api.sessions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(sessions = result)) else copy(sessions = result)
             })
@@ -1141,10 +1145,10 @@ class DashboardViewModel(
         loadAnalytics(DataSection.Retention, "GET /projects/{id}/retention", snapshot,
             fetch = { previous, anchor ->
                 val filter = snapshot.reportFilter()
-                val filtered = filter != OverviewFilter("platform", "all")
+                val filtered = filter.kind != "platform" || filter.value != "all" || filter.trafficScope != "all"
                 val legacy = if (filtered) RetentionResponse(source = "v2") else api.retention(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor)
                 if (snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
-                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, compare = snapshot.compare, filterKind = filter.kind, filterValue = filter.value) }.getOrNull()
+                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, compare = snapshot.compare, filterKind = filter.kind, filterValue = filter.value, trafficScope = filter.trafficScope) }.getOrNull()
                     (if (previous) report?.toPreviousRetentionResponse() else report?.toRetentionResponse()) ?: legacy
                 }
             },

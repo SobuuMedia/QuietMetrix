@@ -38,6 +38,7 @@ external interface QuietMetrixInitOptions {
     var autoTrackInitialPageView: Boolean?
     var trackingAllowedByDefault: Boolean?
     var userAgent: String?
+    var countryCode: String?
     var debug: Boolean?
     var funnels: Array<FunnelOptions>?
 }
@@ -81,6 +82,7 @@ fun init(options: QuietMetrixInitOptions) {
             autoTrackInitialPageView = options.autoTrackInitialPageView ?: true,
             trackingAllowedByDefault = options.trackingAllowedByDefault ?: false,
             userAgent = options.userAgent,
+            countryCode = options.countryCode,
             debug = options.debug ?: false,
             funnels = (options.funnels ?: emptyArray()).map { toFunnel(it) },
         )

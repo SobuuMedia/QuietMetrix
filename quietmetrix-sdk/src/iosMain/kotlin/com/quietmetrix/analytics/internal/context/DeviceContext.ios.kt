@@ -14,6 +14,7 @@ actual class DeviceContext actual constructor() {
     actual val appVersion: String? = NSBundle.mainBundle.infoDictionary?.get("CFBundleShortVersionString") as? String
     actual val screenWidth: Int? = null
     actual val screenHeight: Int? = null
+    actual val trafficClass: String = "unclassified"
     actual val userAgent: String? = null
     actual val osName: String? = "iOS"
     actual val osVersion: String? = UIDevice.currentDevice.systemVersion

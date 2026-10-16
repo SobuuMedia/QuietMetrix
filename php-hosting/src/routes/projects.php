@@ -324,6 +324,7 @@ function handleProjectsUpdate(string $projectId): void {
 function handleProjectsDelete(string $projectId): void {
     $session = requireSession();
     requireAdmin($session);
+    enableOperatorErrorDiagnostics($session, 'DELETE');
     $stmt = getDb()->prepare('SELECT id FROM projects WHERE id = ?');
     $stmt->execute([$projectId]);
     if ($stmt->fetch() === false) {
@@ -334,8 +335,13 @@ function handleProjectsDelete(string $projectId): void {
     $db->beginTransaction();
     try {
         $lock=$db->prepare('SELECT id FROM projects WHERE id=? FOR UPDATE'); $lock->execute([$projectId]); $lock->fetch();
-        $db->prepare('DELETE FROM ai_summary_cache WHERE operation_id IN (SELECT operation_id FROM ai_operations WHERE project_id=?)')->execute([$projectId]);
-        $db->prepare('DELETE FROM ai_operations WHERE project_id=?')->execute([$projectId]);
+        // AI storage may be absent on an older or partially upgraded installation.
+        if (tableExists($db, 'ai_operations')) {
+            if (tableExists($db, 'ai_summary_cache')) {
+                $db->prepare('DELETE FROM ai_summary_cache WHERE operation_id IN (SELECT operation_id FROM ai_operations WHERE project_id=?)')->execute([$projectId]);
+            }
+            $db->prepare('DELETE FROM ai_operations WHERE project_id=?')->execute([$projectId]);
+        }
         $db->prepare('DELETE FROM projects WHERE id = ?')->execute([$projectId]);
         $db->commit();
     } catch (Throwable $e) { $db->rollBack(); throw $e; }

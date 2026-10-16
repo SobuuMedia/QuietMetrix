@@ -36,6 +36,7 @@ class CounterV2Repository(private val database: Database, private val maxDistinc
     private data class CellInput(
         val day: String, val hour: Int?, val metric: String, val dims: Map<String, String>,
         val segmentKind: String, val segmentValue: String, val n: Long, val contributors: Int,
+        val trafficClass: String? = null,
     )
 
     data class TransitionRead(val present: Boolean, val cells: List<CounterRepository.CounterCell>)
@@ -149,22 +150,28 @@ class CounterV2Repository(private val database: Database, private val maxDistinc
 
     fun apply(projectId: Long, request: CounterV2EnvelopeRequest, claimToken: String): Result {
         if (request.schema != 2) return Result.Invalid("unsupported_schema")
+        val browserAlias = request.sdk.platform.equals("js", ignoreCase = true) ||
+            request.sdk.platform.equals("wasmJs", ignoreCase = true)
         val cells = request.items.map { item ->
             val contributor = if (item.metric in setOf("unique_window_v2", "unique_hour_v2", "retention_entry_v2", "retention_return_v2", "experiment_exposure_v2", "experiment_goal_v2")) 1 else 0
-            CellInput(item.day, item.hour, item.metric, item.dimensions, item.segment.kind, item.segment.value, item.n, contributor)
+            val segmentValue = if (browserAlias && item.segment.kind == "platform" && item.segment.value == "unknown") "web" else item.segment.value
+            CellInput(item.day, item.hour, item.metric, item.dimensions, item.segment.kind, segmentValue, item.n, contributor, item.trafficClass)
         }
-        return applyCells(projectId, request.batchId, request.sdk, null, cells, claimToken, canonicalPayloadHash(request))
+        val scopedCells = cells + cells.filter { it.segmentKind == "global" && it.trafficClass != null }.map {
+            it.copy(segmentKind = "traffic_class", segmentValue = it.trafficClass!!, trafficClass = null)
+        }
+        return applyCells(projectId, request.batchId, request.sdk, null, scopedCells, claimToken, canonicalPayloadHash(request), acceptedCount = cells.size)
     }
 
     private fun applyCells(
         projectId: Long, batchId: String, sdk: SdkInfo?, app: CounterAppInfo?, cells: List<CellInput>,
-        claimToken: String, payloadHash: String,
+        claimToken: String, payloadHash: String, acceptedCount: Int = cells.size,
     ): Result {
         if (!batchId.matches(Regex("^[A-Za-z0-9_-]{16,64}$"))) return Result.Invalid("invalid_batch_id")
         val today = LocalDate.now(java.time.ZoneOffset.UTC)
         if ((app?.version?.length ?: 0) > 32) return Result.Invalid("invalid_app_version")
         if ((sdk?.version?.length ?: 0) > 32) return Result.Invalid("invalid_sdk_version")
-        if (cells.isEmpty() || cells.size > 512) return Result.Invalid("invalid_batch_size")
+        if (acceptedCount !in 1..512 || cells.isEmpty() || cells.size > 1024) return Result.Invalid("invalid_batch_size")
         if (cells.any { it.n !in 1..1_000_000_000L || it.contributors !in 0..1 }) return Result.Invalid("invalid_counter_value")
         for (cell in cells) {
             val day = runCatching { LocalDate.parse(cell.day) }.getOrNull() ?: return Result.Invalid("invalid_day")
@@ -266,8 +273,8 @@ class CounterV2Repository(private val database: Database, private val maxDistinc
             }
             CounterBatchReceiptsV2.update({
                 (CounterBatchReceiptsV2.projectId eq projectId) and (CounterBatchReceiptsV2.batchId eq batchId)
-            }) { it[accepted] = cells.size }
-            Result.Accepted(cells.size, replayed = false)
+            }) { it[accepted] = acceptedCount }
+            Result.Accepted(acceptedCount, replayed = false)
         }
     }
 
@@ -275,7 +282,12 @@ class CounterV2Repository(private val database: Database, private val maxDistinc
         projectId: Long, day: LocalDate, hour: Int, sdk: SdkInfo?, app: CounterAppInfo?,
         item: CellInput, valid: CounterRegistryV2.Valid,
     ) {
-        val platform = sdk?.platform?.takeIf { it in setOf("android", "ios", "web", "desktop") } ?: "unknown"
+        val rawPlatform = sdk?.platform.orEmpty()
+        val platform = when {
+            rawPlatform.equals("js", ignoreCase = true) || rawPlatform.equals("wasmJs", ignoreCase = true) -> "web"
+            rawPlatform in setOf("android", "ios", "web", "desktop") -> rawPlatform
+            else -> "unknown"
+        }
         val appVersion = app?.version.orEmpty().take(32)
         val rawCountry = app?.country?.trim()?.uppercase().orEmpty()
         val country = if (rawCountry.matches(Regex("^[A-Z]{2}$"))) rawCountry else "  "
@@ -345,6 +357,7 @@ class CounterV2Repository(private val database: Database, private val maxDistinc
             field(items.size.toString())
             items.forEach { (item, _, dimensions) ->
                 field(item.day); field(item.hour?.toString()); field(item.metric)
+                field(item.trafficClass)
                 field(item.segment.kind); field(item.segment.value); field(item.n.toString()); field(dimensions.size.toString())
                 dimensions.forEach { (key, value) -> field(key); field(value) }
             }
@@ -358,6 +371,7 @@ class CounterV2Repository(private val database: Database, private val maxDistinc
         "platform" -> value in setOf("android", "ios", "web", "desktop", "unknown")
         "country" -> value == "unknown" || java.util.Locale.getISOCountries().contains(value)
         "device_class" -> value in setOf("phone", "tablet", "desktop", "unknown")
+        "traffic_class" -> value in setOf("likely_human", "detected_bot", "unclassified")
         else -> false
     }
 }

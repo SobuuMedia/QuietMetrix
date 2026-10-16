@@ -21,6 +21,8 @@ data class ReportCoverage(
     val newest_day: String? = null,
     val sdk_versions: List<String> = emptyList(),
     val legacy_present: Boolean = false,
+    val traffic_class_available: Boolean = false,
+    val traffic_class_supported: Boolean = true,
 )
 
 @Serializable
@@ -45,6 +47,7 @@ data class ProjectReportResponse(
     val last_received_at: String? = null,
     val coverage: ReportCoverage,
     val overview: Map<String, ReportMeasure>,
+    val traffic: Map<String, ReportMeasure> = emptyMap(),
     val charts: Map<String, List<ReportBin>> = emptyMap(),
     val comparison_charts: Map<String, List<ReportBin>> = emptyMap(),
     val comparison: Map<String, ReportMeasure> = emptyMap(),

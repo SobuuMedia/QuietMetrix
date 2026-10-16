@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -212,6 +213,32 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
         ) {
             if (state.demoMode) DemoBadge()
 
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Exclude detected bots", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (state.aggregates?.trafficClassAvailable == true) "Unclassified traffic stays included." else "Bot classification appears as new SDK data arrives.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (state.aggregates?.trafficClassSupported == true) {
+                        val counts = state.aggregates?.trafficCounts.orEmpty()
+                        fun countLabel(key: String): String {
+                            val measure = counts[key]
+                            return measure?.value?.let(::formatCount) ?: if (measure?.state == "suppressed") "suppressed" else "—"
+                        }
+                        Text(
+                            "Detected bots: ${countLabel("detected_bot")} · Likely human: ${countLabel("likely_human")} · Unclassified: ${countLabel("unclassified")}",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Switch(
+                    checked = state.excludeDetectedBots,
+                    onCheckedChange = viewModel::setExcludeDetectedBots,
+                    enabled = state.aggregates?.trafficClassSupported == true && state.aggregates?.trafficClassAvailable == true,
+                )
+            }
+
             state.sectionErrors[DataSection.Aggregates]?.let {
                 InlineErrorNotice(it, onRetry = { viewModel.navigateTo(state.activeDestination) })
             }
@@ -221,7 +248,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
 
             val agg = state.aggregates
             val sess = state.sessions.takeIf { state.overviewFilter == null }
-            state.aiInsight?.takeIf { it.mode == "ai" }?.let { insight -> Text(insight.text, style = MaterialTheme.typography.bodyLarge) }
+            state.aiInsight?.takeIf { it.mode == "ai" && !state.excludeDetectedBots }?.let { insight -> Text(insight.text, style = MaterialTheme.typography.bodyLarge) }
             val overviewQuestion = stringResource(Res.string.ask_overview_question)
     val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }
                 ?.name?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.value_none)
@@ -312,6 +339,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                     agg = state.overviewBaseAggregates ?: agg,
                     loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                     sizeClass = sizeClass,
+                    trafficFiltered = state.excludeDetectedBots,
                     activeFilter = activeVitalsFilter,
                     onSelectFilter = { kind, value -> viewModel.setOverviewFilter(kind, if (kind == "platform") value.lowercase() else if (kind == "country") (if (value.lowercase() == "unknown") "unknown" else value.uppercase()) else value) },
                 compare = state.compare,
@@ -319,7 +347,9 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                if (layoutFlowFor(sizeClass) == LayoutFlow.Row) {
+                if (state.excludeDetectedBots) {
+                    Text("Additional insights are unavailable for the bot-filtered view yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else if (layoutFlowFor(sizeClass) == LayoutFlow.Row) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
                         WorthALookSection(
                             agg = agg,
@@ -696,6 +726,9 @@ internal fun VitalsSection(
                 }
                 else -> {
                     val reportedPeople = agg?.people
+                    val resolvedDuration = resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec?.takeIf { (sess?.totalSessions ?: 0) > 0 })
+                    val durationLabel = if (agg?.v2VisitDurationMs?.let { it in 1L..999L } == true && agg?.v2VisitDurationState?.let { it in setOf("reported", "zero") } == true) "<1s"
+                        else resolvedDuration.seconds?.let(::formatDuration) ?: stringResource(Res.string.value_none)
                     val peopleMetricAvailable = reportedPeople != null
                     val peopleCaption = when {
                         agg?.peopleState == "suppressed" -> Res.string.overview_vital_people_suppressed
@@ -715,9 +748,8 @@ internal fun VitalsSection(
                     )
                     KpiCard(
                         label = stringResource(Res.string.overview_vital_duration_label),
-                        value = resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec)
-                            .seconds?.let(::formatDuration) ?: stringResource(Res.string.value_none),
-                        sub = stringResource(when (resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec).source) {
+                        value = durationLabel,
+                        sub = stringResource(when (resolvedDuration.source) {
                             OverviewMeasureSource.ReportedV2 -> Res.string.overview_vital_duration_reported_caption
                             OverviewMeasureSource.Suppressed -> Res.string.overview_vital_duration_suppressed_caption
                             OverviewMeasureSource.LegacyApproximate -> Res.string.overview_vital_duration_approximate_caption
@@ -726,8 +758,8 @@ internal fun VitalsSection(
                         leadingIcon = Res.drawable.ic_events,
                         onClick = { onDrillDown("duration", "duration") },
                         compareNote = if (compare) comparisonNoteText(comparableDuration(
-                            resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec),
-                            resolveOverviewDuration(previous.aggregates?.v2VisitDurationMs, previous.aggregates?.v2VisitDurationState, previous.sessions?.avgDurationSec),
+                            resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec?.takeIf { (sess?.totalSessions ?: 0) > 0 }),
+                            resolveOverviewDuration(previous.aggregates?.v2VisitDurationMs, previous.aggregates?.v2VisitDurationState, previous.sessions?.avgDurationSec?.takeIf { (previous.sessions?.totalSessions ?: 0) > 0 }),
                         )?.let(::formatDuration)) else null,
                         modifier = Modifier.fillSlot(),
                     )
@@ -843,19 +875,33 @@ internal fun DailyVolumeSection(
             }
             Spacer(Modifier.height(8.dp))
 
+            val hasReport = agg?.v2VisitDurationState != null
             val currentPoints = when (metric) {
                 DailyVolumeMetric.People -> agg?.dailyPeople.orEmpty()
-                DailyVolumeMetric.Visits -> agg?.dailyVisitsV2?.takeIf { it.isNotEmpty() } ?: sess?.dailySessions.orEmpty()
-                DailyVolumeMetric.Actions -> agg?.dailyActionsV2?.takeIf { it.isNotEmpty() } ?: agg?.daily.orEmpty()
+                DailyVolumeMetric.Visits -> if (hasReport) agg?.dailyVisitsV2.orEmpty() else sess?.dailySessions.orEmpty()
+                DailyVolumeMetric.Actions -> if (hasReport) agg?.dailyActionsV2.orEmpty() else agg?.daily.orEmpty()
             }
             val previousPoints = when (metric) {
                 DailyVolumeMetric.People -> agg?.dailyPeoplePrevious.orEmpty()
-                DailyVolumeMetric.Visits -> agg?.dailyVisitsV2Previous?.takeIf { it.isNotEmpty() } ?: previous.sessions?.dailySessions.orEmpty()
-                DailyVolumeMetric.Actions -> agg?.dailyActionsV2Previous?.takeIf { it.isNotEmpty() } ?: previous.aggregates?.daily.orEmpty()
+                DailyVolumeMetric.Visits -> if (hasReport) agg?.dailyVisitsV2Previous.orEmpty() else previous.sessions?.dailySessions.orEmpty()
+                DailyVolumeMetric.Actions -> if (hasReport) agg?.dailyActionsV2Previous.orEmpty() else previous.aggregates?.daily.orEmpty()
             }
             val points = analyticsChartPoints(currentPoints, range, anchor)
             val priorPoints = analyticsChartPoints(previousPoints, range, anchor, previous = true)
             val bars = points.map { DailyVolumeBar(formatBucketLabel(it.day, false), it.total) }
+            val metricName = when (metric) {
+                DailyVolumeMetric.People -> stringResource(Res.string.overview_chart_metric_people)
+                DailyVolumeMetric.Visits -> stringResource(Res.string.overview_chart_metric_visits)
+                DailyVolumeMetric.Actions -> stringResource(Res.string.overview_chart_metric_actions)
+            }
+            val metricCount = when (metric) {
+                DailyVolumeMetric.People -> agg?.people
+                DailyVolumeMetric.Visits -> if (hasReport) agg?.v2Visits else sess?.totalSessions
+                DailyVolumeMetric.Actions -> if (hasReport) agg?.v2Actions else agg?.totals?.events
+            }
+            metricCount?.let { count ->
+                Text("$metricName · ${formatCount(count)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (compare) {
                 Text(stringResource(Res.string.comparison_current) + " / " + stringResource(Res.string.comparison_previous),
                     style = MaterialTheme.typography.labelSmall, color = LocalExtendedColors.current.lavender)
@@ -953,13 +999,16 @@ internal fun ScreensPlatformsCountriesSection(
     agg: AggregatesResponse?,
     loading: Boolean,
     sizeClass: WindowSizeClass,
+    trafficFiltered: Boolean = false,
     modifier: Modifier = Modifier,
     activeFilter: String? = null,
     onSelectFilter: (String, String) -> Unit = { _, _ -> },
     compare: Boolean = false,
     previous: AggregatesResponse? = null,
 ) {
-    ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
+    if (trafficFiltered) {
+        Text("Breakdowns are unavailable for the bot-filtered view yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+    } else ResponsiveRowOrColumn(sizeClass, modifier = modifier) {
         if (loading) {
             TopListSkeletonCard(Modifier.fillSlot())
             TopListSkeletonCard(Modifier.fillSlot())

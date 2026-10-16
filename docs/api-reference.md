@@ -121,7 +121,7 @@ counts and analytics retention remain unlimited unless configured. See
 - `GET /api/v1/projects/:id/transitions` — Screen-to-screen navigation flow counts
 - `GET /api/v1/projects/:id/sessions` — Session counts and average duration
 - `GET /api/v1/projects/:id/retention` — Cohort retention (day 1/3/7/14/30)
-- `GET /api/v2/projects/:id/report?range=today|7d|30d|90d&anchor=YYYY-MM-DD&compare=true|false&platform=all|android|ios|web|desktop` — Authenticated typed report contract. Current implementation reports fixed-window v2 People with explicit state/source and coverage, plus `charts.people`: elapsed UTC-hour bins for the current Today, all 24 hours for a historical single day, daily bins for 7d/30d, and exact seven-day blocks (with a shorter final block) for 90d. With comparison enabled, `comparison_charts.people` returns the equal-length preceding bins; current-day hourly comparison stops at the same elapsed UTC hour. Chart-bin People values are distinct within each bin and are never summed into the range KPI. Adjacent full-window People KPI comparison is available for 7d/30d/90d. Today KPI comparison and other v2 report sections remain unsupported until their privacy witnesses and query projections are implemented.
+- `GET /api/v2/projects/:id/report?range=today|7d|30d|90d&anchor=YYYY-MM-DD&compare=true|false` — Authenticated, privacy-gated typed report. Includes overview measures, chart bins, exact-day retention cohorts, coverage and a reportable event/screen catalog. Each measure carries its own state, unit and source; missing or suppressed values are not zero. Optional `filter_kind=platform|country|screen` and `filter_value=...` select **one stored projection** (default platform/all). Platform accepts all/android/ios/web/desktop/unknown, country accepts an app-supplied uppercase code or unknown, screen accepts a recorded key. No dimension intersections or proportional scaling are inferred. Screen scope supports screen People/views; visit duration, project events, crashes and retention stay unavailable where no screen projection exists. Legacy data never fills a filtered report. Comparison duration uses the same v2 completed-visit definition in both periods; Today duration KPI comparison is unsupported. People chart bins are independently distinct and must not be added into the range KPI. Dates and window boundaries use UTC.
 
 ### SDK counter protocol
 
@@ -137,7 +137,7 @@ example of the results payload.
 - `POST /api/v1/projects/:id/funnels` — Bearer auth, admin/developer role. Create a funnel.
 - `PATCH /api/v1/projects/:id/funnels/:funnelKey` — Bearer auth, admin/developer role. Update a funnel; locks it against further SDK auto-registration.
 - `DELETE /api/v1/projects/:id/funnels/:funnelKey` — Bearer auth, admin/developer role. Archive a funnel; unlocks the key for SDK re-registration.
-- `GET /api/v1/projects/:id/funnels/:funnelKey/results` — Bearer auth. Query params: `range` (seconds, default 7 days), `breakdown` (`country` \| `platform` \| `device_class` \| `language`), `trend` (`1` to include a daily trend series).
+- `GET /api/v1/projects/:id/funnels/:funnelKey/results` — Bearer auth. `range=1d|7d|30d|90d`, `anchor=YYYY-MM-DD`, `period=previous` and optional positive integer `revision`. Historical revisions use immutable step labels, conversion window and counting policy; missing revisions return 404. Aggregate-only results do not reconstruct per-person paths, timing, breakdowns or trends.
 - `POST /api/v1/funnels/register` — API key auth (`X-QM-Api-Key`). Upserts funnel definitions declared by the SDK; a no-op for any funnel already locked by a dashboard edit.
 
 A step's `props` are string→string exact-match filters compared against the matching event's own props (stringified), not the freeform, mixed-type `props` an event itself carries — an empty filter is always `{}` on the wire, never `[]`.
@@ -170,3 +170,9 @@ All errors follow `{ "error": "code", "message": "description" }`.
 | 413 | `payload_too_large` / `batch_too_large` | Request too large |
 | 429 | `rate_limit_exceeded` | Rate limit hit |
 | 503 | `service_unavailable` | Server under backpressure |
+
+### Dashboard funnel editing and AI selection
+
+Funnel creation and PATCH accept `count_mode=actor|attempt`, `identity_scope=install|session|install_or_session`, and `correlation_property` (required for repeated attempts). Conditions use step `props` string equality. Semantic edits create a new immutable revision; pause-free label/name edits do not pool revisions. `GET results?revision=N` reads that revision. Archive stops future entries after SDK config refresh and retains stored results.
+
+AI `POST /api/v1/projects/:id/ai/ask` and `/ai/insight` optionally accept a bounded `context` object with string keys `screen`, `filter_kind`, `filter_value`, `node`, `funnel`, `revision`, `step`, `cohort`, `experiment`. These are selection labels, never client-supplied metric values. The server constructs the authorized snapshot from reportable v2 measures and matching funnel/experiment aggregates. Cache and retry fingerprints include selection context. Legacy-only unfiltered projects retain legacy reads; filtered requests never fall back to global counters. Experiment explanations use the results screen’s revision-cumulative basis and explicitly identify that period.

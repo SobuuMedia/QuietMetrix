@@ -61,6 +61,7 @@ class ManagementApiTest {
             val url = "http://127.0.0.1:${server.address.port}"
             vm.init("$url/")
             assertEquals(url, vm.state.value.serverBaseUrl)
+            withTimeout(5_000) { while (vm.state.value.serverConnection != ServerConnection.Online) delay(10) }
             assertEquals("fixture-version", vm.state.value.serverVersion)
             assertEquals(ServerConnection.Online, vm.state.value.serverConnection)
             response.set("{}")

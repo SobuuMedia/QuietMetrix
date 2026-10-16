@@ -63,6 +63,7 @@ internal data class CounterV2EnvelopeItemDto(
     val segment: CounterV2SegmentDto,
     val dimensions: Map<String, String>,
     val n: Long,
+    @SerialName("traffic_class") val trafficClass: String? = null,
 )
 
 @Serializable
@@ -140,7 +141,7 @@ internal object CounterFlusher {
         val device = DeviceContext()
         val batches = MetricGateway.prepareBatches(
             device.platform, device.appVersion, normalizedCountry(config.countryCode), SDK_VERSION,
-            Clock.System.now().toEpochMilliseconds(), device.deviceClass,
+            Clock.System.now().toEpochMilliseconds(), device.deviceClass, device.trafficClass,
         )
         if (MetricGateway.hasPersistenceFailure()) return
         if (batches.isEmpty()) return
@@ -252,6 +253,7 @@ internal object CounterFlusher {
                 facets.map { segment -> CounterV2EnvelopeItemDto(
                     day = counter.day, hour = counter.hour, metric = counter.metric,
                     segment = segment, dimensions = counter.dims, n = counter.n,
+                    trafficClass = if (segment.kind == "global") batch.trafficClass.takeIf { it in setOf("likely_human", "detected_bot", "unclassified") } else null,
                 ) }
             },
         )

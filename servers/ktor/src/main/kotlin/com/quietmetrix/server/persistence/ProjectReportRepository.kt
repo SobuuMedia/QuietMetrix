@@ -37,14 +37,15 @@ internal fun selectCounterProjection(rows: List<ResultRow>, platform: String): L
 }
 
 /** A single reporting segment. Intersections are deliberately unsupported by stored projections. */
-data class ReportSelection(val kind: String = "platform", val value: String = "all") {
+data class ReportSelection(val kind: String = "platform", val value: String = "all", val trafficScope: String = "all") {
     val platform: String get() = if (kind == "platform") value else "all"
     fun matchesUnique(dims: Map<String, String>): Boolean =
         dims["scope_kind"] == (if (kind == "screen") "screen" else "project") &&
             dims["scope_key"] == (if (kind == "screen") value else "all")
 }
 
-internal fun selectCounterProjection(rows: List<ResultRow>, selection: ReportSelection): List<ResultRow> = when (selection.kind) {
+internal fun selectCounterProjection(rows: List<ResultRow>, selection: ReportSelection): List<ResultRow> {
+    val ordinary = when (selection.kind) {
     "platform" -> selectCounterProjection(rows, selection.value)
     "country" -> rows.filter { it[CounterCellsV2.segmentKind] == "country" && it[CounterCellsV2.segmentValue] == selection.value }
     "screen" -> selectCounterProjection(rows, "all").filter { row ->
@@ -57,14 +58,31 @@ internal fun selectCounterProjection(rows: List<ResultRow>, selection: ReportSel
         }
     }
     else -> emptyList()
+    }
+    if (selection.trafficScope == "all") return ordinary
+    val key: (ResultRow) -> List<Any?> = { row -> listOf(
+        row[CounterCellsV2.day], row[CounterCellsV2.hour], row[CounterCellsV2.metric],
+        row[CounterCellsV2.platform], row[CounterCellsV2.appVersion], row[CounterCellsV2.country], row[CounterCellsV2.dimsHash],
+    ) }
+    val selectedKeys = ordinary.map(key).toSet()
+    val classified = rows.filter { row ->
+        row[CounterCellsV2.segmentKind] == "traffic_class" && key(row) in selectedKeys && when (selection.trafficScope) {
+            "non_bot" -> row[CounterCellsV2.segmentValue] in setOf("likely_human", "unclassified")
+            "likely_human", "unclassified", "detected_bot" -> row[CounterCellsV2.segmentValue] == selection.trafficScope
+            else -> false
+        }
+    }
+    val knownKeys = rows.filter { it[CounterCellsV2.segmentKind] == "traffic_class" }.map(key).toSet()
+    val legacyUnknown = if (selection.trafficScope in setOf("non_bot", "unclassified")) ordinary.filter { key(it) !in knownKeys } else emptyList()
+    return classified + legacyUnknown
 }
 
 /** Conservative v2 report foundation. People comes from exact fixed-window contributions;
  * daily People values are never added together. */
 class ProjectReportRepository(private val database: Database) {
     fun read(projectId: Long, range: String, anchor: LocalDate, platform: String, compare: Boolean = false,
-        filterKind: String = "platform", filterValue: String = platform): ProjectReportResponse =
-        readSelected(projectId, range, anchor, ReportSelection(filterKind, filterValue), compare)
+        filterKind: String = "platform", filterValue: String = platform, trafficScope: String = "all"): ProjectReportResponse =
+        readSelected(projectId, range, anchor, ReportSelection(filterKind, filterValue, trafficScope), compare)
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -73,6 +91,9 @@ class ProjectReportRepository(private val database: Database) {
         val from = if (range == "today") anchor else anchor.minusDays((days - 1).toLong())
         val to = anchor
         val people = peopleMeasure(projectId, days, to, selection)
+        val traffic = listOf("detected_bot", "likely_human", "unclassified").associateWith { scope ->
+            peopleMeasure(projectId, days, to, selection.copy(trafficScope = scope))
+        }
         val peopleBins = peopleBins(projectId, range, from, to, selection)
         val charts = linkedMapOf(
             "people" to peopleBins,
@@ -122,7 +143,7 @@ class ProjectReportRepository(private val database: Database) {
         val hasHourly = coverageRows.any { it[CounterCellsV2.hour] >= 0 }
         val latest = coverageRows.maxOfOrNull { it[CounterCellsV2.updatedAt] }
         ProjectReportResponse(
-            scope = mapOf("range" to range, "anchor" to anchor.toString(), "platform" to selection.platform, "filter_kind" to selection.kind, "filter_value" to selection.value, "timezone" to "UTC", "compare" to compare.toString()),
+            scope = mapOf("range" to range, "anchor" to anchor.toString(), "platform" to selection.platform, "filter_kind" to selection.kind, "filter_value" to selection.value, "traffic_scope" to selection.trafficScope, "timezone" to "UTC", "compare" to compare.toString()),
             generated_at = java.time.Instant.now().toString(),
             last_received_at = latest?.toInstant(ZoneOffset.UTC)?.toString(),
             coverage = ReportCoverage(
@@ -132,7 +153,10 @@ class ProjectReportRepository(private val database: Database) {
                 newest_day = coverageRows.maxOfOrNull { it[CounterCellsV2.day] }?.toString(),
                 sdk_versions = coverageRows.map { it[CounterCellsV2.sdkVersion] }.filter { it != "unknown" }.distinct().sorted(),
                 legacy_present = legacyExists,
+                traffic_class_available = coverageRows.any { it[CounterCellsV2.segmentKind] == "traffic_class" },
+                traffic_class_supported = true,
             ),
+            traffic = traffic,
             overview = overview,
             charts = charts,
             comparison_charts = comparisonCharts,

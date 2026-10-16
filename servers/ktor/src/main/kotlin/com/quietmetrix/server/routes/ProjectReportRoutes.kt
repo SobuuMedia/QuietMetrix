@@ -61,7 +61,11 @@ fun Routing.configureProjectReportRoutes() {
             if (compareRaw !in setOf("true", "false")) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "compare must be true or false")); return@get
             }
-            call.respond(reports.read(id, range, anchor, platform, compareRaw == "true", filterKind, filterValue))
+            val trafficScope = call.request.queryParameters["traffic_scope"] ?: "all"
+            if (trafficScope !in setOf("all", "non_bot", "detected_bot", "likely_human", "unclassified")) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid traffic_scope")); return@get
+            }
+            call.respond(reports.read(id, range, anchor, platform, compareRaw == "true", filterKind, filterValue, trafficScope))
         }
     }
 }

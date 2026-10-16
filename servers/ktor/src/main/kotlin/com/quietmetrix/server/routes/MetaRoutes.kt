@@ -46,7 +46,7 @@ fun Routing.configureMetaRoutes(aiEnabled: Boolean = com.quietmetrix.server.ai.A
                 return@get
             }
             call.respond(SdkCapabilitiesResponse(
-                capabilities = listOf("counter_batch_receipts", "unique_window_v2", "counter_protocol_v2_hourly", "counter_protocol_v2_schema2", "remote_funnels", "experiment_config_v2"),
+                capabilities = listOf("counter_batch_receipts", "unique_window_v2", "counter_protocol_v2_hourly", "counter_protocol_v2_schema2", "counter_traffic_class_v1", "remote_funnels", "experiment_config_v2"),
                 minimum_versions = mapOf("counter_protocol_v2_hourly" to "0.4.0", "counter_protocol_v2_schema2" to "0.6.0", "remote_funnels" to "0.4.0", "experiment_config_v2" to "0.4.0"),
             ))
         }

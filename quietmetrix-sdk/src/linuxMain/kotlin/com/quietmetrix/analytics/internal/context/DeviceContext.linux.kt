@@ -26,6 +26,7 @@ actual class DeviceContext actual constructor() {
     actual val appVersion: String? = null
     actual val screenWidth: Int? = null
     actual val screenHeight: Int? = null
+    actual val trafficClass: String = "unclassified"
     actual val userAgent: String? = null
     actual val osName: String? = "Linux"
     actual val osVersion: String? = kernelRelease()

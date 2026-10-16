@@ -35,6 +35,7 @@ internal class MetricRecorder(
         val createdAtEpochMs: Long,
         val hour: Int? = null,
         val deviceClass: String = "unknown",
+        val trafficClass: String = "unclassified",
     )
 
     @Serializable
@@ -137,6 +138,7 @@ internal class MetricRecorder(
         sdkVersion: String,
         nowEpochMs: Long,
         deviceClass: String = "unknown",
+        trafficClass: String = "unclassified",
     ): List<QueuedBatch> = mutex.withLock {
         if (persistenceFailure) return emptyList()
         expireOldBatches(nowEpochMs)
@@ -152,7 +154,7 @@ internal class MetricRecorder(
                     if (created >= room) break
                     val counters = chunk.map { (cell, acc) -> PendingCounter(cell.metric, acc.dims, day, acc.n, acc.isNewDevice, hour) }
                     val id = newBatchId()
-                    outbox[id] = QueuedBatch(id, day, counters, platform, appVersion, countryCode, sdkVersion, nowEpochMs, hour, deviceClass)
+                    outbox[id] = QueuedBatch(id, day, counters, platform, appVersion, countryCode, sdkVersion, nowEpochMs, hour, deviceClass, trafficClass)
                     chunk.forEach { (cell, _) -> pending.remove(cell) }
                     created++
                 }

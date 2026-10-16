@@ -176,6 +176,10 @@ data class AggregatesResponse(
     @SerialName("people_source") val peopleSource: String? = null,
     @SerialName("people_comparison") val peopleComparison: Long? = null,
     @SerialName("v2_visits") val v2Visits: Long? = null,
+    @SerialName("v2_actions") val v2Actions: Long? = null,
+    @SerialName("traffic_class_supported") val trafficClassSupported: Boolean = false,
+    @SerialName("traffic_class_available") val trafficClassAvailable: Boolean = false,
+    @SerialName("traffic") val trafficCounts: Map<String, ReportMeasureDto> = emptyMap(),
     @SerialName("v2_visit_duration_ms") val v2VisitDurationMs: Long? = null,
     @SerialName("v2_visit_duration_state") val v2VisitDurationState: String? = null,
     @SerialName("v2_crashes") val v2Crashes: Long? = null,
@@ -217,6 +221,8 @@ data class ReportCoverageDto(
     @SerialName("newest_day") val newestDay: String? = null,
     @SerialName("sdk_versions") val sdkVersions: List<String> = emptyList(),
     @SerialName("legacy_present") val legacyPresent: Boolean = false,
+    @SerialName("traffic_class_available") val trafficClassAvailable: Boolean = false,
+    @SerialName("traffic_class_supported") val trafficClassSupported: Boolean = false,
 )
 
 @Serializable
@@ -234,6 +240,7 @@ data class ProjectReportDto(
     @SerialName("last_received_at") val lastReceivedAt: String? = null,
     val coverage: ReportCoverageDto = ReportCoverageDto(),
     val overview: Map<String, ReportMeasureDto> = emptyMap(),
+    val traffic: Map<String, ReportMeasureDto> = emptyMap(),
     val charts: Map<String, List<ReportBinDto>> = emptyMap(),
     @SerialName("comparison_charts") val comparisonCharts: Map<String, List<ReportBinDto>> = emptyMap(),
     val comparison: Map<String, ReportMeasureDto> = emptyMap(),

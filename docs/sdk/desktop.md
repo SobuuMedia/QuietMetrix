@@ -9,7 +9,7 @@ Add the QuietMetrix dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0")
+    implementation("io.github.sobuumedia:quietmetrix-sdk:0.8.0")
 }
 ```
 

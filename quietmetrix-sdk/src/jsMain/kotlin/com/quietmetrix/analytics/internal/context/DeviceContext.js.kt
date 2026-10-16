@@ -19,6 +19,9 @@ private fun jsDeviceClass(): String? =
 private fun jsUserAgent(): String? =
     js("(typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : null")
 
+private fun jsTrafficClass(): String =
+    js("(function(){ if (typeof navigator === 'undefined') return 'unclassified'; var ua = navigator.userAgent || ''; if (navigator.webdriver === true || /(^|[^a-z])(bot|crawler|spider|slurp|bingpreview|facebookexternalhit|headlesschrome|phantomjs|playwright|puppeteer)([^a-z]|$)/i.test(ua)) return 'detected_bot'; return 'likely_human'; })()")
+
 private fun jsOsName(): String? =
     js(
         "(function(){ if (typeof navigator === 'undefined') return null; var ua = navigator.userAgent || '';" +
@@ -39,13 +42,14 @@ private fun jsBrowserName(): String? =
     )
 
 actual class DeviceContext actual constructor() {
-    actual val platform: String = "js"
+    actual val platform: String = "web"
     actual val deviceClass: String = jsDeviceClass() ?: "unknown"
     actual val language: String? = jsLanguage()
     actual val appVersion: String? = null
     actual val screenWidth: Int? = jsScreenWidth()
     actual val screenHeight: Int? = jsScreenHeight()
     actual val userAgent: String? = jsUserAgent()
+    actual val trafficClass: String = jsTrafficClass()
     actual val osName: String? = jsOsName()
     actual val osVersion: String? = null
     actual val browserName: String? = jsBrowserName()

@@ -7,6 +7,7 @@ actual class DeviceContext actual constructor() {
     actual val appVersion: String? = null
     actual val screenWidth: Int? = null
     actual val screenHeight: Int? = null
+    actual val trafficClass: String = "unclassified"
     actual val userAgent: String? = System.getProperty("os.name")
     actual val osName: String? = System.getProperty("os.name")
     actual val osVersion: String? = System.getProperty("os.version")

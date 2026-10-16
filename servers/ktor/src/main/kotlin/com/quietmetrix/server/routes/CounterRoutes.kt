@@ -86,7 +86,8 @@ fun Routing.configureCounterRoutes() {
                 return@post
             }
 
-            val platform = request.sdk?.platform.orEmpty()
+            val rawPlatform = request.sdk?.platform.orEmpty()
+            val platform = if (rawPlatform.equals("js", ignoreCase = true) || rawPlatform.equals("wasmJs", ignoreCase = true)) "web" else rawPlatform
             if (request.batchId != null) {
                 when (val result = CounterIngestProcessor.processIdempotent(
                     projectId = projectId,

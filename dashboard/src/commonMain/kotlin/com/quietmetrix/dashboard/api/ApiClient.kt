@@ -301,7 +301,7 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun projectReport(projectId: String, range: TimeRange, anchor: String? = null, compare: Boolean = false, filterKind: String = "platform", filterValue: String = "all"): ProjectReportDto {
+    suspend fun projectReport(projectId: String, range: TimeRange, anchor: String? = null, compare: Boolean = false, filterKind: String = "platform", filterValue: String = "all", trafficScope: String = "all"): ProjectReportDto {
         val reportRange = when (range) {
             TimeRange.Day1 -> "today"
             TimeRange.Day7 -> "7d"
@@ -315,6 +315,7 @@ class ApiClient(private val baseUrl: String) {
             append("&compare=").append(compare)
             append("&filter_kind=").append(filterKind.encodeURLParameter())
             append("&filter_value=").append(filterValue.encodeURLParameter())
+            append("&traffic_scope=").append(trafficScope.encodeURLParameter())
         }
         val res = client.get(urlV2("/projects/$projectId/report?$query")) {
             token?.let { header("Authorization", "Bearer $it") }

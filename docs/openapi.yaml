@@ -742,6 +742,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v2/projects/{projectId}/report:
+    get:
+      tags: [Analytics]
+      summary: Read a privacy-gated typed project report
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: range
+          in: query
+          schema: {type: string, enum: [today, 7d, 30d, 90d], default: 7d}
+        - name: anchor
+          in: query
+          schema: {type: string, format: date}
+          description: UTC end date, no later than today.
+        - name: compare
+          in: query
+          schema: {type: boolean, default: false}
+        - name: filter_kind
+          in: query
+          schema: {type: string, enum: [platform, country, screen], default: platform}
+        - name: filter_value
+          in: query
+          schema: {type: string, maxLength: 128, default: all}
+          description: One stored segment, never an inferred intersection. Unsupported or suppressed measures remain unavailable.
+      responses:
+        "200":
+          description: Scope, coverage, overview, chart bins, comparisons, retention cohorts and reportable definition catalog. Each measure carries state, unit and source.
+          content:
+            application/json:
+              schema: {type: object}
+        "400":
+          description: Invalid scope or date
+        "401":
+          description: Authentication required
+        "403":
+          description: Analytics access denied
+        "404":
+          description: Project not found
+
   /api/v1/projects/{projectId}/funnels:
     get:
       tags: [Funnels]
@@ -945,6 +985,12 @@ paths:
             type: integer
             default: 604800
           description: Lookback window in seconds, ending now (default 7 days)
+        - name: revision
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+          description: Immutable definition revision; defaults to the active revision. Unknown revisions return 404.
         - name: breakdown
           in: query
           schema:
@@ -1944,6 +1990,16 @@ components:
         - name
         - steps
       properties:
+        count_mode:
+          type: string
+          enum: [actor, attempt]
+        identity_scope:
+          type: string
+          enum: [install, session, install_or_session]
+        correlation_property:
+          type: string
+          nullable: true
+          description: Local correlation key required for repeated attempts; values remain on device.
         funnel_key:
           type: string
           pattern: "^[a-z0-9_-]{1,64}$"
@@ -1970,6 +2026,16 @@ components:
     UpdateFunnelRequest:
       type: object
       properties:
+        count_mode:
+          type: string
+          enum: [actor, attempt]
+        identity_scope:
+          type: string
+          enum: [install, session, install_or_session]
+        correlation_property:
+          type: string
+          nullable: true
+          description: Local correlation key required for repeated attempts; values remain on device.
         name:
           type: string
           nullable: true

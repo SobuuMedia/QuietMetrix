@@ -65,8 +65,8 @@ internal object MetricGateway {
 
     suspend fun drain(): List<MetricRecorder.PendingCounter> = recorder.drain()
 
-    suspend fun prepareBatches(platform: String, appVersion: String?, countryCode: String?, sdkVersion: String, nowEpochMs: Long, deviceClass: String = "unknown") =
-        recorder.prepareBatches(platform, appVersion, countryCode, sdkVersion, nowEpochMs, deviceClass)
+    suspend fun prepareBatches(platform: String, appVersion: String?, countryCode: String?, sdkVersion: String, nowEpochMs: Long, deviceClass: String = "unknown", trafficClass: String = "unclassified") =
+        recorder.prepareBatches(platform, appVersion, countryCode, sdkVersion, nowEpochMs, deviceClass, trafficClass)
 
     suspend fun acknowledge(batchId: String) = recorder.acknowledge(batchId)
 

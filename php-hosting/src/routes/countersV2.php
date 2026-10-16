@@ -37,6 +37,10 @@ function handleCountersV2(): void {
                 errorResponse(400, 'invalid_counter_value', 'Each schema-2 item requires day, metric, segment, dimensions, and positive n'); return;
             }
             $segmentKind = $segment['kind']; $segmentValue = $segment['value'];
+            $trafficClass = $item['traffic_class'] ?? null;
+            if ($trafficClass !== null && !in_array($trafficClass, ['likely_human','detected_bot','unclassified'], true)) {
+                errorResponse(400, 'invalid_traffic_class', 'traffic_class must be a supported classification'); return;
+            }
             $contributors = in_array($metric, ['unique_window_v2','unique_hour_v2','retention_entry_v2','retention_return_v2','experiment_exposure_v2','experiment_goal_v2'], true) ? 1 : 0;
         } else {
             $day = $body['day'] ?? null; $hour = $body['hour'] ?? null;
@@ -62,11 +66,13 @@ function handleCountersV2(): void {
         } elseif (isset($dims['entry_day']) && $dims['entry_day'] > $day) {
             errorResponse(400, 'entry_day_after_origin', 'entry_day cannot be after origin day'); return;
         }
-        $validated[] = ['item' => ['day'=>$day,'hour'=>$hour,'m'=>$metric,'d'=>$dims,'n'=>$n,'contributors'=>$contributors,'segment_kind'=>$segmentKind,'segment_value'=>$segmentValue], 'canonical' => $checked['canonical'], 'hash' => $checked['hash']];
+        $validated[] = ['item' => ['day'=>$day,'hour'=>$hour,'m'=>$metric,'d'=>$dims,'n'=>$n,'contributors'=>$contributors,'segment_kind'=>$segmentKind,'segment_value'=>$segmentValue,'traffic_class'=>$usesSchema2 ? $trafficClass : null], 'canonical' => $checked['canonical'], 'hash' => $checked['hash']];
     }
 
     if (isset($sdk['version']) && (!is_string($sdk['version']) || strlen($sdk['version']) > 32)) { errorResponse(400, 'invalid_sdk_version', 'sdk.version exceeds 32 characters'); return; }
-    $platform = in_array($sdk['platform'] ?? null, ['android','ios','web','desktop'], true) ? $sdk['platform'] : 'unknown';
+    $rawPlatform = $sdk['platform'] ?? '';
+    $browserAlias = is_string($rawPlatform) && in_array(strtolower($rawPlatform), ['js','wasmjs'], true);
+    $platform = $browserAlias ? 'web' : (in_array($rawPlatform, ['android','ios','web','desktop'], true) ? $rawPlatform : 'unknown');
     $appVersion = $app['version'] ?? '';
     if (!is_string($appVersion) || strlen($appVersion) > 32) { errorResponse(400, 'invalid_app_version', 'app.version exceeds 32 characters'); return; }
     $countryRaw = is_string($app['country'] ?? null) ? strtoupper(trim($app['country'])) : '';
@@ -122,7 +128,11 @@ function handleCountersV2(): void {
         $now = gmdate('Y-m-d\TH:i:s\Z');
         foreach ($validated as $cell) {
             $d = $cell['item']; ksort($d['d']);
-            $upsert->execute([$projectId,$d['day'],$d['hour'] ?? -1,$d['m'],$platform,($sdk['version'] ?? 'unknown') ?: 'unknown',$appVersion,$country,$cell['hash'],counterV2CardinalityHash($d['m'], $d['d']),json_encode($d['d'], JSON_UNESCAPED_SLASHES),$d['n'],$d['contributors'],$d['segment_kind'],$d['segment_value'],$now]);
+            $storedSegmentValue = $browserAlias && $d['segment_kind'] === 'platform' && $d['segment_value'] === 'unknown' ? 'web' : $d['segment_value'];
+            $upsert->execute([$projectId,$d['day'],$d['hour'] ?? -1,$d['m'],$platform,($sdk['version'] ?? 'unknown') ?: 'unknown',$appVersion,$country,$cell['hash'],counterV2CardinalityHash($d['m'], $d['d']),json_encode($d['d'], JSON_UNESCAPED_SLASHES),$d['n'],$d['contributors'],$d['segment_kind'],$storedSegmentValue,$now]);
+            if ($d['segment_kind'] === 'global' && $d['traffic_class'] !== null) {
+                $upsert->execute([$projectId,$d['day'],$d['hour'] ?? -1,$d['m'],$platform,($sdk['version'] ?? 'unknown') ?: 'unknown',$appVersion,$country,$cell['hash'],counterV2CardinalityHash($d['m'], $d['d']),json_encode($d['d'], JSON_UNESCAPED_SLASHES),$d['n'],$d['contributors'],'traffic_class',$d['traffic_class'],$now]);
+            }
         }
         $updateReceipt = $db->prepare('UPDATE counter_batch_receipts_v2 SET accepted=? WHERE project_id=? AND batch_id=?');
         $updateReceipt->execute([count($validated), $projectId, $batchId]);
@@ -166,7 +176,7 @@ function counterV2EnvelopePayloadHash(int $schema, array $sdk, array $app, array
     foreach ($validated as $cell) {
         $item = $cell['item'];
         $canonical .= $field($item['day']) . $field(($item['hour'] ?? null) === null ? null : (string)$item['hour']) .
-            $field($item['m']) . $field($item['segment_kind']) . $field($item['segment_value']) .
+            $field($item['m']) . $field($item['traffic_class'] ?? null) . $field($item['segment_kind']) . $field($item['segment_value']) .
             $field((string)$item['n']) . $field((string)count($item['d']));
         $dims = $item['d']; ksort($dims);
         foreach ($dims as $key => $value) $canonical .= $field((string)$key) . $field((string)$value);
@@ -180,6 +190,7 @@ function counterV2ValidSegment(string $kind, string $value): bool {
         'platform' => in_array($value, ['android','ios','web','desktop','unknown'], true),
         'country' => $value === 'unknown' || in_array($value, explode(' ', 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'), true),
         'device_class' => in_array($value, ['phone','tablet','desktop','unknown'], true),
+        'traffic_class' => in_array($value, ['likely_human','detected_bot','unclassified'], true),
         default => false,
     };
 }

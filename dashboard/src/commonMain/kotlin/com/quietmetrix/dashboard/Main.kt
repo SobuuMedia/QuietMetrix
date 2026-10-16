@@ -3,14 +3,12 @@ package com.quietmetrix.dashboard
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import com.quietmetrix.dashboard.storage.TokenStorage
 import com.quietmetrix.dashboard.theme.LocalThemeMode
 import com.quietmetrix.dashboard.theme.LocalThemeModeSetter
 import com.quietmetrix.dashboard.theme.QuietMetrixTheme
@@ -44,10 +42,8 @@ fun App(apiBaseUrl: String, inviteToken: String? = null) {
         LocalThemeModeSetter provides setMode,
     ) {
         QuietMetrixTheme(themeMode = effective) {
-            val viewModel = remember { DashboardViewModel() }
-            LaunchedEffect(Unit) {
-                viewModel.init(apiBaseUrl)
-                TokenStorage.get()?.let { viewModel.restoreSession(it) }
+            val viewModel = remember(apiBaseUrl) {
+                DashboardViewModel().apply { init(apiBaseUrl) }
             }
             val state by viewModel.state.collectAsState()
             val scope = rememberCoroutineScope()
