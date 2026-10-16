@@ -36,6 +36,7 @@ import com.quietmetrix.dashboard.resources.ask_drawer_suggestion_search
 import com.quietmetrix.dashboard.resources.ask_drawer_suggestion_sessions
 import com.quietmetrix.dashboard.resources.ask_drawer_title
 import com.quietmetrix.dashboard.resources.ask_drawer_unavailable
+import com.quietmetrix.dashboard.resources.ask_selection
 import com.quietmetrix.dashboard.resources.drill_copy
 import com.quietmetrix.dashboard.resources.value_none
 import com.quietmetrix.dashboard.theme.LocalExtendedColors
@@ -96,6 +97,10 @@ internal fun AskDrawer(viewModel: DashboardViewModel, state: DashboardState) {
                 Suggestion(Res.string.ask_drawer_suggestion_retention, viewModel)
                 Suggestion(Res.string.ask_drawer_suggestion_screen, viewModel)
             }
+            val context = com.quietmetrix.dashboard.viewmodel.aiSelectionContext(state)
+            val selected = context.filterKeys { it in setOf("node", "funnel", "revision", "step", "cohort", "experiment") }.values.toList() +
+                listOfNotNull(context["filter_value"]?.takeIf { it != "all" })
+            if (selected.isNotEmpty()) Text(stringResource(Res.string.ask_selection, selected.joinToString(" · ")), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             chat.messages.forEach { message ->
                 val isUser = message.role == AskMessageRole.User
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {

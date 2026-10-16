@@ -129,3 +129,11 @@ MCP configuration matches the repository's actual stdio package/env contract;
 its status pill measures API reachability and explicitly does not claim to probe
 a local MCP process. Stored project keys remain hash-only with a visible tail;
 full keys continue to be revealed and copied at creation/regeneration.
+
+## Dashboard completion follow-up — 2026-10-15
+
+Updated `funnels/new-builder-empty.png` for the complete conversion-window/counting/identity
+controls and accurate remote-config guidance. The body scrolls within the current window so
+header/footer actions remain visible. Updated `overview/vitals/grid-with-filter.png` for the
+explicit selected-segment coverage note. Both actual captures were visually inspected before
+recording; existing design tokens and all unrelated baselines were preserved.

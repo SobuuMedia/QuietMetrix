@@ -1,13 +1,21 @@
 package com.quietmetrix.dashboard.viewmodel
 
-import com.quietmetrix.dashboard.api.*
+import com.quietmetrix.dashboard.api.AggregatesResponse
+import com.quietmetrix.dashboard.api.ExperimentResultsResponse
+import com.quietmetrix.dashboard.api.FrictionResponse
+import com.quietmetrix.dashboard.api.FunnelResultsResponse
+import com.quietmetrix.dashboard.api.RetentionResponse
+import com.quietmetrix.dashboard.api.SearchResponse
+import com.quietmetrix.dashboard.api.SessionsResponse
+import com.quietmetrix.dashboard.api.TimeRange
+import com.quietmetrix.dashboard.api.TransitionsResponse
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 /** Identity of one project/window selection used to reject stale asynchronous responses. */
 internal data class AnalyticsContext(
     val projectId: String?, val range: TimeRange, val compare: Boolean, val anchor: String,
-    val revision: Long, val demo: Boolean, val funnelKey: String?, val experimentKey: String?,
+    val filter: OverviewFilter?, val revision: Long, val demo: Boolean, val funnelKey: String?, val funnelRevision: Int?, val experimentKey: String?,
 )
 
 /** Previous-period responses remain separate from the current statistics used for actions. */
@@ -28,8 +36,8 @@ internal fun analyticsAnchorToday(): String = Clock.System.now().toString().take
 
 /** Captures the controls that define an analytics request. */
 internal fun analyticsContext(state: DashboardState): AnalyticsContext = AnalyticsContext(
-    state.currentProjectId, state.range, state.compare, state.analyticsAnchor, state.analyticsRevision,
-    state.demoMode, state.selectedFunnelKey, state.selectedExperimentKey,
+    state.currentProjectId, state.range, state.compare, state.analyticsAnchor, state.reportFilter(), state.analyticsRevision,
+    state.demoMode, state.selectedFunnelKey, state.selectedFunnelRevision, state.selectedExperimentKey,
 )
 
 /** Allows a response to commit only while its original controls are still selected. */
@@ -48,3 +56,9 @@ internal fun analyticsSections(destination: com.quietmetrix.dashboard.nav.NavDes
     com.quietmetrix.dashboard.nav.NavDestination.Experiments -> setOf(DataSection.ExperimentResults)
     else -> emptySet()
 }
+
+/** One selected stored segment; no approximate scaling or unsupported intersections. */
+data class OverviewFilter(val kind: String, val value: String)
+internal fun DashboardState.reportFilter(): OverviewFilter =
+    if (activeDestination == com.quietmetrix.dashboard.nav.NavDestination.Overview) overviewFilter ?: OverviewFilter("platform", "all")
+    else OverviewFilter("platform", if (activeDestination == com.quietmetrix.dashboard.nav.NavDestination.Flow) flowPlatform else "all")

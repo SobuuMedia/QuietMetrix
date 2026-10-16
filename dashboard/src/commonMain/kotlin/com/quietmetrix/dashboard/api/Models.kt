@@ -373,6 +373,7 @@ data class FunnelDto(
     @SerialName("window_seconds") val windowSeconds: Long = 604_800,
     val source: String = "dashboard",
     val locked: Boolean = false,
+    val revision: Int = 0,
     @SerialName("count_mode") val countMode: String = "actor",
     @SerialName("identity_scope") val identityScope: String = "install_or_session",
     @SerialName("correlation_property") val correlationProperty: String? = null,
@@ -385,6 +386,9 @@ data class FunnelsResponse(val funnels: List<FunnelDto> = emptyList())
 
 @Serializable
 data class CreateFunnelRequest(
+    @SerialName("count_mode") val countMode: String = "actor",
+    @SerialName("identity_scope") val identityScope: String = "install",
+    @SerialName("correlation_property") val correlationProperty: String? = null,
     @SerialName("funnel_key") val funnelKey: String,
     val name: String,
     val description: String? = null,
@@ -394,6 +398,9 @@ data class CreateFunnelRequest(
 
 @Serializable
 data class UpdateFunnelRequest(
+    @SerialName("count_mode") val countMode: String? = null,
+    @SerialName("identity_scope") val identityScope: String? = null,
+    @SerialName("correlation_property") val correlationProperty: String? = null,
     val name: String? = null,
     val description: String? = null,
     val steps: List<FunnelStepDto>? = null,
@@ -439,6 +446,7 @@ data class FunnelTrendPointDto(
 data class FunnelSummaryDto(
     @SerialName("funnel_key") val funnelKey: String,
     val name: String,
+    val revision: Int = 0,
     @SerialName("window_seconds") val windowSeconds: Long = 604_800,
     val steps: List<FunnelStepDto> = emptyList(),
     @SerialName("count_mode") val countMode: String = "actor",
@@ -576,7 +584,7 @@ data class AiHistory(val role: String, val content: String)
 /** AI requests use the same UTC anchor and comparison as analytics. */
 @Serializable
 data class AiRequest(val question: String = "", val language: String = "en", val range: String = "7d", val anchor: String? = null,
-    val compare: Boolean = false, val history: List<AiHistory> = emptyList(), val operation_id: String)
+    val context: Map<String, String> = emptyMap(), val compare: Boolean = false, val history: List<AiHistory> = emptyList(), val operation_id: String)
 
 /** Safe text-only AI response with aggregate source labels. */
 @Serializable

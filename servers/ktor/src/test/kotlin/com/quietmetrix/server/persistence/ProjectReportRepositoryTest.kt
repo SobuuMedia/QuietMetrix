@@ -24,6 +24,31 @@ class ProjectReportRepositoryTest {
         return Triple(ProjectReportRepository(db), db, 1L)
     }
 
+    @Test fun `country and screen filters select independent exact populations`() {
+        val (repo,db,pid)=setup()
+        val today=LocalDate.now(ZoneOffset.UTC)
+        transaction(db) {
+            for ((kind,value,count,scope,key) in listOf(
+                listOf("global","all","20","project","all"),listOf("country","DE","6","project","all"),
+                listOf("country","FR","3","project","all"),listOf("global","all","7","screen","home"))) {
+                val dims=mapOf("days" to "7","end_day" to today.toString(),"scope_kind" to scope,"scope_key" to key)
+                val valid=(CounterRegistryV2.validate("unique_window_v2",dims) as CounterRegistryV2.Result.Accepted).value
+                CounterCellsV2.insert {
+                    it[projectId]=pid; it[day]=today; it[hour]=(-1).toShort(); it[metric]="unique_window_v2"
+                    it[platform]="android"; it[appVersion]=""; it[country]=""; it[segmentKind]=kind; it[segmentValue]=value
+                    it[dimsHash]=valid.hash; it[CounterCellsV2.dims]=kotlinx.serialization.json.Json.encodeToString(dims); it[n]=count.toLong(); it[contributors]=count.toLong()
+                }
+            }
+        }
+        assertEquals(20L,repo.read(pid,"7d",today,"all").overview.getValue("people").value)
+        val germany=repo.read(pid,"7d",today,"all",filterKind="country",filterValue="DE")
+        assertEquals(6L,germany.overview.getValue("people").value)
+        assertEquals("suppressed",repo.read(pid,"7d",today,"all",filterKind="country",filterValue="FR").overview.getValue("people").state)
+        val home=repo.read(pid,"7d",today,"all",filterKind="screen",filterValue="home")
+        assertEquals(7L,home.overview.getValue("people").value)
+        assertEquals(null,home.overview.getValue("visits").value)
+    }
+
     @Test fun `ordinary groups are disclosed only with their matching fixed-window witness`() {
         val (repo, db, projectId) = setup()
         val today = LocalDate.now(ZoneOffset.UTC)

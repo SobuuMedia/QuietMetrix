@@ -1,8 +1,8 @@
 # QuietMetrix Core SDK
 
-Version 0.7.0. Maven coordinates: `io.github.sobuumedia:quietmetrix-sdk:0.7.0`.
+Version 0.8.0. Maven coordinates: `io.github.sobuumedia:quietmetrix-sdk:0.8.0`.
 
-For JavaScript/TypeScript browser apps, install `@sobuumedia/quietmetrix-sdk@0.7.0`
+For JavaScript/TypeScript browser apps, install `@sobuumedia/quietmetrix-sdk@0.8.0`
 from npm and use ES module imports. Compose/WASM apps use the Maven artifacts.
 
 The SDK records aggregate counters on the device. It sends metric names, allowed
@@ -25,4 +25,4 @@ an application needs a completed local-write guarantee.
 See [integration documentation](../docs/sdk/android.md),
 [metrics and privacy](../docs/sdk/metrics-and-privacy.md), and
 [iOS artifacts](../docs/sdk/ios.md). Compose experiment wrappers use
-`io.github.sobuumedia:quietmetrix-sdk-compose:0.7.0`.
+`io.github.sobuumedia:quietmetrix-sdk-compose:0.8.0`.

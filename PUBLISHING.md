@@ -1,5 +1,17 @@
 # Publishing QuietMetrix Core
 
+## Current coordinated release workflow
+
+Use `.github/workflows/publish-sdk.yml` for version 0.8.0 and later. It publishes signed
+Maven Central artifacts (Android/KMP/Compose/debug), the npm web SDK, and iOS XCFramework
+release assets after the multi-host validation and independent consumer checks pass.
+Run `python3 tools/release/prepare-sdk.py --check --tag sdk-v0.8.0`, commit the aligned
+versions/release notes, then push the matching `sdk-v0.8.0` tag to publish. A manual workflow
+run builds and validates without publishing. Never overwrite an existing released version.
+
+The GitHub Packages instructions below describe the older alternative distribution path;
+GitHub Packages is not the coordinated workflow's publication destination.
+
 This document describes how to release the `quietmetrix-sdk` Kotlin Multiplatform module.
 
 ## Coordinates
@@ -23,7 +35,7 @@ The module's `publishing` block always registers `mavenLocal` and `sonatype`, an
 | `GitHubPackages` | Only with env vars   | `GITHUB_ACTOR` + `GITHUB_TOKEN`                         | **Current production release target.**               |
 | `sonatype`       | Yes                  | `OSSRH_USERNAME` + `OSSRH_PASSWORD`/`OSSRH_TOKEN` (or `-PossrhUsername`/`-PossrhToken`), plus GPG signing vars | Maven Central via the Central Portal, see below.     |
 
-## GitHub Packages release (current)
+## GitHub Packages release (alternative)
 
 ### One-time: create a Personal Access Token
 

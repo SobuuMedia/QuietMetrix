@@ -51,7 +51,7 @@ class RetentionLogicTest {
             ),
         )
         val vitals = computeRetentionVitals(response, today)
-        assertEquals(0.40, vitals.day1)
+        assertEquals(1.0 / 3, vitals.day1)
         assertEquals(0.18, vitals.day7)
         assertEquals(0.08, vitals.day30)
     }

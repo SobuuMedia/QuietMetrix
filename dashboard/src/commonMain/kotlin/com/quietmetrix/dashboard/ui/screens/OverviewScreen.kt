@@ -101,6 +101,7 @@ import com.quietmetrix.dashboard.resources.overview_empty_setup_waiting
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_body
 import com.quietmetrix.dashboard.resources.overview_error_ai_nap_title
 import com.quietmetrix.dashboard.resources.overview_error_headline
+import com.quietmetrix.dashboard.resources.overview_filter_coverage
 import com.quietmetrix.dashboard.resources.overview_hero_ai_chip
 import com.quietmetrix.dashboard.resources.overview_hero_change_less
 import com.quietmetrix.dashboard.resources.overview_hero_change_more
@@ -219,7 +220,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
             }
 
             val agg = state.aggregates
-            val sess = state.sessions
+            val sess = state.sessions.takeIf { state.overviewFilter == null }
             state.aiInsight?.takeIf { it.mode == "ai" }?.let { insight -> Text(insight.text, style = MaterialTheme.typography.bodyLarge) }
             val overviewQuestion = stringResource(Res.string.ask_overview_question)
     val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }
@@ -267,13 +268,13 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
             // Offline-captured are no longer shown as standalone vitals cards per the new
             // design (they aren't among its 4 vitals); events remain visible via the daily
             // volume chart below.
-            val resolvedEmpty = (agg != null || sess != null) && isOverviewEmpty(agg, sess) &&
+            val resolvedEmpty = state.overviewFilter == null && (agg != null || sess != null) && isOverviewEmpty(agg, sess) &&
                 !state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention) &&
                 state.sectionErrors.keys.none { it in setOf(DataSection.Aggregates, DataSection.Sessions) }
             if (resolvedEmpty) {
                 SetupInstructionsSection(Modifier.fillMaxWidth())
             } else {
-            var activeVitalsFilter by remember { mutableStateOf<String?>(null) }
+            val activeVitalsFilter = state.overviewFilter?.value
             VitalsSection(
                 agg = agg,
                 sess = sess,
@@ -281,7 +282,7 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
                 loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                 sizeClass = sizeClass,
                 activeFilter = activeVitalsFilter,
-                onClearFilter = { activeVitalsFilter = null },
+                onClearFilter = { viewModel.setOverviewFilter() },
                 onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) },
                 compare = state.compare,
                 previous = state.comparison,
@@ -308,15 +309,11 @@ internal fun OverviewScreen(viewModel: DashboardViewModel, state: DashboardState
             )
 
                 ScreensPlatformsCountriesSection(
-                    agg = agg,
+                    agg = state.overviewBaseAggregates ?: agg,
                     loading = state.isLoading(DataSection.Aggregates, DataSection.Sessions, DataSection.Retention),
                     sizeClass = sizeClass,
                     activeFilter = activeVitalsFilter,
-                    onSelectFilter = {
-                    activeVitalsFilter = it
-                    viewModel.openDrillDown(if (agg?.topScreens?.any { row -> row.screen == it } == true) "screen"
-                        else if (agg?.platforms?.any { row -> row.displayName == it } == true) "platform" else "country", it)
-                },
+                    onSelectFilter = { kind, value -> viewModel.setOverviewFilter(kind, if (kind == "platform") value.lowercase() else if (kind == "country") (if (value.lowercase() == "unknown") "unknown" else value.uppercase()) else value) },
                 compare = state.compare,
                 previous = state.comparison.aggregates,
                     modifier = Modifier.fillMaxWidth(),
@@ -687,6 +684,7 @@ internal fun VitalsSection(
                 onClick = onClearFilter,
                 trailingIcon = Res.drawable.ic_close,
             )
+            Text(stringResource(Res.string.overview_filter_coverage), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         ResponsiveRowOrColumn(sizeClass) {
             when (contentStateFor(loading, vitals == null)) {
@@ -722,11 +720,15 @@ internal fun VitalsSection(
                         sub = stringResource(when (resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec).source) {
                             OverviewMeasureSource.ReportedV2 -> Res.string.overview_vital_duration_reported_caption
                             OverviewMeasureSource.Suppressed -> Res.string.overview_vital_duration_suppressed_caption
-                            else -> Res.string.overview_vital_duration_approximate_caption
+                            OverviewMeasureSource.LegacyApproximate -> Res.string.overview_vital_duration_approximate_caption
+                            else -> Res.string.overview_vital_people_unavailable
                         }),
                         leadingIcon = Res.drawable.ic_events,
                         onClick = { onDrillDown("duration", "duration") },
-                        compareNote = if (compare) comparisonNoteText(previous.sessions?.avgDurationSec?.let(::formatDuration)) else null,
+                        compareNote = if (compare) comparisonNoteText(comparableDuration(
+                            resolveOverviewDuration(agg?.v2VisitDurationMs, agg?.v2VisitDurationState, sess?.avgDurationSec),
+                            resolveOverviewDuration(previous.aggregates?.v2VisitDurationMs, previous.aggregates?.v2VisitDurationState, previous.sessions?.avgDurationSec),
+                        )?.let(::formatDuration)) else null,
                         modifier = Modifier.fillSlot(),
                     )
                     val retentionDay1 = vitals?.retentionDay1
@@ -953,7 +955,7 @@ internal fun ScreensPlatformsCountriesSection(
     sizeClass: WindowSizeClass,
     modifier: Modifier = Modifier,
     activeFilter: String? = null,
-    onSelectFilter: (String) -> Unit = {},
+    onSelectFilter: (String, String) -> Unit = { _, _ -> },
     compare: Boolean = false,
     previous: AggregatesResponse? = null,
 ) {
@@ -978,7 +980,7 @@ internal fun ScreensPlatformsCountriesSection(
                         }
                     } else {
                         rows.forEach { row ->
-                            ScreenUsageRowItem(row, selected = row.screen == activeFilter, onClick = { onSelectFilter(row.screen) })
+                            ScreenUsageRowItem(row, selected = row.screen == activeFilter, onClick = { onSelectFilter("screen", row.screen) })
                             if (compare) ComparisonNote(previous?.topScreens?.firstOrNull { it.screen == row.screen }?.count?.let(::formatCount))
                         }
                     }
@@ -999,7 +1001,7 @@ internal fun ScreensPlatformsCountriesSection(
                         }
                     } else {
                         rows.forEach { row ->
-                            BreakdownRowItem(row, selected = row.name == activeFilter, icon = breakdownGlyph(row.name), onClick = { onSelectFilter(row.name) })
+                            BreakdownRowItem(row, selected = row.name == activeFilter, icon = breakdownGlyph(row.name), onClick = { onSelectFilter("platform", row.name) })
                             if (compare) ComparisonNote(previous?.platforms?.firstOrNull { it.displayName == row.name }?.count?.let(::formatCount))
                         }
                     }
@@ -1020,7 +1022,7 @@ internal fun ScreensPlatformsCountriesSection(
                         }
                     } else {
                         rows.forEach { row ->
-                            BreakdownRowItem(row, selected = row.name == activeFilter, icon = "🌍", onClick = { onSelectFilter(row.name) })
+                            BreakdownRowItem(row, selected = row.name == activeFilter, icon = "🌍", onClick = { onSelectFilter("country", row.name) })
                             if (compare) ComparisonNote(previous?.countries?.firstOrNull { it.displayName == row.name }?.count?.let(::formatCount))
                         }
                     }

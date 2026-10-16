@@ -36,56 +36,83 @@ internal fun selectCounterProjection(rows: List<ResultRow>, platform: String): L
     return platformRows + legacyFallback
 }
 
+/** A single reporting segment. Intersections are deliberately unsupported by stored projections. */
+data class ReportSelection(val kind: String = "platform", val value: String = "all") {
+    val platform: String get() = if (kind == "platform") value else "all"
+    fun matchesUnique(dims: Map<String, String>): Boolean =
+        dims["scope_kind"] == (if (kind == "screen") "screen" else "project") &&
+            dims["scope_key"] == (if (kind == "screen") value else "all")
+}
+
+internal fun selectCounterProjection(rows: List<ResultRow>, selection: ReportSelection): List<ResultRow> = when (selection.kind) {
+    "platform" -> selectCounterProjection(rows, selection.value)
+    "country" -> rows.filter { it[CounterCellsV2.segmentKind] == "country" && it[CounterCellsV2.segmentValue] == selection.value }
+    "screen" -> selectCounterProjection(rows, "all").filter { row ->
+        val dims = runCatching { Json.parseToJsonElement(row[CounterCellsV2.dims]).jsonObject.mapValues { it.value.jsonPrimitive.content } }.getOrDefault(emptyMap())
+        when (row[CounterCellsV2.metric]) {
+            "unique_window_v2", "unique_hour_v2" -> selection.matchesUnique(dims)
+            "screen_view_v2", "screen_dwell_ms_v2", "screen_dwell_sample_v2" -> dims["screen"] == selection.value
+            "witness_window_v2" -> true // target hash is checked independently by windowWitnesses
+            else -> false
+        }
+    }
+    else -> emptyList()
+}
+
 /** Conservative v2 report foundation. People comes from exact fixed-window contributions;
  * daily People values are never added together. */
 class ProjectReportRepository(private val database: Database) {
+    fun read(projectId: Long, range: String, anchor: LocalDate, platform: String, compare: Boolean = false,
+        filterKind: String = "platform", filterValue: String = platform): ProjectReportResponse =
+        readSelected(projectId, range, anchor, ReportSelection(filterKind, filterValue), compare)
+
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun read(projectId: Long, range: String, anchor: LocalDate, platform: String, compare: Boolean = false): ProjectReportResponse = transaction(database) {
+    private fun readSelected(projectId: Long, range: String, anchor: LocalDate, selection: ReportSelection, compare: Boolean = false): ProjectReportResponse = transaction(database) {
         val days = when (range) { "today" -> 1; "7d" -> 7; "30d" -> 30; "90d" -> 90; else -> error("validated range required") }
         val from = if (range == "today") anchor else anchor.minusDays((days - 1).toLong())
         val to = anchor
-        val people = peopleMeasure(projectId, days, to, platform)
-        val peopleBins = peopleBins(projectId, range, from, to, platform)
+        val people = peopleMeasure(projectId, days, to, selection)
+        val peopleBins = peopleBins(projectId, range, from, to, selection)
         val charts = linkedMapOf(
             "people" to peopleBins,
-            "visits" to activityBins(projectId, "visit_start_v2", "visits", peopleBins, range, platform),
-            "events" to activityBins(projectId, "event_v2", "events", peopleBins, range, platform),
-            "screen_views" to activityBins(projectId, "screen_view_v2", "views", peopleBins, range, platform),
-            "crashes" to activityBins(projectId, "crash_v2", "crashes", peopleBins, range, platform),
-            "visit_duration" to durationBins(projectId, peopleBins, range, platform),
+            "visits" to activityBins(projectId, "visit_start_v2", "visits", peopleBins, range, selection),
+            "events" to activityBins(projectId, "event_v2", "events", peopleBins, range, selection),
+            "screen_views" to activityBins(projectId, "screen_view_v2", "views", peopleBins, range, selection),
+            "crashes" to activityBins(projectId, "crash_v2", "crashes", peopleBins, range, selection),
+            "visit_duration" to durationBins(projectId, peopleBins, range, selection),
         )
         val overview = linkedMapOf(
             "people" to people,
-            "visits" to activityMeasure(projectId, "visit_start_v2", from, to, range, platform, people, "visits"),
-            "events" to activityMeasure(projectId, "event_v2", from, to, range, platform, people, "events"),
-            "crashes" to activityMeasure(projectId, "crash_v2", from, to, range, platform, people, "crashes"),
-            "visit_duration" to averageVisitDuration(projectId, from, to, range, platform),
+            "visits" to activityMeasure(projectId, "visit_start_v2", from, to, range, selection, people, "visits"),
+            "events" to activityMeasure(projectId, "event_v2", from, to, range, selection, people, "events"),
+            "crashes" to activityMeasure(projectId, "crash_v2", from, to, range, selection, people, "crashes"),
+            "visit_duration" to averageVisitDuration(projectId, from, to, range, selection),
         )
         val previousFrom = if (range == "today") from.minusDays(1) else from.minusDays(days.toLong())
         val previousTo = from.minusDays(1)
         val comparisonPeopleBins = if (!compare) emptyList() else peopleBins(
-            projectId, range, previousFrom, previousTo, platform,
+            projectId, range, previousFrom, previousTo, selection,
             currentHourLimit = if (range == "today" && to == LocalDate.now(ZoneOffset.UTC)) java.time.Instant.now().atZone(ZoneOffset.UTC).hour else null,
         )
         val comparisonCharts = if (!compare) emptyMap() else linkedMapOf(
             "people" to comparisonPeopleBins,
-            "visits" to activityBins(projectId, "visit_start_v2", "visits", comparisonPeopleBins, range, platform),
-            "events" to activityBins(projectId, "event_v2", "events", comparisonPeopleBins, range, platform),
-            "screen_views" to activityBins(projectId, "screen_view_v2", "views", comparisonPeopleBins, range, platform),
-            "crashes" to activityBins(projectId, "crash_v2", "crashes", comparisonPeopleBins, range, platform),
-            "visit_duration" to durationBins(projectId, comparisonPeopleBins, range, platform),
+            "visits" to activityBins(projectId, "visit_start_v2", "visits", comparisonPeopleBins, range, selection),
+            "events" to activityBins(projectId, "event_v2", "events", comparisonPeopleBins, range, selection),
+            "screen_views" to activityBins(projectId, "screen_view_v2", "views", comparisonPeopleBins, range, selection),
+            "crashes" to activityBins(projectId, "crash_v2", "crashes", comparisonPeopleBins, range, selection),
+            "visit_duration" to durationBins(projectId, comparisonPeopleBins, range, selection),
         )
         // The Overview headline always gets the prior-period People measure. The detailed
         // comparison series and retention cohorts remain gated by `compare` above/below.
         val previousPeople = if (range == "today") {
             mapOf("people" to ReportMeasure(state = "unsupported", unit = "installations", source = "v2"))
         } else {
-            mapOf("people" to peopleMeasure(projectId, days, from.minusDays(1), platform))
+            mapOf("people" to peopleMeasure(projectId, days, from.minusDays(1), selection))
         }
         val flow = mapOf(
-            "screen_views" to activityMeasure(projectId, "screen_view_v2", from, to, range, platform, people, "views"),
-            "transitions" to activityMeasure(projectId, "screen_transition_v2", from, to, range, platform, people, "transitions"),
+            "screen_views" to activityMeasure(projectId, "screen_view_v2", from, to, range, selection, people, "views"),
+            "transitions" to activityMeasure(projectId, "screen_transition_v2", from, to, range, selection, people, "transitions"),
         )
         val coverageRows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and (CounterCellsV2.day greaterEq from) and (CounterCellsV2.day lessEq to)
@@ -95,7 +122,7 @@ class ProjectReportRepository(private val database: Database) {
         val hasHourly = coverageRows.any { it[CounterCellsV2.hour] >= 0 }
         val latest = coverageRows.maxOfOrNull { it[CounterCellsV2.updatedAt] }
         ProjectReportResponse(
-            scope = mapOf("range" to range, "anchor" to anchor.toString(), "platform" to platform, "timezone" to "UTC", "compare" to compare.toString()),
+            scope = mapOf("range" to range, "anchor" to anchor.toString(), "platform" to selection.platform, "filter_kind" to selection.kind, "filter_value" to selection.value, "timezone" to "UTC", "compare" to compare.toString()),
             generated_at = java.time.Instant.now().toString(),
             last_received_at = latest?.toInstant(ZoneOffset.UTC)?.toString(),
             coverage = ReportCoverage(
@@ -109,38 +136,41 @@ class ProjectReportRepository(private val database: Database) {
             overview = overview,
             charts = charts,
             comparison_charts = comparisonCharts,
-            comparison = previousPeople,
+            comparison = previousPeople + if (compare) mapOf(
+                "visit_duration" to if (range == "today") ReportMeasure(state="unsupported", unit="milliseconds", source="v2") else averageVisitDuration(projectId, previousFrom, previousTo, range, selection),
+                "crashes" to activityMeasure(projectId, "crash_v2", previousFrom, previousTo, range, selection, previousPeople.getValue("people"), "crashes"),
+            ) else emptyMap(),
             flow = flow,
-            retention = retentionMeasures(projectId, from, to, platform),
-            retention_cohorts = retentionCohorts(projectId, from, to, platform),
-            comparison_retention_cohorts = if (compare) retentionCohorts(projectId, previousFrom, previousTo, platform) else emptyList(),
-            definitions = definitionCatalog(projectId, from, to, platform),
+            retention = retentionMeasures(projectId, from, to, selection),
+            retention_cohorts = retentionCohorts(projectId, from, to, selection),
+            comparison_retention_cohorts = if (compare) retentionCohorts(projectId, previousFrom, previousTo, selection) else emptyList(),
+            definitions = definitionCatalog(projectId, from, to, selection),
         )
     }
 
     /** Labels are returned only when their own aggregate contributor count reaches k. */
-    private fun definitionCatalog(projectId: Long, from: LocalDate, to: LocalDate, platform: String): Map<String, List<String>> {
+    private fun definitionCatalog(projectId: Long, from: LocalDate, to: LocalDate, selection: ReportSelection): Map<String, List<String>> {
         val rows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and
                 (CounterCellsV2.metric inList listOf("screen_view_v2", "event_v2")) and
                 (CounterCellsV2.day greaterEq from) and (CounterCellsV2.day lessEq to)
-        }.toList().let { selectCounterProjection(it, platform) }.filter { it[CounterCellsV2.hour] == (-1).toShort() }
+        }.toList().let { selectCounterProjection(it, selection) }.filter { it[CounterCellsV2.hour] == (-1).toShort() }
         fun labels(metric: String, dim: String) = rows.filter { it[CounterCellsV2.metric] == metric }
             .groupBy { it[CounterCellsV2.dims] }
             .mapNotNull { (_, cells) ->
                 val dims = runCatching { json.parseToJsonElement(cells.first()[CounterCellsV2.dims]).jsonObject.mapValues { it.value.jsonPrimitive.content } }.getOrDefault(emptyMap())
                 val label = dims[dim]
-                label?.takeIf { it.isNotBlank() && windowWitnesses(projectId, metric, dims, from, to, platform, cells) >= 5 }
+                label?.takeIf { it.isNotBlank() && windowWitnesses(projectId, metric, dims, from, to, selection, cells) >= 5 }
             }.distinct().sorted()
         return mapOf("screens" to labels("screen_view_v2", "screen"), "events" to labels("event_v2", "name"))
     }
 
     /** Mature, entry-day cohort counts; no future mark is inferred from an app install. */
-    private fun retentionMeasures(projectId: Long, from: LocalDate, to: LocalDate, platform: String): Map<String, ReportMeasure> {
+    private fun retentionMeasures(projectId: Long, from: LocalDate, to: LocalDate, selection: ReportSelection): Map<String, ReportMeasure> {
         val rows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and
                 (CounterCellsV2.day greaterEq from) and (CounterCellsV2.day lessEq to)
-        }.toList().let { selectCounterProjection(it, platform) }
+        }.toList().let { selectCounterProjection(it, selection) }
         fun dims(row: ResultRow) = runCatching { json.parseToJsonElement(row[CounterCellsV2.dims]).jsonObject.mapValues { it.value.jsonPrimitive.content } }.getOrDefault(emptyMap())
         val entries = rows.filter { it[CounterCellsV2.metric] == "retention_entry_v2" }
             .map { it to dims(it) }.filter { it.second["entry_day"]?.let { day -> day >= from.toString() && day <= to.toString() } == true }
@@ -179,12 +209,12 @@ class ProjectReportRepository(private val database: Database) {
     }
 
     /** Per-entry-day exact cohort cells used by the Retention heatmap and weighted weekly view. */
-    private fun retentionCohorts(projectId: Long, from: LocalDate, to: LocalDate, platform: String): List<ReportRetentionCohort> {
+    private fun retentionCohorts(projectId: Long, from: LocalDate, to: LocalDate, selection: ReportSelection): List<ReportRetentionCohort> {
         val rows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and
                 (CounterCellsV2.metric inList listOf("retention_entry_v2", "retention_return_v2")) and
                 (CounterCellsV2.day greaterEq from) and (CounterCellsV2.day lessEq to)
-        }.toList().let { selectCounterProjection(it, platform) }.filter { it[CounterCellsV2.hour] == (-1).toShort() }
+        }.toList().let { selectCounterProjection(it, selection) }.filter { it[CounterCellsV2.hour] == (-1).toShort() }
         fun dimensions(row: ResultRow): Map<String, String> = runCatching {
             json.parseToJsonElement(row[CounterCellsV2.dims]).jsonObject.mapValues { it.value.jsonPrimitive.content }
         }.getOrDefault(emptyMap())
@@ -222,14 +252,14 @@ class ProjectReportRepository(private val database: Database) {
     /** Reads only the report resolution for this range and gates action counts by exact-window People. */
     private fun activityMeasure(
         projectId: Long, metric: String, from: LocalDate, to: LocalDate, range: String,
-        platform: String, people: ReportMeasure, unit: String, hour: Int? = null,
+        selection: ReportSelection, people: ReportMeasure, unit: String, hour: Int? = null,
     ): ReportMeasure {
-        val cells = activityCells(projectId, metric, from, to, range, platform, hour)
+        val cells = activityCells(projectId, metric, from, to, range, selection, hour)
         if (cells.isEmpty()) return ReportMeasure(state = "insufficient_data", unit = unit, source = "v2")
         if (people.state != "reported") return ReportMeasure(state = people.state, unit = unit, source = "v2")
         val grouped = cells.groupBy { it[CounterCellsV2.dims] }.values.map { rows ->
             val dims = runCatching { json.parseToJsonElement(rows.first()[CounterCellsV2.dims]).jsonObject.mapValues { it.value.jsonPrimitive.content } }.getOrDefault(emptyMap())
-            rows to (windowWitnesses(projectId, metric, dims, from, to, platform, rows) >= 5)
+            rows to (windowWitnesses(projectId, metric, dims, from, to, selection, rows) >= 5)
         }
         val eligible = grouped.filter { it.second }
         if (eligible.isEmpty()) return ReportMeasure(state = "suppressed", unit = unit, source = "v2")
@@ -244,7 +274,7 @@ class ProjectReportRepository(private val database: Database) {
      * counts are used conservatively (maximum day, never summed across days). */
     private fun windowWitnesses(
         projectId: Long, metric: String, dims: Map<String, String>, from: LocalDate, to: LocalDate,
-        platform: String, legacyRows: List<ResultRow>,
+        selection: ReportSelection, legacyRows: List<ResultRow>,
     ): Long {
         val validation = CounterRegistryV2.validate(metric, dims) as? CounterRegistryV2.Result.Accepted
             ?: return 0
@@ -253,7 +283,7 @@ class ProjectReportRepository(private val database: Database) {
         val witnessRows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and (CounterCellsV2.metric eq "witness_window_v2") and
                 (CounterCellsV2.day greaterEq from) and (CounterCellsV2.day lessEq to)
-        }.toList().let { selectCounterProjection(it, platform) }.filter { row ->
+        }.toList().let { selectCounterProjection(it, selection) }.filter { row ->
             runCatching {
                 val witness = json.parseToJsonElement(row[CounterCellsV2.dims]).jsonObject
                 witness["target_metric"]?.jsonPrimitive?.content == metric &&
@@ -268,15 +298,15 @@ class ProjectReportRepository(private val database: Database) {
 
     /** Duration is a weighted mean: summed milliseconds divided by completed visit samples. */
     private fun averageVisitDuration(
-        projectId: Long, from: LocalDate, to: LocalDate, range: String, platform: String, hour: Int? = null,
+        projectId: Long, from: LocalDate, to: LocalDate, range: String, selection: ReportSelection, hour: Int? = null,
     ): ReportMeasure {
-        val durations = activityCells(projectId, "visit_duration_ms_v2", from, to, range, platform, hour)
-        val completionRows = activityCells(projectId, "visit_complete_v2", from, to, range, platform, hour)
+        val durations = activityCells(projectId, "visit_duration_ms_v2", from, to, range, selection, hour)
+        val completionRows = activityCells(projectId, "visit_complete_v2", from, to, range, selection, hour)
         val completions = completionRows.sumOf { it[CounterCellsV2.n] }
         if (durations.isEmpty() || completions == 0L) return ReportMeasure(state = "insufficient_data", unit = "milliseconds", source = "v2")
         val completionDims = runCatching { json.parseToJsonElement(completionRows.first()[CounterCellsV2.dims]).jsonObject.mapValues { it.value.jsonPrimitive.content } }.getOrDefault(emptyMap())
-        if (completions < 5 || windowWitnesses(projectId, "visit_complete_v2", completionDims, from, to, platform, completionRows) < 5 ||
-            windowWitnesses(projectId, "visit_duration_ms_v2", emptyMap(), from, to, platform, durations) < 5) {
+        if (completions < 5 || windowWitnesses(projectId, "visit_complete_v2", completionDims, from, to, selection, completionRows) < 5 ||
+            windowWitnesses(projectId, "visit_duration_ms_v2", emptyMap(), from, to, selection, durations) < 5) {
             return ReportMeasure(state = "suppressed", unit = "milliseconds", source = "v2")
         }
         val totalMs = durations.sumOf { it[CounterCellsV2.n] }
@@ -284,44 +314,44 @@ class ProjectReportRepository(private val database: Database) {
     }
 
     private fun activityCells(
-        projectId: Long, metric: String, from: LocalDate, to: LocalDate, range: String, platform: String, hour: Int? = null,
+        projectId: Long, metric: String, from: LocalDate, to: LocalDate, range: String, selection: ReportSelection, hour: Int? = null,
     ) = CounterCellsV2.selectAll().where {
         (CounterCellsV2.projectId eq projectId) and (CounterCellsV2.metric eq metric) and
             (CounterCellsV2.day greaterEq from) and (CounterCellsV2.day lessEq to)
-    }.toList().let { selectCounterProjection(it, platform) }.filter { row ->
+    }.toList().let { selectCounterProjection(it, selection) }.filter { row ->
             if (range == "today") row[CounterCellsV2.hour] >= 0 && (hour == null || row[CounterCellsV2.hour] == hour.toShort())
             else row[CounterCellsV2.hour] == (-1).toShort()
     }
 
     private fun activityBins(
-        projectId: Long, metric: String, unit: String, bins: List<ReportBin>, range: String, platform: String,
+        projectId: Long, metric: String, unit: String, bins: List<ReportBin>, range: String, selection: ReportSelection,
     ): List<ReportBin> = bins.map { bin ->
         val from = LocalDate.parse(bin.start_day)
         val to = LocalDate.parse(bin.end_day)
         val measure = activityMeasure(
-            projectId, metric, from, to, range, platform,
+            projectId, metric, from, to, range, selection,
             bin.measures.getValue("people"), unit, bin.hour,
         )
         val key = when (metric) { "visit_start_v2" -> "visits"; "event_v2" -> "events"; "crash_v2" -> "crashes"; "screen_view_v2" -> "views"; else -> metric.removeSuffix("_v2") }
         bin.copy(measures = bin.measures + (key to measure))
     }
 
-    private fun durationBins(projectId: Long, bins: List<ReportBin>, range: String, platform: String): List<ReportBin> = bins.map { bin ->
+    private fun durationBins(projectId: Long, bins: List<ReportBin>, range: String, selection: ReportSelection): List<ReportBin> = bins.map { bin ->
         val measure = averageVisitDuration(
-            projectId, LocalDate.parse(bin.start_day), LocalDate.parse(bin.end_day), range, platform, bin.hour,
+            projectId, LocalDate.parse(bin.start_day), LocalDate.parse(bin.end_day), range, selection, bin.hour,
         )
         bin.copy(measures = bin.measures + ("visit_duration" to measure))
     }
 
     private fun peopleBins(
-        projectId: Long, range: String, from: LocalDate, to: LocalDate, platform: String, currentHourLimit: Int? = null,
+        projectId: Long, range: String, from: LocalDate, to: LocalDate, selection: ReportSelection, currentHourLimit: Int? = null,
     ): List<ReportBin> =
         if (range == "today") {
             val currentUtcDay = LocalDate.now(ZoneOffset.UTC)
             val lastHour = currentHourLimit ?: if (from == currentUtcDay) java.time.Instant.now().atZone(ZoneOffset.UTC).hour else 23
             (0..lastHour).map { hour ->
                 val day = from
-                ReportBin(day.toString(), day.toString(), hour, mapOf("people" to hourlyPeopleMeasure(projectId, day, hour, platform)))
+                ReportBin(day.toString(), day.toString(), hour, mapOf("people" to hourlyPeopleMeasure(projectId, day, hour, selection)))
             }
         } else if (range == "90d") {
             buildList {
@@ -329,24 +359,24 @@ class ProjectReportRepository(private val database: Database) {
                 while (!start.isAfter(to)) {
                     val end = minOf(start.plusDays(6), to)
                     val length = (end.toEpochDay() - start.toEpochDay() + 1).toInt()
-                    add(ReportBin(start.toString(), end.toString(), measures = mapOf("people" to peopleMeasure(projectId, length, end, platform))))
+                    add(ReportBin(start.toString(), end.toString(), measures = mapOf("people" to peopleMeasure(projectId, length, end, selection))))
                     start = end.plusDays(1)
                 }
             }
         } else {
             generateSequence(from) { day -> if (day.isBefore(to)) day.plusDays(1) else null }
-                .map { day -> ReportBin(day.toString(), day.toString(), measures = mapOf("people" to peopleMeasure(projectId, 1, day, platform))) }
+                .map { day -> ReportBin(day.toString(), day.toString(), measures = mapOf("people" to peopleMeasure(projectId, 1, day, selection))) }
                 .toList()
         }
 
-    private fun hourlyPeopleMeasure(projectId: Long, day: LocalDate, hour: Int, platform: String): ReportMeasure {
+    private fun hourlyPeopleMeasure(projectId: Long, day: LocalDate, hour: Int, selection: ReportSelection): ReportMeasure {
         val rows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and (CounterCellsV2.day eq day) and
                 (CounterCellsV2.hour eq hour.toShort()) and (CounterCellsV2.metric eq "unique_hour_v2")
-        }.toList().let { selectCounterProjection(it, platform) }.filter {
+        }.toList().let { selectCounterProjection(it, selection) }.filter {
             runCatching {
                 val d = json.parseToJsonElement(it[CounterCellsV2.dims]).jsonObject
-                d["scope_kind"]?.jsonPrimitive?.content == "project" && d["scope_key"]?.jsonPrimitive?.content == "all"
+                selection.matchesUnique(d.mapValues { it.value.jsonPrimitive.content })
             }.getOrDefault(false)
         }
         val witnesses = rows.sumOf { it[CounterCellsV2.contributors] }
@@ -357,18 +387,17 @@ class ProjectReportRepository(private val database: Database) {
         }
     }
 
-    private fun peopleMeasure(projectId: Long, days: Int, end: LocalDate, platform: String): ReportMeasure {
+    private fun peopleMeasure(projectId: Long, days: Int, end: LocalDate, selection: ReportSelection): ReportMeasure {
         val start = end.minusDays((days - 1).toLong())
         val rows = CounterCellsV2.selectAll().where {
             (CounterCellsV2.projectId eq projectId) and
                 (CounterCellsV2.metric eq "unique_window_v2") and
                 (CounterCellsV2.day greaterEq start) and (CounterCellsV2.day lessEq end) and
                 (CounterCellsV2.hour eq (-1).toShort())
-        }.toList().let { selectCounterProjection(it, platform) }.filter {
+        }.toList().let { selectCounterProjection(it, selection) }.filter {
             runCatching {
                 val d = json.parseToJsonElement(it[CounterCellsV2.dims]).jsonObject
-                d["scope_kind"]?.jsonPrimitive?.content == "project" &&
-                    d["scope_key"]?.jsonPrimitive?.content == "all" &&
+                selection.matchesUnique(d.mapValues { it.value.jsonPrimitive.content }) &&
                     d["days"]?.jsonPrimitive?.content?.toIntOrNull() == days &&
                     d["end_day"]?.jsonPrimitive?.content == end.toString()
             }.getOrDefault(false)

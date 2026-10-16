@@ -43,9 +43,9 @@ import com.quietmetrix.dashboard.resources.login_error_misconfigured
 import com.quietmetrix.dashboard.resources.login_error_network
 import com.quietmetrix.dashboard.resources.login_error_server
 import com.quietmetrix.dashboard.resources.login_error_unknown
+import com.quietmetrix.dashboard.storage.ObservationStorage
 import com.quietmetrix.dashboard.storage.TokenStorage
 import com.quietmetrix.dashboard.ui.screens.EXPERIMENTS_GUIDE_STEP_COUNT
-import com.quietmetrix.dashboard.ui.screens.chartMeasurePoints
 import com.quietmetrix.dashboard.ui.screens.guideStepAfter
 import com.quietmetrix.dashboard.ui.screens.guideStepBefore
 import kotlinx.coroutines.CoroutineScope
@@ -73,6 +73,8 @@ data class DashboardState(
     val projects: List<ApiProject> = emptyList(),
     val currentProjectId: String? = null,
     val aggregates: AggregatesResponse? = null,
+    val overviewBaseAggregates: AggregatesResponse? = null,
+    val overviewFilter: OverviewFilter? = null,
     val range: TimeRange = TimeRange.Default,
     val loading: Boolean = false,
     val refreshing: Boolean = false,
@@ -96,12 +98,19 @@ data class DashboardState(
     val showInfo: NavDestination? = null,
     val transitions: TransitionsResponse? = null,
     val flowPlatform: String = "all",
+    val flowNode: String? = null,
+    val askContext: Map<String, String> = emptyMap(),
+    val selectedCohorts: String? = null,
     val sessions: SessionsResponse? = null,
     val retention: RetentionResponse? = null,
     val search: SearchResponse? = null,
     val friction: FrictionResponse? = null,
     val funnels: List<FunnelDto> = emptyList(),
     val selectedFunnelKey: String? = null,
+    val selectedFunnelRevision: Int? = null,
+    val funnelSaving: Boolean = false,
+    val funnelSaveError: UiError? = null,
+    val funnelCatalog: Map<String, List<String>> = emptyMap(),
     val funnelResults: FunnelResultsResponse? = null,
     // A/B testing experiments
     val experiments: List<ExperimentDto> = emptyList(),
@@ -149,11 +158,7 @@ data class DashboardState(
     val comparisonErrors: Map<DataSection, UiError> = emptyMap(),
     /** The selected analytics drill-down, or null while its drawer is closed. */
     val drillDown: DrillDownSelection? = null,
-    /** Ids of "Worth a look" observations ([com.quietmetrix.dashboard.ui.screens.WorthALookObservation.id])
-     *  the user has dismissed or snoozed this session — set by [DashboardViewModel.hideWorthALook],
-     *  cleared by that same call's undo toast action. Session-only (matches the design handoff's
-     *  State Management section: `dismissed: array of dismissed "worth a look" ids`), not
-     *  persisted — there is no server-side endpoint for it. */
+    /** Project-local hidden observations, with snoozes expiring on the next UTC date. */
     val dismissedWorthALookIds: Set<String> = emptySet(),
 ) {
     /** Global role of the signed-in user. */
@@ -291,6 +296,26 @@ class DashboardViewModel(
     private val askRequest = MutableStateFlow<Any?>(null)
     private val aiCapabilityRequest = MutableStateFlow<Any?>(null)
     private var aiRetryRequest: AiRequest? = null
+    private var observationPreferences = runCatching {
+        json.decodeFromString<List<ObservationPreference>>(ObservationStorage.read() ?: "[]")
+    }.getOrDefault(emptyList())
+    private var observationExpiryJob: Job? = null
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    private fun refreshObservationPreferences() {
+        _state.update { it.copy(dismissedWorthALookIds = hiddenObservationIds(observationPreferences, it.currentProjectId, analyticsAnchorToday())) }
+        if (observationPreferences.any { it.snoozed && it.hiddenOn == analyticsAnchorToday() } && observationExpiryJob?.isActive != true) {
+            observationExpiryJob = scope.launch {
+                val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                delay(86_400_000L - now.mod(86_400_000L))
+                observationExpiryJob = null
+                refreshObservationPreferences()
+            }
+        }
+    }
+    private fun saveObservationPreferences() {
+        ObservationStorage.write(json.encodeToString(observationPreferences))
+        refreshObservationPreferences()
+    }
     private val analyticsRequests = MutableStateFlow<Map<DataSection, Any>>(emptyMap())
 
     /** Persists the signed-in user so role/email survive a page reload. */
@@ -477,6 +502,7 @@ class DashboardViewModel(
     /** Refreshes live data while preserving and dimming the current screen. */
     fun refresh() {
         if (_state.value.refreshing) return
+        refreshObservationPreferences()
         val destination = _state.value.activeDestination
         _state.update { it.copy(refreshing = true, analyticsAnchor = analyticsAnchorToday(), analyticsRevision = it.analyticsRevision + 1) }
         scope.launch {
@@ -515,14 +541,26 @@ class DashboardViewModel(
         askRequest.value = null
         _state.update {
             it.copy(
-                currentProjectId = projectId, askDrawer = AskDrawerState(), ai = AiCapabilities(), aiInsight = null, aggregates = null, sessions = null, retention = null, transitions = null,
+                currentProjectId = projectId, overviewFilter = null, overviewBaseAggregates = null, askDrawer = AskDrawerState(), ai = AiCapabilities(), aiInsight = null, aggregates = null, sessions = null, retention = null, transitions = null,
                 search = null, friction = null, comparison = ComparisonData(), comparisonErrors = emptyMap(),
-                sectionErrors = emptyMap(), analyticsRevision = it.analyticsRevision + 1, drillDown = null, funnels = emptyList(), selectedFunnelKey = null, funnelResults = null,
+                sectionErrors = emptyMap(), analyticsRevision = it.analyticsRevision + 1, drillDown = null, funnels = emptyList(), selectedFunnelKey = null, selectedFunnelRevision = null, funnelCatalog = emptyMap(), funnelSaveError = null, funnelResults = null,
                 experiments = emptyList(), experimentLimit = null, selectedExperimentKey = null, experimentResults = null,
             )
         }
+        refreshObservationPreferences()
         TokenStorage.saveLastProjectId(projectId)
         scope.launch { loadAggregates(); loadTransitions(); loadSearch(); loadFriction(); loadSessions(); loadRetentionOnce(); loadFunnelsOnce(); loadExperimentsOnce() }
+    }
+
+    fun setOverviewFilter(kind: String? = null, value: String? = null) {
+        val filter = if (kind == null || value == null) null else OverviewFilter(kind, value)
+        if (_state.value.overviewFilter == filter) return
+        aiRetryRequest = null
+        askRequest.value = null
+        _state.update { it.copy(overviewFilter = filter, aggregates = null, sessions = null, retention = null,
+            comparison = ComparisonData(), analyticsRevision = it.analyticsRevision + 1,
+            aiInsight = null, askDrawer = AskDrawerState(), drillDown = null) }
+        scope.launch { loadAggregates(); loadSessions(); loadRetentionOnce() }
     }
 
     fun selectRange(range: TimeRange) {
@@ -792,9 +830,14 @@ class DashboardViewModel(
         val projectId = s.currentProjectId ?: return
         loadList(DataSection.Funnels, "GET /projects/{id}/funnels", projectId, fetch = { api.listFunnels(projectId) }) { res ->
             val currentKey = selectedFunnelKey?.takeIf { key -> res.funnels.any { it.funnelKey == key } } ?: res.funnels.firstOrNull()?.funnelKey
-            copy(funnels = res.funnels, selectedFunnelKey = currentKey)
+            copy(funnels = res.funnels, selectedFunnelKey = currentKey, selectedFunnelRevision = selectedFunnelRevision.takeIf { currentKey == selectedFunnelKey })
         }
-        if (_state.value.currentProjectId == projectId) loadFunnelResultsOnce()
+        if (_state.value.currentProjectId == projectId) {
+            runCatching { api.projectReport(projectId, s.range, s.analyticsAnchor) }.getOrNull()?.let { report ->
+                _state.update { if (it.currentProjectId == projectId) it.copy(funnelCatalog = report.definitions) else it }
+            }
+            loadFunnelResultsOnce()
+        }
     }
 
     /** Loads selected funnel statistics without allowing stale controls to commit a response. */
@@ -803,16 +846,27 @@ class DashboardViewModel(
         val projectId = snapshot.currentProjectId ?: return
         val key = snapshot.selectedFunnelKey ?: return
         loadAnalytics(DataSection.FunnelResults, "GET /projects/{id}/funnels/{key}/results", snapshot,
-            fetch = { previous, anchor -> api.funnelResults(projectId, key, snapshot.range, previous = previous, anchor = anchor) },
+            fetch = { previous, anchor -> api.funnelResults(projectId, key, snapshot.range, previous = previous, anchor = anchor, revision = snapshot.selectedFunnelRevision) },
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(funnel = result)) else copy(funnelResults = result)
             })
     }
 
     fun selectFunnel(funnelKey: String) {
-        _state.update { it.copy(selectedFunnelKey = funnelKey, funnelResults = null, comparison = it.comparison.copy(funnel = null), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
+        askRequest.value = null; aiRetryRequest = null
+        _state.update { it.copy(askContext = emptyMap(), askDrawer = AskDrawerState(open = it.askDrawer.open)) }
+        _state.update { it.copy(selectedFunnelKey = funnelKey, selectedFunnelRevision = null, funnelResults = null, comparison = it.comparison.copy(funnel = null), analyticsRevision = it.analyticsRevision + 1, drillDown = null) }
         scope.launch { loadFunnelResultsOnce() }
     }
+
+    fun selectFunnelRevision(revision: Int) {
+        askRequest.value = null; aiRetryRequest = null
+        _state.update { it.copy(askContext = emptyMap(), askDrawer = AskDrawerState(open = it.askDrawer.open)) }
+        _state.update { it.copy(selectedFunnelRevision = revision, funnelResults = null,
+            comparison = it.comparison.copy(funnel = null), analyticsRevision = it.analyticsRevision + 1) }
+        scope.launch { loadFunnelResultsOnce() }
+    }
+    fun clearFunnelSaveError() { _state.update { it.copy(funnelSaveError = null) } }
 
     fun deleteFunnel(funnelKey: String) {
         val projectId = _state.value.currentProjectId ?: return
@@ -829,15 +883,30 @@ class DashboardViewModel(
         }
     }
 
-    fun createFunnel(request: CreateFunnelRequest) {
-        val projectId = _state.value.currentProjectId ?: return
+    fun createFunnel(request: CreateFunnelRequest) = saveFunnel(request)
+
+    fun saveFunnel(request: CreateFunnelRequest, editing: Boolean = false, onSaved: () -> Unit = {}) {
+        val snapshot = _state.value
+        val projectId = snapshot.currentProjectId ?: return
+        if (snapshot.funnelSaving) return
+        _state.update { it.copy(funnelSaving = true, funnelSaveError = null) }
         scope.launch {
             try {
-                val created = api.createFunnel(projectId, request)
-                _state.update { it.copy(selectedFunnelKey = created.funnelKey, funnelResults = null, error = null) }
-                loadFunnelsOnce()
+                val saved = if (editing) api.updateFunnel(projectId, request.funnelKey,
+                    com.quietmetrix.dashboard.api.UpdateFunnelRequest(name=request.name, description=request.description,
+                        steps=request.steps, windowSeconds=request.windowSeconds, countMode=request.countMode,
+                        identityScope=request.identityScope, correlationProperty=request.correlationProperty))
+                    else api.createFunnel(projectId, request)
+                if (_state.value.currentProjectId == projectId && _state.value.token == snapshot.token) {
+                    _state.update { it.copy(selectedFunnelKey = saved.funnelKey, selectedFunnelRevision = null, funnelResults = null) }
+                    onSaved()
+                    loadFunnelsOnce()
+                }
             } catch (e: Throwable) {
-                _state.update { it.copy(error = e.toUiError("POST /projects/{id}/funnels")) }
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _state.update { if (it.currentProjectId == projectId && it.token == snapshot.token) it.copy(funnelSaveError = e.toUiError("Save funnel")) else it }
+            } finally {
+                _state.update { it.copy(funnelSaving = false) }
             }
         }
     }
@@ -979,6 +1048,7 @@ class DashboardViewModel(
                 aiInsight = if (changed) null else aiInsight, askDrawer = if (changed) AskDrawerState() else askDrawer,
                 analyticsRevision = analyticsRevision + if (changed) 1 else 0)
         }
+        refreshObservationPreferences()
     }
 
     /** Loads aggregates and an optional previous period within one captured selection. */
@@ -988,31 +1058,17 @@ class DashboardViewModel(
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Aggregates, "GET /projects/{id}/aggregates", snapshot,
             fetch = { previous, anchor ->
-                val legacy = api.aggregates(snapshot.currentProjectId.orEmpty(), snapshot.range, snapshot.demoMode, previous = previous, anchor = anchor)
-                if (previous || snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
-                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare) }.getOrNull()
-                    val people = report?.overview?.get("people")
-                    if (people == null) legacy else legacy.copy(
-                        people = people.value,
-                        peopleState = people.state,
-                        peopleSource = people.source,
-                        peopleComparison = report.comparison["people"]?.value,
-                        v2Visits = report.overview["visits"]?.value,
-                        v2VisitDurationMs = report.overview["visit_duration"]?.value,
-                        v2VisitDurationState = report.overview["visit_duration"]?.state,
-                        v2Crashes = report.overview["crashes"]?.value,
-                        v2CrashesState = report.overview["crashes"]?.state,
-                        dailyPeople = report.charts["people"].orEmpty().chartMeasurePoints("people"),
-                        dailyPeoplePrevious = report.comparisonCharts["people"].orEmpty().chartMeasurePoints("people"),
-                        dailyVisitsV2 = report.charts["visits"].orEmpty().chartMeasurePoints("visits"),
-                        dailyVisitsV2Previous = report.comparisonCharts["visits"].orEmpty().chartMeasurePoints("visits"),
-                        dailyActionsV2 = report.charts["events"].orEmpty().chartMeasurePoints("events"),
-                        dailyActionsV2Previous = report.comparisonCharts["events"].orEmpty().chartMeasurePoints("events"),
-                    )
+                val filter = snapshot.reportFilter()
+                val filtered = filter != OverviewFilter("platform", "all")
+                val legacy = if (filtered) AggregatesResponse() else api.aggregates(snapshot.currentProjectId.orEmpty(), snapshot.range, snapshot.demoMode, previous = previous, anchor = anchor)
+                if (snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
+                    val report = if (filtered) api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare, filter.kind, filter.value)
+                        else runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, snapshot.compare) }.getOrNull()
+                    report?.toAggregates(legacy, previous) ?: legacy
                 }
             },
             accept = { result, previous ->
-                if (previous) copy(comparison = comparison.copy(aggregates = result)) else copy(aggregates = result)
+                if (previous) copy(comparison = comparison.copy(aggregates = result)) else copy(aggregates = result, overviewBaseAggregates = if (overviewFilter == null) result else overviewBaseAggregates)
             })
     }
 
@@ -1025,6 +1081,17 @@ class DashboardViewModel(
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(transitions = result)) else copy(transitions = result)
             })
+    }
+
+    fun setFlowNode(node: String?) {
+        if (_state.value.flowNode == node) return
+        askRequest.value = null; aiRetryRequest = null
+        _state.update { it.copy(flowNode = node, askContext = emptyMap(), askDrawer = AskDrawerState(open = it.askDrawer.open)) }
+    }
+    fun setSelectedCohorts(cohorts: String?) {
+        if (_state.value.selectedCohorts == cohorts) return
+        askRequest.value = null; aiRetryRequest = null
+        _state.update { it.copy(selectedCohorts = cohorts, askContext = emptyMap(), askDrawer = AskDrawerState(open = it.askDrawer.open)) }
     }
 
     fun setFlowPlatform(platform: String) {
@@ -1061,7 +1128,7 @@ class DashboardViewModel(
         val snapshot = _state.value
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Sessions, "GET /projects/{id}/sessions", snapshot,
-            fetch = { previous, anchor -> api.sessions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
+            fetch = { previous, anchor -> if (snapshot.reportFilter() != OverviewFilter("platform", "all")) SessionsResponse() else api.sessions(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor) },
             accept = { result, previous ->
                 if (previous) copy(comparison = comparison.copy(sessions = result)) else copy(sessions = result)
             })
@@ -1073,9 +1140,11 @@ class DashboardViewModel(
         if (snapshot.currentProjectId == null && !snapshot.demoMode) return
         loadAnalytics(DataSection.Retention, "GET /projects/{id}/retention", snapshot,
             fetch = { previous, anchor ->
-                val legacy = api.retention(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor)
+                val filter = snapshot.reportFilter()
+                val filtered = filter != OverviewFilter("platform", "all")
+                val legacy = if (filtered) RetentionResponse(source = "v2") else api.retention(snapshot.currentProjectId.orEmpty(), snapshot.range, previous = previous, anchor = anchor)
                 if (snapshot.demoMode || snapshot.range == TimeRange.Hour1) legacy else {
-                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, compare = snapshot.compare) }.getOrNull()
+                    val report = runCatching { api.projectReport(snapshot.currentProjectId.orEmpty(), snapshot.range, anchor, compare = snapshot.compare, filterKind = filter.kind, filterValue = filter.value) }.getOrNull()
                     (if (previous) report?.toPreviousRetentionResponse() else report?.toRetentionResponse()) ?: legacy
                 }
             },
@@ -1122,7 +1191,7 @@ class DashboardViewModel(
     private fun aiRequest(snapshot: DashboardState, question: String = ""): AiRequest {
         val history = snapshot.askDrawer.messages.filter { it.role != AskMessageRole.Error }.dropLast(if (question.isNotEmpty()) 1 else 0).takeLast(6)
             .map { AiHistory(if (it.role == AskMessageRole.User) "user" else "assistant", it.text.take(2000)) }
-        return AiRequest(question = question, language = androidx.compose.ui.text.intl.Locale.current.language, range = snapshot.range.token, anchor = snapshot.analyticsAnchor, compare = snapshot.compare,
+        return AiRequest(context = aiSelectionContext(snapshot), question = question, language = androidx.compose.ui.text.intl.Locale.current.language, range = snapshot.range.token, anchor = snapshot.analyticsAnchor, compare = snapshot.compare,
             history = if (question.isEmpty()) emptyList() else history, operation_id = kotlin.random.Random.nextBytes(16).joinToString("") { byte -> (byte.toInt() and 255).toString(16).padStart(2, '0') })
     }
 
@@ -1150,7 +1219,7 @@ class DashboardViewModel(
         if (!access.enabled) return
         try {
             val summary = api.aiInsight(snapshot.currentProjectId!!, aiRequest(snapshot))
-            _state.update { if (it.currentProjectId == snapshot.currentProjectId && it.token == snapshot.token && it.analyticsRevision == snapshot.analyticsRevision && it.ai.enabled) it.copy(aiInsight = summary) else it }
+            _state.update { if (it.currentProjectId == snapshot.currentProjectId && it.token == snapshot.token && it.analyticsRevision == snapshot.analyticsRevision && aiSelectionContext(it) == aiSelectionContext(snapshot) && it.ai.enabled) it.copy(aiInsight = summary) else it }
             loadAiCapabilities(snapshot)
         } catch (_: Throwable) { }
     }
@@ -1158,7 +1227,8 @@ class DashboardViewModel(
     // ---- Ask drawer ----
 
     /** Opens the Ask drawer, optionally pre-filling a drill-down or result-specific question. */
-    fun openAskDrawer(prefill: String? = null) {
+    fun openAskDrawer(prefill: String? = null, context: Map<String, String> = emptyMap()) {
+        _state.update { it.copy(askContext = context) }
         _state.update { it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Open(prefill)), drillDown = null) }
     }
 
@@ -1193,12 +1263,12 @@ class DashboardViewModel(
                 val submission = aiRequest(snapshot, pending.retryQuestion.orEmpty())
                 aiRetryRequest = submission
                 val answer = api.aiAsk(projectId, submission)
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.ai.available && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.sources.joinToString(" · ")))) else it }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && aiSelectionContext(it) == aiSelectionContext(snapshot) && it.ai.available && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.sources.joinToString(" · ")))) else it }
                 loadAiCapabilities(snapshot)
             } catch (e: Throwable) {
                 if (e is ApiException && e.code in setOf("ai_provider_failed", "ai_operation_expired", "ai_operation_conflict")) aiRetryRequest = null
                 loadAiCapabilities(snapshot)
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && aiSelectionContext(it) == aiSelectionContext(snapshot) && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
             }
         }
     }
@@ -1218,15 +1288,15 @@ class DashboardViewModel(
                 return@launch
             }
             try {
-                val submission = aiRetryRequest?.takeIf { it.question == question && it.range == snapshot.range.token && it.anchor == snapshot.analyticsAnchor && it.compare == snapshot.compare } ?: aiRequest(snapshot, question)
+                val submission = aiRetryRequest?.takeIf { it.question == question && it.range == snapshot.range.token && it.anchor == snapshot.analyticsAnchor && it.compare == snapshot.compare && it.context == aiSelectionContext(snapshot) } ?: aiRequest(snapshot, question)
                 aiRetryRequest = submission
                 val answer = api.aiAsk(projectId, submission)
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.ai.available && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.sources.joinToString(" · ")))) else it }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && aiSelectionContext(it) == aiSelectionContext(snapshot) && it.ai.available && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Answer(answer.answer, answer.sources.joinToString(" · ")))) else it }
                 loadAiCapabilities(snapshot)
             } catch (e: Throwable) {
                 if (e is ApiException && e.code in setOf("ai_provider_failed", "ai_operation_expired", "ai_operation_conflict")) aiRetryRequest = null
                 loadAiCapabilities(snapshot)
-                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
+                _state.update { if (askRequest.value === request && it.currentProjectId == snapshot.currentProjectId && it.range == snapshot.range && it.analyticsRevision == snapshot.analyticsRevision && it.token == snapshot.token && aiSelectionContext(it) == aiSelectionContext(snapshot) && it.askDrawer.loading) it.copy(askDrawer = reduceAskDrawer(it.askDrawer, AskDrawerEvent.Fail("", Res.string.ask_error_fetch))) else it }
             }
         }
     }
@@ -1280,35 +1350,27 @@ class DashboardViewModel(
 
     // ---- "Worth a look" dismiss/snooze (Task 21) ----
 
-    /**
-     * Hides the "Worth a look" card [id] immediately and shows an undo toast through the SAME
-     * [showToast] queue every other toast on this screen uses (design_handoff_dashboard_redesign/
-     * README.md > Interactions & Behavior > "Dismiss/snooze": "both remove a 'Worth a look' card
-     * immediately and show an undo toast for ~5s") — no separate/ad-hoc hide mechanism.
-     *
-     * [snooze] only changes the toast's copy/emoji (💤 "Snoozed until tomorrow." vs. 👋 "Hidden.")
-     * — mirroring the design prototype's own `hide(w, snooze)`, where both branches do the exact
-     * same state change and only the toast differs. There is no actual "come back tomorrow" timer:
-     * [id] simply stays out of [DashboardState.dismissedWorthALookIds] once undone, or for the
-     * rest of this session if it isn't.
-     */
+    /** Saves project-local choices; a snooze expires at the next UTC midnight. */
+    @OptIn(kotlin.time.ExperimentalTime::class)
     fun hideWorthALook(id: String, snooze: Boolean) {
-        _state.update { it.copy(dismissedWorthALookIds = it.dismissedWorthALookIds + id) }
-        showToast(
-            Toast(
-                emoji = if (snooze) "💤" else "👋",
-                title = if (snooze) "Snoozed until tomorrow." else "Hidden.",
-                body = if (snooze) "It comes back if it's still true." else "You won't see this one again.",
-                actionLabel = "Undo",
-                action = { undoHideWorthALook(id) },
-            ),
-        )
-    }
-
-    /** Restores a card hidden by [hideWorthALook] and closes its undo toast — the toast's "Undo"
-     *  action button, same pattern every other toast's `action` callback follows. */
-    private fun undoHideWorthALook(id: String) {
-        _state.update { it.copy(dismissedWorthALookIds = it.dismissedWorthALookIds - id) }
-        dismissToast()
+        val project = _state.value.currentProjectId
+        val old = observationPreferences.firstOrNull { it.project == project && it.id == id }
+        if (project != null) {
+            observationPreferences = observationPreferences.filterNot { it.project == project && it.id == id } +
+                ObservationPreference(project, id, analyticsAnchorToday(), snooze)
+            saveObservationPreferences()
+        } else _state.update { it.copy(dismissedWorthALookIds = it.dismissedWorthALookIds + id) }
+        showToast(Toast(
+            emoji = if (snooze) "💤" else "👋",
+            title = if (snooze) "Snoozed until tomorrow." else "Hidden.",
+            body = if (snooze) "It comes back if it's still true." else "Hidden for this project.",
+            actionLabel = "Undo",
+            action = {
+                observationPreferences = observationPreferences.filterNot { it.project == project && it.id == id } + listOfNotNull(old)
+                saveObservationPreferences()
+                if (project == null) _state.update { it.copy(dismissedWorthALookIds = it.dismissedWorthALookIds - id) }
+                dismissToast()
+            },
+        ))
     }
 }

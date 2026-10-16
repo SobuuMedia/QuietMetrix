@@ -67,7 +67,7 @@ class OverviewTopListsScreenshotTest {
                         loading = false,
                         sizeClass = sizeClass,
                         activeFilter = null,
-                        onSelectFilter = {},
+                        onSelectFilter = { _, _ -> },
                         modifier = Modifier.width(960.dp),
                     )
                 }
@@ -88,7 +88,7 @@ class OverviewTopListsScreenshotTest {
                         loading = true,
                         sizeClass = sizeClass,
                         activeFilter = null,
-                        onSelectFilter = {},
+                        onSelectFilter = { _, _ -> },
                         modifier = Modifier.width(960.dp),
                     )
                 }
@@ -109,7 +109,7 @@ class OverviewTopListsScreenshotTest {
                         loading = false,
                         sizeClass = sizeClass,
                         activeFilter = null,
-                        onSelectFilter = {},
+                        onSelectFilter = { _, _ -> },
                         modifier = Modifier.width(960.dp),
                     )
                 }
@@ -133,7 +133,7 @@ class OverviewTopListsScreenshotTest {
                         loading = false,
                         sizeClass = sizeClass,
                         activeFilter = null,
-                        onSelectFilter = {},
+                        onSelectFilter = { _, _ -> },
                         modifier = Modifier.width(960.dp),
                     )
                 }
@@ -154,7 +154,7 @@ class OverviewTopListsScreenshotTest {
                         loading = false,
                         sizeClass = sizeClass,
                         activeFilter = "home",
-                        onSelectFilter = {},
+                        onSelectFilter = { _, _ -> },
                         modifier = Modifier.width(960.dp),
                     )
                 }
@@ -176,7 +176,7 @@ class OverviewTopListsScreenshotTest {
                         loading = false,
                         sizeClass = sizeClass,
                         activeFilter = null,
-                        onSelectFilter = { selected = it },
+                        onSelectFilter = { _, value -> selected = value },
                         modifier = Modifier.width(960.dp),
                     )
                 }
@@ -200,7 +200,7 @@ class OverviewTopListsScreenshotTest {
                         loading = false,
                         sizeClass = sizeClass,
                         activeFilter = null,
-                        onSelectFilter = { selected = it },
+                        onSelectFilter = { _, value -> selected = value },
                         modifier = Modifier.width(960.dp),
                     )
                 }

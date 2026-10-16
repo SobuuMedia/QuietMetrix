@@ -12,7 +12,7 @@ internal data class OverviewCrashValue(val count: Long?, val source: OverviewMea
 
 /** Prefer exact v2 duration; never fall back to a legacy estimate when v2 explicitly suppressed it. */
 internal fun resolveOverviewDuration(v2Milliseconds: Long?, v2State: String?, legacySeconds: Int?): OverviewDurationValue = when {
-    v2State == "reported" && v2Milliseconds != null -> OverviewDurationValue(
+    v2State in setOf("reported", "zero") && v2Milliseconds != null -> OverviewDurationValue(
         (v2Milliseconds / 1_000L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(), OverviewMeasureSource.ReportedV2,
     )
     v2State == "suppressed" -> OverviewDurationValue(null, OverviewMeasureSource.Suppressed)
@@ -26,12 +26,20 @@ internal fun resolveOverviewCrashes(v2Count: Long?, v2State: String?): OverviewC
     else -> OverviewCrashValue(null, OverviewMeasureSource.Unavailable)
 }
 
-/** Selects the latest mature, reportable day-one cohort. Missing data remains unavailable. */
-internal fun computeVitalsNumbers(retention: RetentionResponse?): VitalsNumbers? {
-    if (retention == null) return null
-    val day1 = retention.cohorts
-        .filter { it.day1 != null && it.size > 0 }
-        .maxByOrNull { it.cohortDate }
-        ?.day1
-    return VitalsNumbers(day1)
+/** Size-weighted rate across reportable, mature entry cohorts. Suppressed cohorts are excluded. */
+internal fun weightedRetentionRate(retention: RetentionResponse?, age: Int): Double? {
+    val rows = retention?.cohorts.orEmpty().mapNotNull { cohort ->
+        val rate = when (age) { 1 -> cohort.day1; 7 -> cohort.day7; 30 -> cohort.day30; else -> null }
+        if (rate == null || cohort.size <= 0 || cohort.sizeState == "suppressed" || cohort.dayStates["day_$age"] in setOf("not_mature", "suppressed", "unsupported")) null
+        else cohort.size to rate
+    }
+    val size = rows.sumOf { it.first.toLong() }
+    return if (size == 0L) null else rows.sumOf { it.first * it.second } / size
 }
+
+internal fun computeVitalsNumbers(retention: RetentionResponse?): VitalsNumbers? =
+    retention?.let { VitalsNumbers(weightedRetentionRate(it, 1)) }
+
+/** Only compare values with the same collection semantics. */
+internal fun comparableDuration(current: OverviewDurationValue, previous: OverviewDurationValue): Int? =
+    previous.seconds.takeIf { current.seconds != null && current.source == previous.source }

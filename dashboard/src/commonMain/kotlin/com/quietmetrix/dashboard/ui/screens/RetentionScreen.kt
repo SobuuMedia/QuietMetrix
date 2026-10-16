@@ -174,7 +174,7 @@ internal fun RetentionScreen(viewModel: DashboardViewModel, state: DashboardStat
                 )
                 RetentionVitalCardsRow(vitals, sizeClass, onDrillDown = { kind, key -> viewModel.openDrillDown(kind, key) },
                     compare = state.compare, previous = computeRetentionVitals(state.comparison.retention))
-                CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it }, onInspect = viewModel::openDrillDown,
+                CohortHeatmap(cohorts, onSelectedRowsChange = { comparisonRows = it; viewModel.setSelectedCohorts(it.joinToString(",") { row -> row.id }.ifEmpty { null }) }, onInspect = viewModel::openDrillDown,
                     compare = state.compare, previousCohorts = state.comparison.retention?.cohorts.orEmpty(),
                     periodDays = ((state.range.seconds + 86399) / 86400).toInt())
                 if (comparisonRows.size == 2) {

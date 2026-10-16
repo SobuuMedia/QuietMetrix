@@ -2,9 +2,9 @@ package com.quietmetrix.dashboard.viewmodel
 
 import com.quietmetrix.dashboard.api.AggregatesResponse
 import com.quietmetrix.dashboard.api.BreakdownItem
-import com.quietmetrix.dashboard.api.TopScreen
-import com.quietmetrix.dashboard.api.RetentionResponse
 import com.quietmetrix.dashboard.api.RetentionCohort
+import com.quietmetrix.dashboard.api.RetentionResponse
+import com.quietmetrix.dashboard.api.TopScreen
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -52,5 +52,12 @@ class DrillDownLogicTest {
         val row = com.quietmetrix.dashboard.ui.components.buildCohortHeatmapRows(state.retention!!.cohorts, com.quietmetrix.dashboard.ui.components.CohortGrouping.ByWeek).single()
         assertEquals("80", selectDrillDown(state, "cohort-week", row.id).previousValue)
         assertEquals("80", selectDrillDown(state, "cohort", "2026-W40").previousValue)
+    }
+    @Test fun durationDrawerAlsoRejectsMixedComparisonSources() {
+        val state=DashboardState(compare=true,aggregates=AggregatesResponse(v2VisitDurationMs=60000,v2VisitDurationState="reported"),
+            comparison=ComparisonData(sessions=com.quietmetrix.dashboard.api.SessionsResponse(avgDurationSec=10)))
+        assertEquals(null,selectDrillDown(state,"duration","duration").previousValue)
+        val matched=state.copy(comparison=ComparisonData(aggregates=AggregatesResponse(v2VisitDurationMs=20000,v2VisitDurationState="reported")))
+        assertTrue(selectDrillDown(matched,"duration","duration").previousValue != null)
     }
 }

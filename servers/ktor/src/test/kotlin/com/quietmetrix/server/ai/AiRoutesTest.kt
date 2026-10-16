@@ -6,9 +6,14 @@ import com.quietmetrix.server.config.AppConfig
 import com.quietmetrix.server.config.AuthConfig
 import com.quietmetrix.server.config.DbConfig
 import com.quietmetrix.server.config.RateLimitConfig
+import com.quietmetrix.server.domain.ProjectReportResponse
+import com.quietmetrix.server.domain.ReportCoverage
+import com.quietmetrix.server.domain.ReportMeasure
 import com.quietmetrix.server.persistence.AccessTokenRepository
 import com.quietmetrix.server.persistence.CounterRepository
+import com.quietmetrix.server.persistence.CounterV2Repository
 import com.quietmetrix.server.persistence.ProjectMemberRepository
+import com.quietmetrix.server.persistence.ProjectReportRepository
 import com.quietmetrix.server.persistence.ProjectRepository
 import com.quietmetrix.server.persistence.UserRepository
 import com.quietmetrix.server.routes.configureAskRoutes
@@ -43,6 +48,14 @@ class AiRoutesTest {
     @Test fun `owner member outsider admin operator and unavailable contracts`() = testApplication {
         val config=AppConfig(profile=AppConfig.Profile.CLOUD,ai=AiConfig(operatorKey="operator-secret"),db=DbConfig("unused","unused","unused","unused",1),auth=AuthConfig("test-secret","qm","qm",2),rateLimit=RateLimitConfig(false,10,60))
         val counters=mockk<CounterRepository>()
+        val reports=mockk<ProjectReportRepository>()
+        val v2=mockk<CounterV2Repository>()
+        val report=ProjectReportResponse(scope=mapOf("range" to "7d"),generated_at="2026-10-15T00:00:00Z",coverage=ReportCoverage(),overview=mapOf(
+            "people" to ReportMeasure(value=77,state="reported",unit="installations",source="v2"),
+            "visits" to ReportMeasure(state="suppressed",unit="visits",source="v2"),
+            "visit_duration" to ReportMeasure(state="suppressed",unit="milliseconds",source="v2")))
+        every { reports.read(any(),any(),any(),any(),any(),any(),any()) } returns report
+        every { v2.readTransitions(any(),any(),any(),any(),any()) } returns CounterV2Repository.TransitionRead(false,emptyList())
         val projects=mockk<ProjectRepository>()
         val members=mockk<ProjectMemberRepository>()
         val tokens=mockk<AccessTokenRepository>()
@@ -59,7 +72,7 @@ class AiRoutesTest {
         every { ledger.operator("plans",null,null) } returns buildJsonArray {}
         application {
             install(ContentNegotiation) { json(Json { encodeDefaults=true }) }
-            install(Koin) { modules(module { single { config };single { counters };single { projects };single { members };single { tokens };single { users };single { ledger };single { service } }) }
+            install(Koin) { modules(module { single { reports };single { v2 };single { config };single { counters };single { projects };single { members };single { tokens };single { users };single { ledger };single { service } }) }
             routing { configureAskRoutes() }
         }
         fun jwt(id: Long,role: String="reviewer"): String {
@@ -81,6 +94,7 @@ class AiRoutesTest {
             assertEquals(HttpStatusCode.Unauthorized,client.get("/api/v1/_operator/ai/plans") { bearerAuth(jwt(10,role)) }.status)
         }
         assertEquals(HttpStatusCode.OK,client.get("/api/v1/_operator/ai/plans") { bearerAuth("operator-secret") }.status)
-        verify(exactly=4) { service.generate("10","1",any(),false,any(),any()) }
+        verify(exactly=4) { service.generate("10","1",any(),false,match { it["aggregates"].toString().contains("77") && it["sessions"].toString().contains("suppressed") },any()) }
+        verify(exactly=0) { counters.readCells(any(),any(),any(),any(),any()) }
     }
 }

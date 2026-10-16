@@ -17,6 +17,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.sync.Mutex
@@ -300,7 +301,7 @@ class ApiClient(private val baseUrl: String) {
         return res.body()
     }
 
-    suspend fun projectReport(projectId: String, range: TimeRange, anchor: String? = null, compare: Boolean = false): ProjectReportDto {
+    suspend fun projectReport(projectId: String, range: TimeRange, anchor: String? = null, compare: Boolean = false, filterKind: String = "platform", filterValue: String = "all"): ProjectReportDto {
         val reportRange = when (range) {
             TimeRange.Day1 -> "today"
             TimeRange.Day7 -> "7d"
@@ -312,6 +313,8 @@ class ApiClient(private val baseUrl: String) {
             append("range=").append(reportRange)
             anchor?.let { append("&anchor=").append(it) }
             append("&compare=").append(compare)
+            append("&filter_kind=").append(filterKind.encodeURLParameter())
+            append("&filter_value=").append(filterValue.encodeURLParameter())
         }
         val res = client.get(urlV2("/projects/$projectId/report?$query")) {
             token?.let { header("Authorization", "Bearer $it") }
@@ -444,12 +447,14 @@ class ApiClient(private val baseUrl: String) {
         funnelKey: String,
         range: TimeRange,
         breakdown: String? = null,
+        revision: Int? = null,
         trend: Boolean = false,
         previous: Boolean = false,
         anchor: String? = null,
     ): FunnelResultsResponse {
         val query = buildString {
             append("?range=${range.token}${analyticsWindowQuery(previous, anchor)}")
+            revision?.let { append("&revision=$it") }
             breakdown?.let { append("&breakdown=$it") }
             if (trend) append("&trend=1")
         }

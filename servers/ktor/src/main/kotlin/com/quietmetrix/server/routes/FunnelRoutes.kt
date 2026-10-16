@@ -184,11 +184,18 @@ fun Routing.configureFunnelRoutes() {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Missing funnelKey"))
                     return@get
                 }
-                val funnel = funnelRepo.findByKey(projectId, funnelKey) ?: run {
+                val currentFunnel = funnelRepo.findByKey(projectId, funnelKey) ?: run {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Funnel not found"))
                     return@get
                 }
 
+                val revisionRaw = call.request.queryParameters["revision"]
+                val revision = revisionRaw?.toIntOrNull()
+                if (revisionRaw != null && (revision == null || revision < 1)) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid revision")); return@get
+                }
+                val funnel = if (revision == null) currentFunnel else funnelRepo.findRevision(projectId, funnelKey, revision)
+                if (funnel == null) { call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found", "Revision not found")); return@get }
                 val rangeSeconds = parseRangeSeconds(call.parameters["range"])
                 // Breakdown/trend query params are accepted (unrecognized query params are
                 // otherwise ignored across this API) but no longer honored: aggregate-only
@@ -316,9 +323,9 @@ fun Routing.configureFunnelRoutes() {
                     windowSeconds = request.windowSeconds ?: existing.windowSeconds,
                     source = existing.source,
                     locked = true,
-                    countMode = existing.countMode,
-                    identityScope = existing.identityScope,
-                    correlationProperty = existing.correlationProperty,
+                    countMode = request.countMode ?: existing.countMode,
+                    identityScope = request.identityScope ?: existing.identityScope,
+                    correlationProperty = if (request.countMode == "actor") null else request.correlationProperty ?: existing.correlationProperty,
                 )
                 val result = FunnelValidation.validate(merged, funnelRepo.countActive(projectId) - 1)
                 if (result is FunnelValidationResult.Invalid) {
@@ -330,7 +337,7 @@ fun Routing.configureFunnelRoutes() {
                     projectId, funnelKey,
                     name = request.name, description = request.description,
                     steps = request.steps, windowSeconds = request.windowSeconds,
-                    lock = true,
+                    lock = true, countMode = request.countMode, identityScope = request.identityScope, correlationProperty = request.correlationProperty,
                 )
                 call.respond(funnelRepo.findByKey(projectId, funnelKey)!!.toResponse())
             }

@@ -44,3 +44,13 @@ projectionCheck($platformCounts === [['name'=>'android','count'=>5]], 'platform 
 projectionCheck($countryCounts === [['name'=>'FR','count'=>5]], 'country breakdown uses app-provided country projection');
 projectionCheck($deviceCounts === [['name'=>'phone','count'=>5]], 'device breakdown uses a coarse device-class projection');
 echo "dashboardProjectionTest passed\n";
+
+$selectedRows = [
+ ['metric'=>'unique_window_v2','segment_kind'=>'global','segment_value'=>'all','dims'=>'{"scope_kind":"project","scope_key":"all"}','n'=>20],
+ ['metric'=>'unique_window_v2','segment_kind'=>'country','segment_value'=>'DE','dims'=>'{"scope_kind":"project","scope_key":"all"}','n'=>6],
+ ['metric'=>'unique_window_v2','segment_kind'=>'global','segment_value'=>'all','dims'=>'{"scope_kind":"screen","scope_key":"home"}','n'=>7],
+];
+projectionCheck(array_column(selectCounterProjectionRows($selectedRows,['country','DE']),'n') === [6], 'country report never includes global totals');
+projectionCheck(array_column(selectCounterProjectionRows($selectedRows,['screen','home']),'n') === [7], 'screen report uses screen-unique scope only');
+projectionCheck(selectCounterProjectionRows($selectedRows,['country','FR']) === [], 'absent country never falls back to global');
+projectionCheck(!validReportFilterV2('screen','__exit__') && !validReportFilterV2('country','Germany'), 'invalid report selectors are rejected');

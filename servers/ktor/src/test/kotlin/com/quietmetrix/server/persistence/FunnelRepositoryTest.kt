@@ -79,6 +79,18 @@ class FunnelRepositoryTest {
         assertTrue(snapshots.getValue(2).contains("account_created"))
     }
 
+    @Test fun `counting edits create revisions with original semantics retrievable`() {
+        val (repo,pid)=seed(freshDb())
+        repo.create(pid,definition())
+        repo.update(pid,"signup",null,null,null,3600,true,"attempt","session","attempt_id")
+        assertEquals("actor",repo.findRevision(pid,"signup",1)?.countMode)
+        assertEquals("signup_submitted",repo.findRevision(pid,"signup",1)?.steps?.last()?.event)
+        assertEquals("attempt",repo.findRevision(pid,"signup",2)?.countMode)
+        assertEquals(3600L,repo.findRevision(pid,"signup",2)?.windowSeconds)
+        assertNull(repo.findRevision(pid+1,"signup",1))
+        assertNull(repo.findRevision(pid,"signup",99))
+    }
+
     @Test
     fun `findByKey returns null for a different project`() {
         val db = freshDb()

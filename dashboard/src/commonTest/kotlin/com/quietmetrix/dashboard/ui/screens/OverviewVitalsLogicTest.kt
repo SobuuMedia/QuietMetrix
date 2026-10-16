@@ -11,7 +11,7 @@ class OverviewVitalsLogicTest {
     fun `duration uses reported v2 and identifies legacy estimate`() {
         assertEquals(60, resolveOverviewDuration(60_500, "reported", 10).seconds)
         assertEquals(OverviewMeasureSource.ReportedV2, resolveOverviewDuration(60_500, "reported", 10).source)
-        assertEquals(OverviewMeasureSource.LegacyApproximate, resolveOverviewDuration(null, "insufficient_data", 10).source)
+        assertEquals(OverviewMeasureSource.LegacyApproximate, resolveOverviewDuration(null, null, 10).source)
     }
 
     @Test
@@ -43,13 +43,13 @@ class OverviewVitalsLogicTest {
     }
 
     @Test
-    fun picksMostRecentMatureReportableCohort() {
+    fun weightsAllMatureReportableCohorts() {
         val retention = RetentionResponse(cohorts = listOf(
             RetentionCohort(cohortDate = "2026-01-01", size = 10, day1 = 0.4),
             RetentionCohort(cohortDate = "2026-01-03", size = 12, day1 = 0.6),
             RetentionCohort(cohortDate = "2026-01-02", size = 11, day1 = 0.5),
         ))
-        assertEquals(0.6, computeVitalsNumbers(retention)?.retentionDay1)
+        assertEquals((10 * 0.4 + 12 * 0.6 + 11 * 0.5) / 33, computeVitalsNumbers(retention)?.retentionDay1)
     }
 
     @Test
@@ -59,5 +59,11 @@ class OverviewVitalsLogicTest {
             RetentionCohort(cohortDate = "2026-01-05", size = 10, day1 = null),
         ))
         assertEquals(0.4, computeVitalsNumbers(retention)?.retentionDay1)
+    }
+    @Test fun durationComparisonNeverMixesMeasurementSources() {
+        val exact = resolveOverviewDuration(60_000, "reported", 10)
+        assertNull(comparableDuration(exact, resolveOverviewDuration(null, null, 10)))
+        assertNull(resolveOverviewDuration(null, "insufficient_data", null).seconds)
+        assertEquals(20, comparableDuration(exact, resolveOverviewDuration(20_000, "reported", 5)))
     }
 }

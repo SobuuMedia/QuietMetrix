@@ -58,6 +58,9 @@ data class CreateFunnelRequest(
 
 @Serializable
 data class UpdateFunnelRequest(
+    @SerialName("count_mode") val countMode: String? = null,
+    @SerialName("identity_scope") val identityScope: String? = null,
+    @SerialName("correlation_property") val correlationProperty: String? = null,
     val name: String? = null,
     val description: String? = null,
     val steps: List<FunnelStepDefinition>? = null,

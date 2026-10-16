@@ -70,6 +70,18 @@ class FunnelRepository(private val database: Database) {
             .singleOrNull()
     }
 
+    /** Historical definitions retain their original labels and counting semantics. */
+    fun findRevision(projectId: Long, funnelKey: String, revision: Int): FunnelRecord? = transaction(database) {
+        val current = findByKey(projectId, funnelKey) ?: return@transaction null
+        val row = FunnelDefinitionRevisions.selectAll().where {
+            (FunnelDefinitionRevisions.projectId eq projectId) and (FunnelDefinitionRevisions.funnelKey eq funnelKey) and
+                (FunnelDefinitionRevisions.revision eq revision)
+        }.singleOrNull() ?: return@transaction current.takeIf { it.revision == revision }
+        current.copy(revision = revision, steps = json.decodeFromString(row[FunnelDefinitionRevisions.steps]),
+            windowSeconds = row[FunnelDefinitionRevisions.windowSeconds], countMode = row[FunnelDefinitionRevisions.countMode],
+            identityScope = row[FunnelDefinitionRevisions.identityScope], correlationProperty = row[FunnelDefinitionRevisions.correlationProperty])
+    }
+
     fun listActive(projectId: Long): List<FunnelRecord> = transaction(database) {
         Funnels.selectAll()
             .where { (Funnels.projectId eq projectId) and (Funnels.archivedAt.isNull()) }
@@ -119,6 +131,7 @@ class FunnelRepository(private val database: Database) {
         steps: List<FunnelStepDefinition>?,
         windowSeconds: Long?,
         lock: Boolean,
+        countMode: String? = null, identityScope: String? = null, correlationProperty: String? = null,
     ): Boolean {
         return transaction(database) {
             val existing = Funnels.selectAll().where {
@@ -126,7 +139,11 @@ class FunnelRepository(private val database: Database) {
             }.singleOrNull() ?: return@transaction false
             val nextSteps = steps ?: json.decodeFromString(existing[Funnels.steps])
             val nextWindow = windowSeconds ?: existing[Funnels.windowSeconds]
-            val semanticChange = nextSteps != json.decodeFromString<List<FunnelStepDefinition>>(existing[Funnels.steps]) ||
+            val nextMode = countMode ?: existing[Funnels.countMode]
+            val nextScope = identityScope ?: existing[Funnels.identityScope]
+            val nextCorrelation = if (nextMode == "actor") null else correlationProperty ?: existing[Funnels.correlationProperty]
+            val semanticChange = nextMode != existing[Funnels.countMode] || nextScope != existing[Funnels.identityScope] ||
+                nextCorrelation != existing[Funnels.correlationProperty] || nextSteps != json.decodeFromString<List<FunnelStepDefinition>>(existing[Funnels.steps]) ||
                 nextWindow != existing[Funnels.windowSeconds]
             val nextRevision = existing[Funnels.revision] + if (semanticChange) 1 else 0
             Funnels.update({
@@ -136,12 +153,15 @@ class FunnelRepository(private val database: Database) {
                 if (description != null) it[Funnels.description] = description
                 if (steps != null) it[Funnels.steps] = json.encodeToString(steps)
                 if (windowSeconds != null) it[Funnels.windowSeconds] = windowSeconds
+                it[Funnels.countMode] = nextMode
+                it[Funnels.identityScope] = nextScope
+                it[Funnels.correlationProperty] = nextCorrelation
                 it[Funnels.revision] = nextRevision
                 if (lock) it[Funnels.locked] = true
                 it[updatedAt] = LocalDateTime.now()
             }
             if (semanticChange) insertRevision(projectId, funnelKey, nextRevision, nextSteps, nextWindow,
-                existing[Funnels.countMode], existing[Funnels.identityScope], existing[Funnels.correlationProperty])
+                nextMode, nextScope, nextCorrelation)
             true
         }
     }

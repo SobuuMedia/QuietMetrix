@@ -3,7 +3,21 @@ require_once __DIR__ . '/../counterRegistryV2.php';
 
 /** Select exactly one counter projection, with cell-by-cell fallback for rows written before
  * the projection protocol was enabled. */
-function selectCounterProjectionRows(array $rows, string $platform): array {
+function selectCounterProjectionRows(array $rows, string|array $platform): array {
+    if (is_array($platform)) {
+        [$kind, $value] = $platform;
+        if ($kind === 'country') return array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? '') === 'country' && ($row['segment_value'] ?? '') === $value));
+        if ($kind === 'screen') return array_values(array_filter(selectCounterProjectionRows($rows, 'all'), static function($row) use ($value) {
+            $d = json_decode($row['dims'], true) ?: [];
+            return match ($row['metric'] ?? '') {
+                'unique_window_v2', 'unique_hour_v2' => ($d['scope_kind'] ?? '') === 'screen' && ($d['scope_key'] ?? '') === $value,
+                'screen_view_v2', 'screen_dwell_ms_v2', 'screen_dwell_sample_v2' => ($d['screen'] ?? '') === $value,
+                'witness_window_v2' => true,
+                default => false,
+            };
+        }));
+        return [];
+    }
     $global = array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? 'global') === 'global' && ($row['segment_value'] ?? 'all') === 'all'));
     if ($platform === 'all') return $global;
     $specific = array_values(array_filter($rows, static fn($row) => ($row['segment_kind'] ?? 'global') === 'platform' && ($row['segment_value'] ?? '') === $platform));
@@ -13,16 +27,30 @@ function selectCounterProjectionRows(array $rows, string $platform): array {
     return array_merge($specific, $fallback);
 }
 
+function reportPlatformV2(string|array $selection): string { return is_array($selection) ? 'all' : $selection; }
+function reportUniqueScopeV2(array $dims, string|array $selection): bool {
+    $screen = is_array($selection) && $selection[0] === 'screen';
+    return ($dims['scope_kind'] ?? '') === ($screen ? 'screen' : 'project') && ($dims['scope_key'] ?? '') === ($screen ? $selection[1] : 'all');
+}
+function validReportFilterV2(string $kind, string $value): bool {
+    return match ($kind) {
+        'platform' => in_array($value, ['all','android','ios','web','desktop','unknown'], true),
+        'country' => $value === 'unknown' || preg_match('/^[A-Z]{2}$/D', $value) === 1,
+        'screen' => preg_match('~^[A-Za-z0-9_.:/-]{1,128}$~D', $value) === 1 && !in_array($value, ['all','__exit__'], true),
+        default => false,
+    };
+}
+
 /** Count unique witnesses for one exact metric group/window. Old rows are handled conservatively
  * by using the largest per-day distinct count, never adding daily populations together. */
-function reportMetricWitnessCountV2(PDO $db, string $projectId, string $metric, array $dims, DateTimeImmutable $start, DateTimeImmutable $end, string $platform, array $legacyRows,
+function reportMetricWitnessCountV2(PDO $db, string $projectId, string $metric, array $dims, DateTimeImmutable $start, DateTimeImmutable $end, string|array $platform, array $legacyRows,
     ?DateTimeImmutable $windowEnd = null, ?int $windowDays = null, ?DateTimeImmutable $observedStart = null, ?DateTimeImmutable $observedEnd = null): int {
     $checked = counterV2Validate($metric, $dims);
     if (!($checked['valid'] ?? false)) return 0;
     $windowEnd ??= $end; $days = $windowDays ?? ((int)$start->diff($end)->format('%a') + 1);
     $observedStart ??= $start; $observedEnd ??= $end;
     $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric='witness_window_v2' AND day BETWEEN ? AND ? AND hour=-1 AND (?='all' OR platform=?)");
-    $stmt->execute([$projectId, $observedStart->format('Y-m-d'), $observedEnd->format('Y-m-d'), $platform, $platform]);
+    $stmt->execute([$projectId, $observedStart->format('Y-m-d'), $observedEnd->format('Y-m-d'), reportPlatformV2($platform), reportPlatformV2($platform)]);
     $witnesses = array_values(array_filter(selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform), static function ($row) use ($checked, $metric, $days, $windowEnd): bool {
         $d = json_decode($row['dims'], true);
         return is_array($d) && ($d['target_metric'] ?? null) === $metric && ($d['target_hash'] ?? null) === $checked['hash'] &&
@@ -41,28 +69,36 @@ function reportMetricWitnessCountV2(PDO $db, string $projectId, string $metric, 
  * of daily People values. */
 function handleProjectReportV2(string $projectId): void {
     requireAnalyticsAccess($projectId);
-    $range = $_GET['range'] ?? '7d';
+    try { jsonResponse(200, readProjectReportV2($projectId, $_GET)); }
+    catch (InvalidArgumentException $e) { errorResponse(400, 'bad_request', $e->getMessage()); }
+}
+
+function readProjectReportV2(string $projectId, array $query): array {
+    $range = $query['range'] ?? '7d';
     $days = ['today' => 1, '7d' => 7, '30d' => 30, '90d' => 90][$range] ?? null;
-    if ($days === null) { errorResponse(400, 'bad_request', 'range must be today, 7d, 30d, or 90d'); return; }
+    if ($days === null) { throw new InvalidArgumentException('range must be today, 7d, 30d, or 90d'); }
     $today = new DateTimeImmutable('today', new DateTimeZone('UTC'));
-    $anchorRaw = $_GET['anchor'] ?? $today->format('Y-m-d');
+    $anchorRaw = $query['anchor'] ?? $today->format('Y-m-d');
     $anchor = DateTimeImmutable::createFromFormat('!Y-m-d', $anchorRaw, new DateTimeZone('UTC'));
-    if (!$anchor || $anchor->format('Y-m-d') !== $anchorRaw || $anchor > $today) { errorResponse(400, 'bad_request', 'anchor must be a real UTC date no later than today'); return; }
-    $platform = $_GET['platform'] ?? 'all';
-    if (!in_array($platform, ['all','android','ios','web','desktop'], true)) { errorResponse(400, 'bad_request', 'Invalid platform'); return; }
-    $compareRaw = $_GET['compare'] ?? 'false';
-    if (!in_array($compareRaw, ['true', 'false'], true)) { errorResponse(400, 'bad_request', 'compare must be true or false'); return; }
+    if (!$anchor || $anchor->format('Y-m-d') !== $anchorRaw || $anchor > $today) { throw new InvalidArgumentException('anchor must be a real UTC date no later than today'); }
+    $platform = $query['platform'] ?? 'all';
+    if (!in_array($platform, ['all','android','ios','web','desktop'], true)) { throw new InvalidArgumentException('Invalid platform'); }
+    $kind = $query['filter_kind'] ?? 'platform'; $value = $query['filter_value'] ?? $platform;
+    if (!validReportFilterV2($kind, $value)) throw new InvalidArgumentException('Invalid report filter');
+    $platform = $kind === 'platform' ? $value : [$kind, $value];
+    $compareRaw = $query['compare'] ?? 'false';
+    if (!in_array($compareRaw, ['true', 'false'], true)) { throw new InvalidArgumentException('compare must be true or false'); }
     $compare = $compareRaw === 'true';
     $from = $range === 'today' ? $anchor : $anchor->modify('-' . ($days - 1) . ' days');
     $db = getDb();
     $peopleForWindow = static function (DateTimeImmutable $end, int $length) use ($db, $projectId, $platform): array {
         $start = $end->modify('-' . ($length - 1) . ' days');
         $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric='unique_window_v2' AND hour=-1 AND day BETWEEN ? AND ? AND (?='all' OR platform=?)");
-        $stmt->execute([$projectId, $start->format('Y-m-d'), $end->format('Y-m-d'), $platform, $platform]);
+        $stmt->execute([$projectId, $start->format('Y-m-d'), $end->format('Y-m-d'), reportPlatformV2($platform), reportPlatformV2($platform)]);
         $rows = [];
         foreach (selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform) as $row) {
             $dims = json_decode($row['dims'], true);
-            if (is_array($dims) && ($dims['scope_kind'] ?? null) === 'project' && ($dims['scope_key'] ?? null) === 'all' &&
+            if (is_array($dims) && reportUniqueScopeV2($dims, $platform) &&
                 (int)($dims['days'] ?? 0) === $length && ($dims['end_day'] ?? null) === $end->format('Y-m-d')) $rows[] = $row;
         }
         $value = array_sum(array_map(static fn($row) => (int)$row['n'], $rows));
@@ -79,7 +115,7 @@ function handleProjectReportV2(string $projectId): void {
         $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric=? AND day BETWEEN ? AND ? AND $hourCondition AND (?='all' OR platform=?)");
         $params = [$projectId, $metric, $start->format('Y-m-d'), $end->format('Y-m-d')];
         if ($resolution === 'today' && $hour !== null) $params[] = $hour;
-        array_push($params, $platform, $platform);
+        array_push($params, reportPlatformV2($platform), reportPlatformV2($platform));
         $stmt->execute($params);
         return selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform);
     };
@@ -107,15 +143,18 @@ function handleProjectReportV2(string $projectId): void {
         return ['value' => $value, 'state' => $value === 0 ? 'zero' : 'reported', 'unit' => $unit, 'source' => 'v2', 'contributors' => $eligiblePeople['value']];
     };
     $activityMeasure = static fn(string $metric, string $unit): array => $measureFromRows($activityCells($metric, $from, $anchor, $range), $people, $unit, $metric, $from, $anchor);
-    $durationRows = $activityCells('visit_duration_ms_v2', $from, $anchor, $range);
-    $completionRows = $activityCells('visit_complete_v2', $from, $anchor, $range);
-    $durationTotal = array_sum(array_map(static fn($row) => (int)$row['n'], $durationRows));
-    $completionCount = array_sum(array_map(static fn($row) => (int)$row['n'], $completionRows));
-    $visitDuration = !$durationRows || $completionCount === 0
-        ? ['value' => null, 'state' => 'insufficient_data', 'unit' => 'milliseconds', 'source' => 'v2']
-        : ($completionCount < 5
-            ? ['value' => null, 'state' => 'suppressed', 'unit' => 'milliseconds', 'source' => 'v2']
-            : ['value' => intdiv($durationTotal, $completionCount), 'state' => 'reported', 'unit' => 'milliseconds', 'source' => 'v2', 'contributors' => $completionCount]);
+    $durationMeasure = static function(DateTimeImmutable $start, DateTimeImmutable $end, ?int $hour = null) use ($activityCells, $range, $db, $projectId, $platform): array {
+        $durationRows=$activityCells('visit_duration_ms_v2',$start,$end,$range,$hour);
+        $completionRows=$activityCells('visit_complete_v2',$start,$end,$range,$hour);
+        $samples=array_sum(array_column($completionRows,'n'));
+        $empty=['value'=>null,'state'=>'insufficient_data','unit'=>'milliseconds','source'=>'v2'];
+        if (!$durationRows || $samples===0) return $empty;
+        $completionDims=json_decode($completionRows[0]['dims'],true) ?: [];
+        if ($samples<5 || reportMetricWitnessCountV2($db,$projectId,'visit_complete_v2',$completionDims,$start,$end,$platform,$completionRows)<5 ||
+            reportMetricWitnessCountV2($db,$projectId,'visit_duration_ms_v2',[],$start,$end,$platform,$durationRows)<5) return array_merge($empty,['state'=>'suppressed']);
+        return ['value'=>intdiv((int)array_sum(array_column($durationRows,'n')),(int)$samples),'state'=>'reported','unit'=>'milliseconds','source'=>'v2','contributors'=>$samples];
+    };
+    $visitDuration=$durationMeasure($from,$anchor);
     $overview = [
         'people' => $people,
         'visits' => $activityMeasure('visit_start_v2', 'visits'),
@@ -130,10 +169,10 @@ function handleProjectReportV2(string $projectId): void {
         $lastHour = $hourLimit ?? ($start->format('Y-m-d') === $today->format('Y-m-d') ? (int)gmdate('G') : 23);
         for ($hour = 0; $hour <= $lastHour; $hour++) {
             $hourQuery = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric='unique_hour_v2' AND day=? AND hour=? AND (?='all' OR platform=?)");
-            $hourQuery->execute([$projectId, $start->format('Y-m-d'), $hour, $platform, $platform]);
-            $rows = array_values(array_filter(selectCounterProjectionRows($hourQuery->fetchAll(PDO::FETCH_ASSOC), $platform), static function ($row): bool {
+            $hourQuery->execute([$projectId, $start->format('Y-m-d'), $hour, reportPlatformV2($platform), reportPlatformV2($platform)]);
+            $rows = array_values(array_filter(selectCounterProjectionRows($hourQuery->fetchAll(PDO::FETCH_ASSOC), $platform), static function ($row) use ($platform): bool {
                 $dims = json_decode($row['dims'], true);
-                return is_array($dims) && ($dims['scope_kind'] ?? null) === 'project' && ($dims['scope_key'] ?? null) === 'all';
+                return is_array($dims) && reportUniqueScopeV2($dims, $platform);
             }));
             $witnesses = array_sum(array_map(static fn($row) => (int)$row['contributors'], $rows));
             $measure = !$rows
@@ -172,22 +211,11 @@ function handleProjectReportV2(string $projectId): void {
             return $bin;
         }, $bins);
     };
-    $durationForBins = static function (array $bins) use ($activityCells, $range): array {
-        return array_map(static function (array $bin) use ($activityCells, $range): array {
-            $start = new DateTimeImmutable($bin['start_day'], new DateTimeZone('UTC'));
-            $end = new DateTimeImmutable($bin['end_day'], new DateTimeZone('UTC'));
-            $durations = $activityCells('visit_duration_ms_v2', $start, $end, $range, $bin['hour'] ?? null);
-            $completions = $activityCells('visit_complete_v2', $start, $end, $range, $bin['hour'] ?? null);
-            $totalMs = array_sum(array_map(static fn($row) => (int)$row['n'], $durations));
-            $samples = array_sum(array_map(static fn($row) => (int)$row['n'], $completions));
-            $measure = !$durations || $samples === 0
-                ? ['value' => null, 'state' => 'insufficient_data', 'unit' => 'milliseconds', 'source' => 'v2']
-                : ($samples < 5
-                    ? ['value' => null, 'state' => 'suppressed', 'unit' => 'milliseconds', 'source' => 'v2']
-                    : ['value' => intdiv($totalMs, $samples), 'state' => 'reported', 'unit' => 'milliseconds', 'source' => 'v2', 'contributors' => $samples]);
-            $bin['measures']['visit_duration'] = $measure;
+    $durationForBins = static function(array $bins) use ($durationMeasure): array {
+        return array_map(static function(array $bin) use ($durationMeasure): array {
+            $bin['measures']['visit_duration']=$durationMeasure(new DateTimeImmutable($bin['start_day'],new DateTimeZone('UTC')),new DateTimeImmutable($bin['end_day'],new DateTimeZone('UTC')),$bin['hour'] ?? null);
             return $bin;
-        }, $bins);
+        },$bins);
     };
     $charts = [
         'people' => $peopleBins,
@@ -212,6 +240,7 @@ function handleProjectReportV2(string $projectId): void {
             ? ['value' => null, 'state' => 'unsupported', 'unit' => 'installations', 'source' => 'v2']
             : $peopleForWindow($from->modify('-1 day'), $days),
     ];
+    if ($compare) $comparison['visit_duration'] = $range === 'today' ? ['value'=>null,'state'=>'unsupported','unit'=>'milliseconds','source'=>'v2'] : $durationMeasure($previousFrom,$previousTo);
     $coverageQuery = $db->prepare('SELECT MIN(day) AS oldest_day, MAX(day) AS newest_day, MAX(updated_at) AS last_received_at, MAX(hour >= 0) AS has_hourly, GROUP_CONCAT(DISTINCT sdk_version ORDER BY sdk_version) AS sdk_versions FROM counter_cells_v2 WHERE project_id=? AND day BETWEEN ? AND ?');
     $coverageQuery->execute([$projectId, $from->format('Y-m-d'), $anchor->format('Y-m-d')]);
     $coverage = $coverageQuery->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -220,8 +249,8 @@ function handleProjectReportV2(string $projectId): void {
     $legacyPresent = $legacy->fetchColumn() !== false;
     $v2Present = $coverage['newest_day'] !== null;
     $coverageSource = $v2Present && $legacyPresent ? 'mixed' : ($v2Present ? 'v2' : ($legacyPresent ? 'legacy' : 'v2'));
-    jsonResponse(200, [
-        'scope' => ['range' => $range, 'anchor' => $anchor->format('Y-m-d'), 'platform' => $platform, 'timezone' => 'UTC', 'compare' => $compareRaw],
+    return [
+        'scope' => ['range' => $range, 'anchor' => $anchor->format('Y-m-d'), 'platform' => reportPlatformV2($platform), 'filter_kind' => $kind, 'filter_value' => $value, 'timezone' => 'UTC', 'compare' => $compareRaw],
         'generated_at' => gmdate('Y-m-d\\TH:i:s\\Z'),
         'last_received_at' => $coverage['last_received_at'] ?: null,
         'coverage' => ['source' => $coverageSource, 'resolution' => ($range === 'today' && (int)($coverage['has_hourly'] ?? 0) === 1 ? 'hourly' : 'daily'), 'oldest_day' => $coverage['oldest_day'] ?: null, 'newest_day' => $coverage['newest_day'] ?: null, 'sdk_versions' => array_values(array_filter(explode(',', $coverage['sdk_versions'] ?? ''), static fn($v) => $v !== '' && $v !== 'unknown')), 'legacy_present' => $legacyPresent],
@@ -234,12 +263,12 @@ function handleProjectReportV2(string $projectId): void {
         'retention_cohorts' => reportRetentionCohortsV2($db, $projectId, $from, $anchor, $platform),
         'comparison_retention_cohorts' => $compare ? reportRetentionCohortsV2($db, $projectId, $previousFrom, $previousTo, $platform) : [],
         'definitions' => reportDefinitionCatalogV2($db, $projectId, $from, $anchor, $platform),
-    ]);
+    ];
 }
 
-function reportRetentionCohortsV2(PDO $db, string $projectId, DateTimeImmutable $from, DateTimeImmutable $to, string $platform): array {
+function reportRetentionCohortsV2(PDO $db, string $projectId, DateTimeImmutable $from, DateTimeImmutable $to, string|array $platform): array {
     $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric IN ('retention_entry_v2','retention_return_v2') AND day BETWEEN ? AND ? AND hour=-1 AND (?='all' OR platform=?)");
-    $stmt->execute([$projectId, $from->format('Y-m-d'), $to->format('Y-m-d'), $platform, $platform]);
+    $stmt->execute([$projectId, $from->format('Y-m-d'), $to->format('Y-m-d'), reportPlatformV2($platform), reportPlatformV2($platform)]);
     $entries = [];
     $returns = [];
     foreach (selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform) as $row) {
@@ -274,9 +303,9 @@ function reportRetentionCohortsV2(PDO $db, string $projectId, DateTimeImmutable 
     return $result;
 }
 
-function reportDefinitionCatalogV2(PDO $db, string $projectId, DateTimeImmutable $from, DateTimeImmutable $to, string $platform): array {
+function reportDefinitionCatalogV2(PDO $db, string $projectId, DateTimeImmutable $from, DateTimeImmutable $to, string|array $platform): array {
     $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,contributors FROM counter_cells_v2 WHERE project_id=? AND metric IN ('screen_view_v2','event_v2') AND day BETWEEN ? AND ? AND hour=-1 AND (?='all' OR platform=?)");
-    $stmt->execute([$projectId, $from->format('Y-m-d'), $to->format('Y-m-d'), $platform, $platform]);
+    $stmt->execute([$projectId, $from->format('Y-m-d'), $to->format('Y-m-d'), reportPlatformV2($platform), reportPlatformV2($platform)]);
     $totals = ['screens' => [], 'events' => []];
     $rows = selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform);
     $groups = [];
@@ -307,9 +336,9 @@ function reportDefinitionCatalogV2(PDO $db, string $projectId, DateTimeImmutable
 }
 
 /** Mature entry cohorts only; a missing return row is a true zero only for a mature cohort. */
-function reportRetentionMeasuresV2(PDO $db, string $projectId, DateTimeImmutable $from, DateTimeImmutable $to, string $platform): array {
+function reportRetentionMeasuresV2(PDO $db, string $projectId, DateTimeImmutable $from, DateTimeImmutable $to, string|array $platform): array {
     $stmt = $db->prepare("SELECT metric,day,hour,dims_hash,platform,segment_kind,segment_value,dims,n,contributors FROM counter_cells_v2 WHERE project_id=? AND metric IN ('retention_entry_v2','retention_return_v2') AND day BETWEEN ? AND ? AND hour=-1 AND (?='all' OR platform=?)");
-    $stmt->execute([$projectId, $from->format('Y-m-d'), $to->format('Y-m-d'), $platform, $platform]);
+    $stmt->execute([$projectId, $from->format('Y-m-d'), $to->format('Y-m-d'), reportPlatformV2($platform), reportPlatformV2($platform)]);
     $entries = [];
     $returns = [];
     foreach (selectCounterProjectionRows($stmt->fetchAll(PDO::FETCH_ASSOC), $platform) as $row) {

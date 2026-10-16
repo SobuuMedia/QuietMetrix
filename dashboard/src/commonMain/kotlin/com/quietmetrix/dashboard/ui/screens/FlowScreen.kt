@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -156,6 +157,7 @@ internal fun FlowScreen(viewModel: DashboardViewModel, state: DashboardState, si
             val startScreens = remember(transitions) { topStartScreens(transitions) }
             // Start at the highest-volume root. Each following node is explicit user intent.
             var flowPath by remember(transitions) { mutableStateOf(defaultFlowPath(transitions)) }
+            LaunchedEffect(flowPath) { viewModel.setFlowNode(flowPath.lastOrNull()) }
             val projectName = state.projects.firstOrNull { it.id == state.currentProjectId }?.name.orEmpty()
             val rangeLabel = stringResource(state.range.labelRes)
             val platformResource = when (state.flowPlatform) {

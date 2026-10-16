@@ -72,9 +72,15 @@ internal fun selectDrillDown(state: DashboardState, kind: String, key: String): 
         buildCohortHeatmapRows(previous.retention?.cohorts.orEmpty(), CohortGrouping.ByWeek)
             .firstOrNull { target != null && epochDayFromIsoOrNull(it.label) == target }?.id ?: ""
     } else key
+    if (kind == "duration" && durationValue(state).source != durationValue(previous).source) return selected
     val prior = resolveDrillDown(previous, kind, previousKey, previousPeriod = true)
     return selected.copy(previousValue = prior.value.takeIf { prior.available })
 }
+
+private fun durationValue(state: DashboardState) = com.quietmetrix.dashboard.ui.screens.resolveOverviewDuration(
+    state.aggregates?.v2VisitDurationMs, state.aggregates?.v2VisitDurationState,
+    state.sessions?.avgDurationSec.takeIf { state.overviewFilter == null },
+)
 
 /** Resolves a stable metric key and retains missing, suppressed, and genuinely zero values. */
 private fun resolveDrillDown(state: DashboardState, kind: String, key: String, previousPeriod: Boolean = false): DrillDownContent {
@@ -112,7 +118,7 @@ private fun resolveDrillDown(state: DashboardState, kind: String, key: String, p
             explanation = if (kind == "sessions") Res.string.drill_sessions_detail else Res.string.drill_duration_detail
             breakdownTitle = Res.string.drill_daily
             rows = state.sessions?.dailySessions.orEmpty().map { DrillDownRow(it.day, formatCount(it.total), it.total.toFloat()) }
-            if (kind == "sessions") state.sessions?.totalSessions else state.sessions?.avgDurationSec
+            if (kind == "sessions") state.sessions?.totalSessions else durationValue(state).seconds
         }
         "errors" -> {
             title = Res.string.kpi_errors

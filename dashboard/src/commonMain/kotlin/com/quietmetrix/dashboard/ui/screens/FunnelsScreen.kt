@@ -1,5 +1,6 @@
 package com.quietmetrix.dashboard.ui.screens
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -12,30 +13,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,14 +40,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.quietmetrix.dashboard.api.CreateFunnelRequest
 import com.quietmetrix.dashboard.api.FunnelDto
 import com.quietmetrix.dashboard.api.FunnelResultsResponse
-import com.quietmetrix.dashboard.api.FunnelStepDto
 import com.quietmetrix.dashboard.api.FunnelStepResultDto
 import com.quietmetrix.dashboard.format.formatCount
 import com.quietmetrix.dashboard.format.formatPercent
@@ -67,32 +59,16 @@ import com.quietmetrix.dashboard.resources.col_count
 import com.quietmetrix.dashboard.resources.col_dropped
 import com.quietmetrix.dashboard.resources.col_step
 import com.quietmetrix.dashboard.resources.funnel_badge_sdk
-import com.quietmetrix.dashboard.resources.funnel_builder_add_step
-import com.quietmetrix.dashboard.resources.funnel_builder_create
-import com.quietmetrix.dashboard.resources.funnel_builder_description
-import com.quietmetrix.dashboard.resources.funnel_builder_event
-import com.quietmetrix.dashboard.resources.funnel_builder_intro
-import com.quietmetrix.dashboard.resources.funnel_builder_key
-import com.quietmetrix.dashboard.resources.funnel_builder_key_format
-import com.quietmetrix.dashboard.resources.funnel_builder_move_down
-import com.quietmetrix.dashboard.resources.funnel_builder_move_up
-import com.quietmetrix.dashboard.resources.funnel_builder_name
-import com.quietmetrix.dashboard.resources.funnel_builder_remove_step
-import com.quietmetrix.dashboard.resources.funnel_builder_screen_optional
-import com.quietmetrix.dashboard.resources.funnel_builder_step_key
-import com.quietmetrix.dashboard.resources.funnel_builder_step_name
-import com.quietmetrix.dashboard.resources.funnel_builder_step_number
-import com.quietmetrix.dashboard.resources.funnel_builder_steps
-import com.quietmetrix.dashboard.resources.funnel_builder_title
-import com.quietmetrix.dashboard.resources.funnel_builder_window_days
 import com.quietmetrix.dashboard.resources.funnel_card_steps
 import com.quietmetrix.dashboard.resources.funnel_copy_csv
 import com.quietmetrix.dashboard.resources.funnel_copy_csv_copied
+import com.quietmetrix.dashboard.resources.funnel_definition_meta
 import com.quietmetrix.dashboard.resources.funnel_delete
 import com.quietmetrix.dashboard.resources.funnel_delete_confirm_body
 import com.quietmetrix.dashboard.resources.funnel_delete_confirm_title
 import com.quietmetrix.dashboard.resources.funnel_dropoff_message
 import com.quietmetrix.dashboard.resources.funnel_dropoff_why
+import com.quietmetrix.dashboard.resources.funnel_edit
 import com.quietmetrix.dashboard.resources.funnel_editor_cancel
 import com.quietmetrix.dashboard.resources.funnel_empty_intro
 import com.quietmetrix.dashboard.resources.funnel_empty_title
@@ -107,8 +83,9 @@ import com.quietmetrix.dashboard.resources.funnel_kpi_success_rate
 import com.quietmetrix.dashboard.resources.funnel_new_action
 import com.quietmetrix.dashboard.resources.funnel_no_entrants
 import com.quietmetrix.dashboard.resources.funnel_none_selected
+import com.quietmetrix.dashboard.resources.funnel_revision
+import com.quietmetrix.dashboard.resources.funnel_view_definition
 import com.quietmetrix.dashboard.resources.ic_check
-import com.quietmetrix.dashboard.resources.ic_close
 import com.quietmetrix.dashboard.resources.ic_copy
 import com.quietmetrix.dashboard.resources.ic_funnel
 import com.quietmetrix.dashboard.resources.ic_plus
@@ -124,10 +101,6 @@ import com.quietmetrix.dashboard.ui.components.InlineErrorNotice
 import com.quietmetrix.dashboard.ui.components.KpiCard
 import com.quietmetrix.dashboard.ui.components.KpiSkeleton
 import com.quietmetrix.dashboard.ui.components.MaxWidthContainer
-import com.quietmetrix.dashboard.ui.components.ModalFooter
-import com.quietmetrix.dashboard.ui.components.ModalFooterAction
-import com.quietmetrix.dashboard.ui.components.ModalFooterEmphasis
-import com.quietmetrix.dashboard.ui.components.ModalShell
 import com.quietmetrix.dashboard.ui.components.Pill
 import com.quietmetrix.dashboard.ui.components.PillVariant
 import com.quietmetrix.dashboard.ui.components.ResponsiveRowOrColumn
@@ -149,21 +122,14 @@ import androidx.compose.material3.Text as MaterialText
 import com.quietmetrix.dashboard.ui.components.SelectableText as Text
 import com.quietmetrix.dashboard.ui.components.table.Column as TableColumn
 
-/**
- * Funnels can be declared in app code or created from this dashboard. Dashboard definitions are
- * persisted through the existing project CRUD API; SDK delivery/evaluation of those definitions
- * is being completed in the separate remote-revision work.
- */
+/** Dashboard and SDK funnel definitions share the existing authenticated APIs. */
 @Composable
 fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: WindowSizeClass) {
     var pendingDelete by remember { mutableStateOf<FunnelDto?>(null) }
-    // Local, not-yet-globally-wired toggle — same convention `DashboardShell.kt`'s own
-    // `expertOn`/`compareOn` establish ("no Compare/Expert-mode state exists on DashboardState"):
-    // the header's 🤓 Expert pill isn't plumbed to any screen yet, so this screen keeps its own
-    // local flag for Task 28's "Expert mode adds a raw step table" requirement rather than
-    // blocking on that larger, out-of-scope app-wide wiring.
     val whyQuestion = stringResource(Res.string.ask_funnel_question)
     val expertOn = state.expertMode
+    var editingFunnel by remember { mutableStateOf<FunnelDto?>(null) }
+    var viewingFunnel by remember { mutableStateOf<FunnelDto?>(null) }
     var newFunnelDialogOpen by remember { mutableStateOf(false) }
 
     val funnel = currentFunnel(state.funnels, state.selectedFunnelKey)
@@ -190,7 +156,7 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                 }
                 ContentState.Empty -> FunnelsGettingStarted(
                     canWrite = state.canWriteExperiments,
-                    onCreate = { newFunnelDialogOpen = true },
+                    onCreate = { viewModel.clearFunnelSaveError(); newFunnelDialogOpen = true },
                 )
                 ContentState.Data -> {
                     if (funnel == null) {
@@ -198,18 +164,30 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
                             EmptyState(Res.drawable.ic_funnel, Res.string.funnel_none_selected, Modifier.padding(16.dp))
                         }
                     } else {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (revision in 1..funnel.revision) Pill(
+                                text = stringResource(Res.string.funnel_revision, revision),
+                                variant = if ((state.selectedFunnelRevision ?: funnel.revision) == revision) PillVariant.Lime else PillVariant.Neutral,
+                                onClick = { viewModel.selectFunnelRevision(revision) },
+                            )
+                            TextButton(onClick = { viewingFunnel = funnelForResults(funnel, state.funnelResults) }) { MaterialText(stringResource(Res.string.funnel_view_definition)) }
+                            if (state.canWriteExperiments && funnel.source == "dashboard") TextButton(onClick = {
+                                viewModel.clearFunnelSaveError(); editingFunnel = funnel
+                            }) { MaterialText(stringResource(Res.string.funnel_edit)) }
+                        }
+                        Text(stringResource(Res.string.funnel_definition_meta, funnel.source, funnel.countMode, funnel.identityScope), style = MaterialTheme.typography.bodySmall)
                         FunnelDetail(
                             state = state,
                             funnels = state.funnels,
-                            funnel = funnel,
+                            funnel = funnelForResults(funnel, state.funnelResults),
                             sizeClass = sizeClass,
                             onSelectFunnel = { viewModel.selectFunnel(it) },
                             onDelete = { pendingDelete = funnel },
-                            onNewFunnel = { newFunnelDialogOpen = true },
+                            onNewFunnel = { viewModel.clearFunnelSaveError(); newFunnelDialogOpen = true },
                             canWrite = state.canWriteExperiments,
                             expertOn = expertOn,
                             onExpertToggle = { viewModel.toggleExpertMode() },
-                            onAskWhy = { step -> viewModel.openAskDrawer(whyQuestion.replace("%1\$s", step.name ?: step.key)) },
+                            onAskWhy = { step -> viewModel.openAskDrawer(whyQuestion.replace("%1\$s", step.name ?: step.key), mapOf("step" to step.key)) },
                             onDrillDown = { key -> viewModel.openDrillDown("funnel", key) },
                         )
                     }
@@ -240,9 +218,19 @@ fun FunnelsTab(viewModel: DashboardViewModel, state: DashboardState, sizeClass: 
     if (newFunnelDialogOpen) {
         NewFunnelBuilderDialog(
             onDismiss = { newFunnelDialogOpen = false },
-            onCreate = { request -> viewModel.createFunnel(request); newFunnelDialogOpen = false },
+            onCreate = { request -> viewModel.saveFunnel(request, onSaved = { newFunnelDialogOpen = false }) },
+            saving = state.funnelSaving, error = state.funnelSaveError, catalog = state.funnelCatalog,
         )
     }
+    editingFunnel?.let { definition -> NewFunnelBuilderDialog(
+        onDismiss = { if (!state.funnelSaving) editingFunnel = null },
+        onCreate = { request -> viewModel.saveFunnel(request, editing = true, onSaved = { editingFunnel = null }) },
+        initial = definition, saving = state.funnelSaving, error = state.funnelSaveError, catalog = state.funnelCatalog,
+    ) }
+    viewingFunnel?.let { definition -> NewFunnelBuilderDialog(
+        onDismiss = { viewingFunnel = null }, onCreate = {}, initial = definition, readOnly = true,
+    ) }
+
 }
 
 /** First-funnel state gives project editors the same real builder action as the populated view. */
@@ -702,98 +690,14 @@ private fun NewFunnelButton(onClick: () -> Unit, enabled: Boolean = true, modifi
     }
 }
 
-private data class FunnelStepDraft(
+internal data class FunnelStepDraft(
     val key: String,
     val event: String = "",
     val name: String = "",
     val screen: String = "",
+    val props: String = "{}",
 )
 
-/** Creates a dashboard-owned definition through the existing authenticated funnel API. */
-@Composable
-internal fun NewFunnelBuilderDialog(onDismiss: () -> Unit, onCreate: (CreateFunnelRequest) -> Unit) {
-    var key by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var windowDays by remember { mutableStateOf("7") }
-    val steps = remember { mutableStateListOf(FunnelStepDraft("step_1"), FunnelStepDraft("step_2")) }
-    val validKey = key.matches(Regex("^[a-z0-9_-]{1,64}$"))
-    val validSteps = steps.size in 2..10 && steps.all {
-        it.key.matches(Regex("^[a-z0-9_-]{1,64}$")) && it.event.isNotBlank()
-    } && steps.map { it.key }.toSet().size == steps.size
-    val days = windowDays.toIntOrNull()
-    val valid = validKey && name.isNotBlank() && validSteps && (days ?: 0) in 1..90
-
-    ModalShell(
-        title = stringResource(Res.string.funnel_builder_title),
-        onDismiss = onDismiss,
-        footer = {
-            ModalFooter(
-                secondary = ModalFooterAction(stringResource(Res.string.funnel_editor_cancel), ModalFooterEmphasis.Secondary, onDismiss),
-                primary = ModalFooterAction(stringResource(Res.string.funnel_builder_create), ModalFooterEmphasis.Primary) {
-                    if (valid) onCreate(
-                        CreateFunnelRequest(
-                            funnelKey = key.trim(),
-                            name = name.trim(),
-                            description = description.trim().ifEmpty { null },
-                            steps = steps.map {
-                                FunnelStepDto(it.key.trim(), it.event.trim(), it.name.trim().ifEmpty { null }, it.screen.trim().ifEmpty { null })
-                            },
-                            windowSeconds = days!!.toLong() * 86_400,
-                        ),
-                    )
-                },
-                primaryEnabled = valid,
-            )
-        },
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(stringResource(Res.string.funnel_builder_intro), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(key, { key = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' || c == '-' } },
-                label = { Text(stringResource(Res.string.funnel_builder_key)) }, singleLine = true,
-                supportingText = { Text(stringResource(Res.string.funnel_builder_key_format)) }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.funnel_builder_name)) },
-                singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(description, { description = it }, label = { Text(stringResource(Res.string.funnel_builder_description)) },
-                modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(windowDays, { windowDays = it.filter(Char::isDigit).take(2) },
-                label = { Text(stringResource(Res.string.funnel_builder_window_days)) }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
-            Text(stringResource(Res.string.funnel_builder_steps), style = MaterialTheme.typography.titleMedium)
-            steps.forEachIndexed { index, step ->
-                Card {
-                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(Res.string.funnel_builder_step_number, index + 1),
-                                style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            TextButton(enabled = index > 0, onClick = { val item = steps.removeAt(index); steps.add(index - 1, item) }, modifier = Modifier.handCursor()) { MaterialText(stringResource(Res.string.funnel_builder_move_up)) }
-                            TextButton(enabled = index < steps.lastIndex, onClick = { val item = steps.removeAt(index); steps.add(index + 1, item) }, modifier = Modifier.handCursor()) { MaterialText(stringResource(Res.string.funnel_builder_move_down)) }
-                            IconButton(enabled = steps.size > 2, onClick = { steps.removeAt(index) }, modifier = Modifier.handCursor()) {
-                                Icon(painterResource(Res.drawable.ic_close), contentDescription = stringResource(Res.string.funnel_builder_remove_step),
-                                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        OutlinedTextField(step.key, { value -> steps[index] = step.copy(key = value.lowercase().filter { it.isLetterOrDigit() || it == '_' || it == '-' }) },
-                            label = { Text(stringResource(Res.string.funnel_builder_step_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(step.event, { value -> steps[index] = step.copy(event = value) },
-                            label = { Text(stringResource(Res.string.funnel_builder_event)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(step.name, { value -> steps[index] = step.copy(name = value) },
-                            label = { Text(stringResource(Res.string.funnel_builder_step_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(step.screen, { value -> steps[index] = step.copy(screen = value) },
-                            label = { Text(stringResource(Res.string.funnel_builder_screen_optional)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            }
-            OutlinedButton(onClick = { if (steps.size < 10) steps.add(FunnelStepDraft("step_${steps.size + 1}")) }, enabled = steps.size < 10, modifier = Modifier.handCursor()) {
-                MaterialText(stringResource(Res.string.funnel_builder_add_step))
-            }
-        }
-    }
-}
 
 /**
  * The 3 stat cards (design handoff: "3 stat cards (Started / Made it to the end / Success rate —

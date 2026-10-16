@@ -13,8 +13,8 @@ $pdo = new PDO("mysql:host={$host};port={$port};dbname={$database};charset=utf8m
 $pdo->exec('CREATE TABLE IF NOT EXISTS counters (project_id VARCHAR(36), day VARCHAR(10)) ENGINE=InnoDB');
 $pdo->exec('CREATE TABLE IF NOT EXISTS counter_cells_v2 (
  project_id VARCHAR(36), day VARCHAR(10), hour SMALLINT, metric VARCHAR(64), platform VARCHAR(20), sdk_version VARCHAR(32), app_version VARCHAR(32),
- country CHAR(2), dims_hash CHAR(64), dims TEXT, n BIGINT, contributors BIGINT, updated_at VARCHAR(32),
- PRIMARY KEY(project_id,day,hour,metric,platform,app_version,country,dims_hash)) ENGINE=InnoDB');
+ country CHAR(2), segment_kind VARCHAR(20) NOT NULL DEFAULT \'global\', segment_value VARCHAR(128) NOT NULL DEFAULT \'all\', dims_hash CHAR(64), dims TEXT, n BIGINT, contributors BIGINT, updated_at VARCHAR(32),
+ PRIMARY KEY(project_id,day,hour,metric,platform,app_version,country,segment_kind,segment_value,dims_hash)) ENGINE=InnoDB');
 $project = 'qm-report-v2-test';
 $pdo->prepare('DELETE FROM counter_cells_v2 WHERE project_id=?')->execute([$project]);
 $today = new DateTimeImmutable('today', new DateTimeZone('UTC'));
@@ -113,6 +113,18 @@ handleProjectReportV2($project);
 $weekly = $GLOBALS['report_v2_result'][1]['charts']['people'] ?? [];
 if (($GLOBALS['report_v2_result'][0] ?? 0) !== 200 || count($weekly) !== 13 || !array_key_exists('hour', $weekly[12] ?? []) || $weekly[12]['hour'] !== null || ($weekly[12]['end_day'] ?? null) !== $today->format('Y-m-d')) {
     fwrite(STDERR, "FAIL: ninety-day People chart did not return twelve full and one final short bin\n"); exit(1);
+}
+
+$facetInsert=$pdo->prepare('INSERT INTO counter_cells_v2 (project_id,day,hour,metric,platform,sdk_version,app_version,country,segment_kind,segment_value,dims_hash,dims,n,contributors,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+foreach ([['country','DE',6,'project','all'],['country','FR',3,'project','all'],['global','all',7,'screen','home']] as [$kind,$value,$count,$scopeKind,$scopeKey]) {
+    $dims=json_encode(['days'=>'7','end_day'=>$today->format('Y-m-d'),'scope_kind'=>$scopeKind,'scope_key'=>$scopeKey]);
+    $facetInsert->execute([$project,$today->format('Y-m-d'),-1,'unique_window_v2','android','2.0','','  ',$kind,$value,hash('sha256',$dims),$dims,$count,$count,$today->format('Y-m-d').'T12:00:00Z']);
+}
+$de=readProjectReportV2($project,['range'=>'7d','filter_kind'=>'country','filter_value'=>'DE']);
+$fr=readProjectReportV2($project,['range'=>'7d','filter_kind'=>'country','filter_value'=>'FR']);
+$home=readProjectReportV2($project,['range'=>'7d','filter_kind'=>'screen','filter_value'=>'home']);
+if (($de['overview']['people']['value'] ?? null)!==6 || $fr['overview']['people']['state']!=='suppressed' || ($home['overview']['people']['value'] ?? null)!==7 || $home['overview']['visits']['value']!==null) {
+    fwrite(STDERR,"FAIL: selected projections disagree or leaked global values\n"); exit(1);
 }
 $pdo->prepare('DELETE FROM counter_cells_v2 WHERE project_id=?')->execute([$project]);
 echo "projectReportV2MysqlTest passed\n";

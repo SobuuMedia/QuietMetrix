@@ -52,11 +52,24 @@ fun Routing.configureProjectReportRoutes() {
             if (platform !in setOf("all", "android", "ios", "web", "desktop")) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid platform")); return@get
             }
+            val filterKind = call.request.queryParameters["filter_kind"] ?: "platform"
+            val filterValue = call.request.queryParameters["filter_value"] ?: platform
+            if (!validReportFilter(filterKind, filterValue)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid report filter")); return@get
+            }
             val compareRaw = call.request.queryParameters["compare"] ?: "false"
             if (compareRaw !in setOf("true", "false")) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "compare must be true or false")); return@get
             }
-            call.respond(reports.read(id, range, anchor, platform, compareRaw == "true"))
+            call.respond(reports.read(id, range, anchor, platform, compareRaw == "true", filterKind, filterValue))
         }
     }
+}
+
+/** Filters select one existing projection, never arbitrary dimension intersections. */
+internal fun validReportFilter(kind: String, value: String): Boolean = when (kind) {
+    "platform" -> value in setOf("all", "android", "ios", "web", "desktop", "unknown")
+    "country" -> value == "unknown" || value.matches(Regex("^[A-Z]{2}$"))
+    "screen" -> value.matches(Regex("^[A-Za-z0-9_.:/-]{1,128}$")) && value !in setOf("all", "__exit__")
+    else -> false
 }

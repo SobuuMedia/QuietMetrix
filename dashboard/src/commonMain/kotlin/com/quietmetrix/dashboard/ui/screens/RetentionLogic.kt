@@ -32,16 +32,7 @@ internal data class RetentionVitals(
     val day30: Double?,
 )
 
-/**
- * Derives [RetentionVitals] from [response]'s cohorts, as observed at [todayEpochDay] (days since
- * the Unix epoch, UTC — defaults to the real current day; a test passes a fixed value for
- * determinism). Each of day1/day7/day30 is resolved independently (not all three necessarily come
- * from the same cohort row): a newly-installed cohort might already have a `day1` figure while the
- * only cohort old enough to show `day30` is a much earlier one — same "most recent cohort that has
- * actually observed this day" selection [OverviewVitalsLogic.kt]'s `computeVitalsNumbers` already
- * established for `day1` alone (Task 19), generalized here to all three headline days, now reading
- * each cohort through [effectiveDayValue] rather than the raw field.
- */
+/** Computes size-weighted headline rates from mature, reportable cohorts in the selected window. */
 @OptIn(ExperimentalTime::class)
 internal fun computeRetentionVitals(
     response: RetentionResponse?,
@@ -49,9 +40,9 @@ internal fun computeRetentionVitals(
 ): RetentionVitals {
     val cohorts = response?.cohorts.orEmpty()
     return RetentionVitals(
-        day1 = mostRecentObserved(cohorts, dayNumber = 1, todayEpochDay) { it.day1 },
-        day7 = mostRecentObserved(cohorts, dayNumber = 7, todayEpochDay) { it.day7 },
-        day30 = mostRecentObserved(cohorts, dayNumber = 30, todayEpochDay) { it.day30 },
+        day1 = weightedRetentionRate(response?.copy(cohorts = cohorts.filter { effectiveDayValue(it, 1, it.day1, todayEpochDay) != null }), 1),
+        day7 = weightedRetentionRate(response?.copy(cohorts = cohorts.filter { effectiveDayValue(it, 7, it.day7, todayEpochDay) != null }), 7),
+        day30 = weightedRetentionRate(response?.copy(cohorts = cohorts.filter { effectiveDayValue(it, 30, it.day30, todayEpochDay) != null }), 30),
     )
 }
 
@@ -62,17 +53,6 @@ private const val MILLIS_PER_DAY = 86_400_000L
  * The most recent (by [RetentionCohort.cohortDate]) cohort for which [effectiveDayValue] resolves
  * to a non-null fraction for [dayValue] at [dayNumber] days. Missing values remain unavailable.
  */
-private fun mostRecentObserved(
-    cohorts: List<RetentionCohort>,
-    dayNumber: Int,
-    todayEpochDay: Long,
-    dayValue: (RetentionCohort) -> Double?,
-): Double? =
-    cohorts
-        .mapNotNull { cohort -> effectiveDayValue(cohort, dayNumber, dayValue(cohort), todayEpochDay)?.let { cohort.cohortDate to it } }
-        .maxByOrNull { it.first }
-        ?.second
-
 /**
  * Resolves a cohort's raw day-N field without inferring a measurement from age. The server applies
  * k-anonymity to return counts, so null can mean either a future observation or a suppressed count.

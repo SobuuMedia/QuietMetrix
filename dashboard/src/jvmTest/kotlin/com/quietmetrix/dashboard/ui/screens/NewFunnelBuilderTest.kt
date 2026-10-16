@@ -2,9 +2,10 @@ package com.quietmetrix.dashboard.ui.screens
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import com.quietmetrix.dashboard.api.CreateFunnelRequest
@@ -27,8 +28,8 @@ class NewFunnelBuilderTest {
         onNodeWithText("Create funnel").assertIsNotEnabled()
         onNodeWithText("Funnel key").performTextInput("signup-flow")
         onNodeWithText("Name").performTextInput("Signup flow")
-        onAllNodes(hasSetTextAction())[5].performTextInput("signup_started")
-        onAllNodes(hasSetTextAction())[9].performTextInput("signup_completed")
+        onNodeWithTag("funnel-event-0").performScrollTo().performTextInput("signup_started")
+        onNodeWithTag("funnel-event-1").performScrollTo().performTextInput("signup_completed")
         onNodeWithText("Create funnel").performClick()
 
         assertEquals("signup-flow", submitted?.funnelKey)

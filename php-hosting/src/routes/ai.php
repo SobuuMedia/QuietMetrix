@@ -1,5 +1,8 @@
 <?php
 require_once __DIR__ . '/../ai.php';
+require_once __DIR__ . '/dashboard.php';
+require_once __DIR__ . '/funnels.php';
+require_once __DIR__ . '/experiments.php';
 
 /** AI project authorization never lets a hosted customer admin cross account boundaries. */
 function aiAuthorizedAccount(string $projectId): string {
@@ -35,9 +38,16 @@ function handleAi(string $project, string $action, bool $alias = false): void {
         $request=getJsonBody(); $range=$request['range'] ?? '7d';
         $ranges=['1h'=>3600,'1d'=>86400,'7d'=>604800,'30d'=>2592000,'90d'=>7776000];
         if (!is_string($range) || !isset($ranges[$range]) || isset($request['compare']) && !is_bool($request['compare'])) throw new InvalidArgumentException('Invalid date context');
+        $selection = $request['context'] ?? [];
+        if (!is_array($selection) || count($selection)>10) throw new InvalidArgumentException('Invalid selection');
+        foreach ($selection as $key=>$value) if (!in_array($key,['screen','filter_kind','filter_value','node','funnel','revision','step','cohort','experiment'],true) || !is_string($value) || strlen($value)<1 || strlen($value)>128) throw new InvalidArgumentException('Invalid selection');
+        $kind=$selection['filter_kind'] ?? 'platform'; $value=$selection['filter_value'] ?? 'all';
+        if (!validReportFilterV2($kind,$value)) throw new InvalidArgumentException('Invalid filter');
         $window=analyticsWindow($ranges[$range],$request['period'] ?? null,$request['anchor'] ?? null);
+        $report = $range === '1h' ? null : readProjectReportV2($project, ['range'=>$range==='1d'?'today':$range, 'anchor'=>$window['to_day'], 'compare'=>($request['compare'] ?? false)?'true':'false', 'filter_kind'=>$kind,'filter_value'=>$value]);
         $snapshot=['anchor'=>$request['anchor'] ?? $window['to_day']];
         $metrics=['aggregates'=>['event','value'],'sessions'=>['session'],'retention'=>['retention','activation'],'transitions'=>['screen_transition','screen_dwell'],'search'=>['search','search_zero_result'],'friction'=>['friction'],'funnels'=>['funnel_step'],'experiments'=>['experiment']];
+        if (!$report || ($report['coverage']['source']==='legacy' && $kind==='platform' && $value==='all')) {
         foreach ($metrics as $name=>$reads) {
             $data=['from'=>$window['from_day'],'to'=>$window['to_day'],'current'=>[]];
             foreach ($reads as $metric) $data['current'][$metric]=aiReportableCells($project,$metric,$window);
@@ -48,7 +58,42 @@ function handleAi(string $project, string $action, bool $alias = false): void {
             }
             $snapshot[$name]=$data;
         }
-        $computed=askAnalyticsAnalyze('sessions',counterReadCells($project,'session',$window['from_day'],$window['to_day']),[],[],[],[],$range)['answer'];
+
+        }
+        if ($report && ($report['coverage']['source'] !== 'legacy' || $kind !== 'platform' || $value !== 'all')) {
+            $snapshot = ['anchor'=>$window['to_day'],
+                'aggregates'=>array_intersect_key($report,array_flip(['scope','coverage','generated_at','last_received_at','overview','comparison'])),
+                'sessions'=>['visits'=>$report['overview']['visits'],'duration'=>$report['overview']['visit_duration']],
+                'retention'=>['summary'=>aiVisibleRetentionSummary($report['retention_cohorts']),'cohorts'=>$report['retention_cohorts'],'previous_cohorts'=>$report['comparison_retention_cohorts']],
+                'transitions'=>['scope'=>$selection,'state'=>'unsupported'],
+            ];
+            if ($kind==='platform') {
+                $edges=counterReadTransitionsV2($project,$window['from_day'],$window['to_day'],$value);
+                $snapshot['transitions']=['scope'=>$selection,'edges'=>array_values(array_filter($edges['cells'] ?? [],static fn($c)=>!isset($selection['node']) || ($c['dims']['from'] ?? null)===$selection['node']))];
+            }
+        }
+        if (isset($selection['funnel'])) {
+            $f=findFunnelRow($project,$selection['funnel']);
+            if ($f) {
+                $rev=isset($selection['revision']) ? (int)$selection['revision'] : (int)$f['revision'];
+                $f=findFunnelRevision($project,$selection['funnel'],$rev);
+                if ($f && $f['source']==='dashboard') {
+                    $a=funnelCounterAnalyze(json_decode($f['steps'],true),readDashboardFunnelV2Steps($project,$f['funnel_key'],$rev,$window['from_day'],$window['to_day']),$f['count_mode']);
+                    $snapshot['funnels']=['key'=>$f['funnel_key'],'revision'=>$rev,'from'=>$window['from_day'],'to'=>$window['to_day'],'steps'=>array_map(static fn($step)=>['key'=>$step['key'],'count'=>$step['count']],$a['steps'])];
+                }
+            }
+        }
+        if (isset($selection['experiment'])) {
+            $e=findExperimentRow($project,$selection['experiment']);
+            if ($e && in_array($e['mode'],['visibility','variants'],true)) {
+                $from=substr($e['started_at'] ?? $e['created_at'],0,10); $to=gmdate('Y-m-d');
+                $a=experimentCounterAnalyzeV2(['experiment_key'=>$e['experiment_key'],'variants'=>json_decode($e['variants'],true),'revision'=>(int)$e['revision']],
+                    counterReadExperimentCellsV2($project,'experiment_exposure_v2',$from,$to,$e['experiment_key'],(int)$e['revision']),
+                    counterReadExperimentCellsV2($project,'experiment_goal_v2',$from,$to,$e['experiment_key'],(int)$e['revision']));
+                $snapshot['experiments']=['key'=>$e['experiment_key'],'revision'=>(int)$e['revision'],'basis'=>'since_revision_started','from'=>$from,'to'=>$to]+$a;
+            }
+        }
+        $computed=isset($report['overview']['people']['value']) ? 'Recorded active installations: '.$report['overview']['people']['value'].'. Dates use UTC.' : 'There is not enough reportable data for the selected scope.';
         $result=aiGenerate($account,$project,$request,$action==='insight',$snapshot,$computed,requireProject:true);
         jsonResponse(200,$alias ? ['answer'=>$result['answer'],'source'=>implode(' · ',$result['sources'])] : $result);
     } catch (InvalidArgumentException $e) { errorResponse(400,'bad_request','Invalid AI request'); }
@@ -86,4 +131,21 @@ function handleAiOperator(string $method, string $resource, ?string $id): void {
         } else throw new InvalidArgumentException();
         jsonResponse(200,['ok'=>true]);
     } catch (InvalidArgumentException $e) { errorResponse(400,'bad_request','Invalid operator request'); }
+}
+
+/** Uses the same eligible cohort weights as the dashboard; no hidden denominator is inferred. */
+function aiVisibleRetentionSummary(array $cohorts): array {
+    $summary=[];
+    foreach ([1,3,7,14,30] as $age) {
+        $size=0; $weighted=0.0; $count=0;
+        foreach ($cohorts as $cohort) {
+            $day=$cohort['days'][(string)$age] ?? [];
+            if (($cohort['size']['value'] ?? 0)<=0 || !in_array($cohort['size']['state'],['reported','zero'],true) ||
+                !in_array($day['state'] ?? '',['reported','zero'],true) || !isset($day['rate'])) continue;
+            $size += $cohort['size']['value']; $weighted += $cohort['size']['value']*$day['rate']; $count += $day['value'] ?? 0;
+        }
+        $summary['day_'.$age]=$size ? ['value'=>$count,'rate'=>$weighted/$size,'contributors'=>$size,'state'=>'reported','unit'=>'installations','source'=>'v2']
+            : ['value'=>null,'state'=>'insufficient_data','unit'=>'installations','source'=>'v2'];
+    }
+    return $summary;
 }

@@ -44,6 +44,12 @@ function handleFunnelResults(string $projectId, string $funnelKey): void {
         errorResponse(404, 'not_found', 'Funnel not found');
         return;
     }
+    if (isset($_GET['revision'])) {
+        $revision = filter_var($_GET['revision'], FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
+        if ($revision === false) { errorResponse(400, 'bad_request', 'Invalid revision'); return; }
+        $funnel = findFunnelRevision($projectId, $funnelKey, $revision);
+        if ($funnel === null) { errorResponse(404, 'not_found', 'Revision not found'); return; }
+    }
     $steps = json_decode($funnel['steps'], true) ?? [];
     $windowSecondsVal = (int)$funnel['window_seconds'];
 
@@ -230,7 +236,7 @@ function handleFunnelUpdate(string $projectId, string $funnelKey): void {
     $windowSeconds = array_key_exists('window_seconds', $body) ? $body['window_seconds'] : (int)$existing['window_seconds'];
 
     $definition = ['funnel_key' => $funnelKey, 'name' => $name, 'steps' => $steps, 'window_seconds' => $windowSeconds,
-        'count_mode' => $existing['count_mode'], 'identity_scope' => $existing['identity_scope'], 'correlation_property' => $existing['correlation_property']];
+        'count_mode' => $body['count_mode'] ?? $existing['count_mode'], 'identity_scope' => $body['identity_scope'] ?? $existing['identity_scope'], 'correlation_property' => ($body['count_mode'] ?? '') === 'actor' ? null : ($body['correlation_property'] ?? $existing['correlation_property'])];
     // Excludes the funnel being edited from its own count.
     $errors = validateFunnelDefinition($definition, countActiveFunnels($projectId) - 1);
     if (!empty($errors)) {
@@ -240,16 +246,16 @@ function handleFunnelUpdate(string $projectId, string $funnelKey): void {
 
     $normalizedSteps = funnelStepsForWire($steps);
     $semanticChanged = funnelSemanticSteps($normalizedSteps) !== funnelSemanticSteps(json_decode($existing['steps'], true) ?? []) ||
-        (int)$windowSeconds !== (int)$existing['window_seconds'];
+        (int)$windowSeconds !== (int)$existing['window_seconds'] || $definition['count_mode'] !== $existing['count_mode'] || $definition['identity_scope'] !== $existing['identity_scope'] || $definition['correlation_property'] !== $existing['correlation_property'];
     $nextRevision = (int)$existing['revision'] + ($semanticChanged ? 1 : 0);
     $db = getDb();
     $db->beginTransaction();
     try {
     $db->prepare(
-        'UPDATE funnels SET name = ?, description = ?, steps = ?, window_seconds = ?, revision = ?, locked = 1, updated_at = ?
+        'UPDATE funnels SET name = ?, description = ?, steps = ?, window_seconds = ?, count_mode = ?, identity_scope = ?, correlation_property = ?, revision = ?, locked = 1, updated_at = ?
           WHERE project_id = ? AND funnel_key = ? AND archived_at IS NULL'
     )->execute([
-        $name, $description, json_encode($normalizedSteps, JSON_UNESCAPED_UNICODE), $windowSeconds, $nextRevision, now(),
+        $name, $description, json_encode($normalizedSteps, JSON_UNESCAPED_UNICODE), $windowSeconds, $definition['count_mode'], $definition['identity_scope'], $definition['correlation_property'], $nextRevision, now(),
         $projectId, $funnelKey,
     ]);
     if ($semanticChanged) insertFunnelRevisionSnapshot($projectId, $definition, $nextRevision);
@@ -468,4 +474,14 @@ function rowToFunnelResponse(array $row): array {
         'created_at' => $row['created_at'],
         'updated_at' => $row['updated_at'],
     ];
+}
+
+/** Historical results use immutable step labels/window/counting semantics. */
+function findFunnelRevision(string $projectId, string $key, int $revision): ?array {
+    $current = findFunnelRow($projectId, $key);
+    if ($current === null) return null;
+    $stmt = getDb()->prepare('SELECT revision,steps,window_seconds,count_mode,identity_scope,correlation_property FROM funnel_definition_revisions WHERE project_id=? AND funnel_key=? AND revision=?');
+    $stmt->execute([$projectId, $key, $revision]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ? array_merge($current, $row) : ((int)$current['revision'] === $revision ? $current : null);
 }
