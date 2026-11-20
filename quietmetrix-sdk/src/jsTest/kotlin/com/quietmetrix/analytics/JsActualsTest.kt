@@ -59,7 +59,7 @@ class JsActualsTest {
         // anonymousId is only generated once the SDK is initialized (it needs a storage prefix).
         QuietMetrix.init(QuietMetrixConfig(storageKeyPrefix = "qm_device_", trackingEndpoint = null))
         val ctx = DeviceContext()
-        assertEquals("js", ctx.platform)
+        assertEquals("web", ctx.platform)
         assertEquals("", ctx.anonymousId)
     }
 }

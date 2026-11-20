@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- Accept existing legacy-namespace funnel revision zero on both v2 ingest backends,
+  preventing atomic rejection of otherwise valid browser counter batches.
+
+## [0.8.2] - 2026-11-15
+
+### Release
+- Publish core, Compose, debug and iOS XCFramework distributions at 0.8.2 on Maven Central
+  and the GitHub release, matching the npm web package.
+- See [SDK 0.8.2 release notes](docs/releases/sdk-0.8.2.md) for installation and compatibility.
+
+### Changed
+- Use native browser fetch for SDK requests and ES2015 browser output, removing the
+  browser Ktor runtime while retaining the shared counter protocol and consent behavior.
+- Include browser source maps for production diagnostics.
+- Reuse immutable daily calendar projections and compute each counter-group hash once
+  across rolling windows, preserving the emitted counters and receipt identities.
+- Yield between browser recording operations so analytics does not monopolize the UI
+  task queue; recheck opt-out after yielding and keep native scheduling unchanged.
+
+## [0.8.1] - 2026-10-16
+
+### Release
+- Publish the web SDK with browser traffic classification and foreground visit completion tracking.
+- Normalize browser platform reporting to Web and expose optional country configuration in the JS API.
+- This release entry covers the npm web package; Maven and iOS artifacts remain at 0.8.0.
+
 ## [0.8.0] - 2026-10-15
 
 ### Release

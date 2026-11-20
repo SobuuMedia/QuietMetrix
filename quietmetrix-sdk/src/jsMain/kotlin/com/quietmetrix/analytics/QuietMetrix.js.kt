@@ -1,15 +1,24 @@
 package com.quietmetrix.analytics
 
 import com.quietmetrix.analytics.internal.Gate
+import com.quietmetrix.analytics.internal.counters.MetricGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 // Browser events share the consent-gated aggregate recorder; no raw tracker is injected.
 private var removeBrowserLifecycle: (() -> Unit)? = null
 
 internal actual fun platformInit(config: QuietMetrixConfig) {
+    MetricGateway.beforeRecording = {
+        // A timer yields a real browser task, unlike a chain of resolved Promises.
+        // All UTC timestamps were captured by the caller before this scheduling point.
+        // Hidden pages need to persist their final counters promptly before shutdown.
+        if (js("typeof document === 'undefined' || document.visibilityState !== 'hidden'") as Boolean) delay(1)
+        Gate.shouldTrack()
+    }
     removeBrowserLifecycle?.invoke()
     removeBrowserLifecycle = null
     if (js("typeof document") != "undefined" && js("typeof window") != "undefined") {
@@ -36,6 +45,7 @@ internal actual fun platformInit(config: QuietMetrixConfig) {
 }
 
 internal actual fun platformStop() {
+    MetricGateway.beforeRecording = null
     removeBrowserLifecycle?.invoke()
     removeBrowserLifecycle = null
 }

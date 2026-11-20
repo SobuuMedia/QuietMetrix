@@ -20,6 +20,10 @@ internal object MetricGateway {
     private var recorder = MetricRecorder()
     private var configuredPrefix: String? = null
     private val purgeScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private data class CalendarWindows(val day: String, val values: List<Pair<Map<String, String>, String>>)
+    private var calendarWindows: CalendarWindows? = null
+    /** Browser-only scheduling hook; native recording keeps its existing execution behavior. */
+    internal var beforeRecording: (suspend () -> Boolean)? = null
 
     fun configure(storageKeyPrefix: String) {
         if (configuredPrefix == storageKeyPrefix) return
@@ -30,6 +34,7 @@ internal object MetricGateway {
     }
 
     suspend fun record(metric: String, dims: Map<String, String>, n: Long = 1L, now: Instant = Clock.System.now()) {
+        if (beforeRecording?.invoke() == false) return
         val day = utcTodayIso(now)
         if (metric == "unique_window_v2") {
             recorder.record(metric, dims, day = day, n = n)
@@ -38,18 +43,7 @@ internal object MetricGateway {
         val windows = if (metric == "funnel_step_v2") {
             val entryDay = dims["entry_day"] ?: day
             listOf(mapOf("days" to "1", "end_day" to entryDay) to entryDay)
-        } else {
-            val origin = epochDayFromIso(day)
-            val lengths = (1..7) + listOf(30, 90)
-            lengths.flatMap { length ->
-                (0 until length).map { offset ->
-                    val endDay = civilDateFromEpochDay(origin + offset.toLong()).let { (year, month, date) ->
-                        "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${date.toString().padStart(2, '0')}"
-                    }
-                    mapOf("scope_kind" to "project", "scope_key" to "all", "days" to length.toString(), "end_day" to endDay) to endDay
-                }
-            }
-        }
+        } else projectWindows(day)
         val hour = if (metric in HOURLY_METRICS) ((now.toEpochMilliseconds() / 3_600_000L) % 24L).toInt() else null
         recorder.recordWithWindows(metric, dims, day, n, windows, hour)
         v2Alias(metric)?.let { alias ->
@@ -74,6 +68,22 @@ internal object MetricGateway {
 
     private fun hourOf(now: Instant): Int = ((now.toEpochMilliseconds() / 3_600_000L) % 24L).toInt()
 
+    /** Immutable calendar projections can be shared by all metrics recorded on one UTC day. */
+    internal fun projectWindows(day: String): List<Pair<Map<String, String>, String>> {
+        calendarWindows?.takeIf { it.day == day }?.let { return it.values }
+        val origin = epochDayFromIso(day)
+        val windows = ((1..7) + listOf(30, 90)).flatMap { length ->
+            (0 until length).map { offset ->
+                val endDay = civilDateFromEpochDay(origin + offset.toLong()).let { (year, month, date) ->
+                    "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${date.toString().padStart(2, '0')}"
+                }
+                mapOf("scope_kind" to "project", "scope_key" to "all", "days" to length.toString(), "end_day" to endDay) to endDay
+            }
+        }
+        calendarWindows = CalendarWindows(day, windows)
+        return windows
+    }
+
     private fun v2Alias(metric: String): String? = when (metric) {
         "event" -> "event_v2"
         "screen_transition" -> "screen_transition_v2"
@@ -94,6 +104,8 @@ internal object MetricGateway {
     internal fun reset() {
         recorder = MetricRecorder()
         configuredPrefix = null
+        calendarWindows = null
+        beforeRecording = null
     }
 
     private val HOURLY_METRICS = setOf(

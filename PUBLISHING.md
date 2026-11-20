@@ -5,9 +5,11 @@
 Use `.github/workflows/publish-sdk.yml` for version 0.8.0 and later. It publishes signed
 Maven Central artifacts (Android/KMP/Compose/debug), the npm web SDK, and iOS XCFramework
 release assets after the multi-host validation and independent consumer checks pass.
-Run `python3 tools/release/prepare-sdk.py --check --tag sdk-v0.8.0`, commit the aligned
-versions/release notes, then push the matching `sdk-v0.8.0` tag to publish. A manual workflow
-run builds and validates without publishing. Never overwrite an existing released version.
+Run `python3 tools/release/prepare-sdk.py --check --tag sdk-v0.8.2`, commit the aligned
+versions/release notes, then push the matching `sdk-v0.8.2` tag to publish. If the npm package
+for that version already exists, the npm publication step is skipped and only Maven Central and
+the GitHub release are updated. A manual workflow run builds and validates without publishing.
+Never overwrite an existing released version.
 
 The GitHub Packages instructions below describe the older alternative distribution path;
 GitHub Packages is not the coordinated workflow's publication destination.

@@ -156,11 +156,22 @@ jobs:
         run: |
           test -n "$OSSRH_USERNAME"
           test -n "$OSSRH_PASSWORD"
-          test -n "$NODE_AUTH_TOKEN"
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
+          if npm view "@sobuumedia/quietmetrix-sdk@$version" version >/dev/null 2>&1; then
+            echo "npm already has @sobuumedia/quietmetrix-sdk@$version; npm token not required"
+          else
+            test -n "$NODE_AUTH_TOKEN"
+          fi
       - name: Publish complete Central bundle and await completion
         run: python3 tools/release/publish-central.py release/quietmetrix-central.zip --publish
       - name: Publish tested npm archive
-        run: npm publish release/assets/*.tgz --access public
+        run: |
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
+          if npm view "@sobuumedia/quietmetrix-sdk@$version" version >/dev/null 2>&1; then
+            echo "npm already has @sobuumedia/quietmetrix-sdk@$version; skipping"
+          else
+            npm publish release/assets/*.tgz --access public
+          fi
 
   release:
     name: Create GitHub Release

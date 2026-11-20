@@ -98,14 +98,18 @@ internal class MetricRecorder(
         // hourly cells; historical reports read daily cells and never sum both resolutions.
         // Legacy names deliberately keep their original single daily-compatible projection.
         if (metric.endsWith("_v2") && hour != null) recordCell(metric, dims, day, n, null)
+        // The group hash is identical for every rolling window. Computing SHA-256
+        // inside this loop repeated it 148 times per ordinary v2 counter.
+        val targetHash = if (windows.isNotEmpty() && metric.endsWith("_v2") && metric !in NON_WITNESS_METRICS) {
+            sha256Hex(canonicalize(dims))
+        } else null
         windows.forEach { (windowDims, endDay) ->
             val windowKey = canonicalize(windowDims)
             if (metric != "funnel_step_v2" && !seenWindows.containsKey(windowKey)) {
                 seenWindows[windowKey] = endDay
                 recordCell("unique_window_v2", windowDims, day, 1L, null)
             }
-            if (metric.endsWith("_v2") && metric !in NON_WITNESS_METRICS) {
-                val targetHash = sha256Hex(canonicalize(dims))
+            if (targetHash != null) {
                 val witnessDims = mapOf(
                     "target_metric" to metric,
                     "target_hash" to targetHash,

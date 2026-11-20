@@ -1,6 +1,8 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -11,7 +13,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.8.0"
+version = "0.8.2"
 
 kotlin {
     compilerOptions {
@@ -35,6 +37,10 @@ kotlin {
     }
 
     js(IR) {
+        compilerOptions {
+            target.set("es2015")
+            sourceMap.set(true)
+        }
         browser()
         // nodejs() is enabled so the test suite (jsNodeTest) runs in Node with lightweight
         // browser-global shims, avoiding a headless-browser dependency in CI. The published
@@ -62,11 +68,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // Used directly by shared counter/consent code, independently of HTTP engines.
+            implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.kotlinx.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -86,7 +91,6 @@ kotlin {
             implementation(libs.kotlinx.browser)
         }
         jsMain.dependencies {
-            implementation(libs.ktor.client.js)
             implementation(libs.kotlinx.browser)
             implementation(libs.kotlinx.coroutines.core)
         }
@@ -150,6 +154,23 @@ val prepareNpmPackage by tasks.registering {
             }
         }
         pkgJson.writeText(patched)
+        // Maps embed their sources; use portable virtual names instead of compiler-machine
+        // paths (including upstream Windows build-agent paths). Source indices stay intact.
+        npmDistDir.get().asFile.listFiles { file -> file.extension == "map" }?.forEach { mapFile ->
+            @Suppress("UNCHECKED_CAST")
+            val map = JsonSlurper().parseText(mapFile.readText()) as MutableMap<String, Any?>
+            val sources = map["sources"] as List<*>
+            val module = mapFile.name.removeSuffix(".mjs.map")
+            map["sourceRoot"] = ""
+            map["sources"] = sources.mapIndexed { index, source ->
+                val normalized = source.toString().replace('\\', '/')
+                val ownPath = normalized.substringAfter("quietmetrix-sdk/src/", "")
+                if (normalized.startsWith("dependencies/")) normalized
+                else if (ownPath.isNotEmpty()) "quietmetrix-sdk/src/$ownPath"
+                else "dependencies/$module/$index-${normalized.substringAfterLast('/')}"
+            }
+            mapFile.writeText(JsonOutput.toJson(map))
+        }
         require(rootProject.file("LICENSE").readText().isNotBlank()) { "The release license must not be empty" }
         rootProject.file("LICENSE").copyTo(npmDistDir.get().file("LICENSE").asFile, overwrite = true)
         npmDistDir.get().file("README.md").asFile.writeText(
