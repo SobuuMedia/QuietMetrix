@@ -3,9 +3,12 @@
 These projects consume Maven coordinates; they do not depend on repository SDK projects.
 On macOS, first run `python3 tools/release/prepare-sdk.py --local` to install the
 current core, Compose and debug artifacts without forcing unsupported native targets.
-Then run `./gradlew -p tools/release-consumers/jvm compileKotlin` and
-`./gradlew -p tools/release-consumers/android assembleDebug`.
-Build the browser WASM consumer with `./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution`.
+Then run `./gradlew -p tools/release-consumers/jvm compileKotlin -PqmSdkVersion=<version>` and
+`./gradlew -p tools/release-consumers/android assembleDebug -PqmSdkVersion=<version>`.
+Build the browser WASM consumer with
+`./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution -PqmSdkVersion=<version>`.
+The release workflow passes the version from `quietmetrix-sdk/build.gradle.kts`, so these fixtures
+always resolve the artifacts being released rather than a stale pin.
 Compose consumers apply the Compose Multiplatform plugin to package the Skiko browser runtime.
 After building, run `node tools/e2e/wasm-consumer-proof.cjs` with Playwright installed
 (`QM_PLAYWRIGHT_MODULE` can specify its absolute module path). It verifies browser

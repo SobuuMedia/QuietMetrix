@@ -90,15 +90,15 @@ jobs:
       - name: Verify independent app and WASM consumers
         if: matrix.host == 'macos'
         run: |
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
           python tools/release/prepare-sdk.py --local
-          ./gradlew -p tools/release-consumers/jvm compileKotlin
-          ./gradlew -p tools/release-consumers/android assembleDebug
-          ./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution
+          ./gradlew -p tools/release-consumers/jvm compileKotlin -PqmSdkVersion="$version"
+          ./gradlew -p tools/release-consumers/android assembleDebug -PqmSdkVersion="$version"
+          ./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution -PqmSdkVersion="$version"
           swiftc -typecheck -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -target "$(uname -m)-apple-ios17.0-simulator" -F quietmetrix-sdk/build/XCFrameworks/release/QuietMetrix.xcframework/ios-arm64_x86_64-simulator -framework QuietMetrix samples/ios/QuietMetrixSample/App.swift samples/ios/QuietMetrixSample/ContentView.swift samples/ios/QuietMetrixSample/ExperimentElement.swift
           npm install --prefix "$RUNNER_TEMP/qm-browser" playwright@1.60.0
           "$RUNNER_TEMP/qm-browser/node_modules/.bin/playwright" install chromium
           npm install --prefix "$RUNNER_TEMP/qm-npm-consumer" --ignore-scripts --no-audit --no-fund "$GITHUB_WORKSPACE"/build/sdk-release/assets/*.tgz
-          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
           QM_EXPECTED_SDK_VERSION="$version" QM_SDK_DIST_DIR="$RUNNER_TEMP/qm-npm-consumer/node_modules/@sobuumedia/quietmetrix-sdk" QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" node tools/e2e/browser-sdk-proof.cjs
           QM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/qm-browser/node_modules/playwright" node tools/e2e/wasm-consumer-proof.cjs
       - uses: actions/upload-artifact@v4

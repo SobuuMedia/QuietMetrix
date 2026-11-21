@@ -15,4 +15,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
-dependencies { implementation("io.github.sobuumedia:quietmetrix-sdk:0.7.0") }
+// Supplied by the release workflow so this fixture always tests the version being released.
+val qmSdkVersion: String = providers.gradleProperty("qmSdkVersion").get()
+dependencies { implementation("io.github.sobuumedia:quietmetrix-sdk:$qmSdkVersion") }
