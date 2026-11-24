@@ -95,9 +95,11 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install compile SDK and publish local consumer artifacts
         run: |
-          sdkmanager "platforms;android-37"
-          ./gradlew :quietmetrix-sdk:publishAndroidPublicationToMavenLocal :quietmetrix-sdk:publishKotlinMultiplatformPublicationToMavenLocal
-          ./gradlew -p tools/release-consumers/android assembleDebug
+          sdkmanager "platforms;android-37" "platforms;android-24" "platforms;android-34"
+          ./gradlew :quietmetrix-sdk:publishAndroidPublicationToMavenLocal :quietmetrix-sdk:publishKotlinMultiplatformPublicationToMavenLocal :quietmetrix-sdk-compose:publishAndroidPublicationToMavenLocal :quietmetrix-sdk-compose:publishKotlinMultiplatformPublicationToMavenLocal
+          version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
+          ./gradlew -p tools/release-consumers/android clean assembleDebug -PqmSdkVersion="$version"
+          ./gradlew -p tools/release-consumers/android clean assembleDebug -PqmSdkVersion="$version" -PqmWithCompose=true
       - name: Verify consent and visit lifecycle on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:

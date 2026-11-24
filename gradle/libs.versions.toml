@@ -22,6 +22,9 @@ h2 = "2.5.252"
 androidx-core = "1.19.1"
 android-compileSdk = "37"
 android-minSdk = "24"
+# Consumer compile requirements; independent of the SDK used to build the libraries.
+android-core-minCompileSdk = "24"
+android-compose-minCompileSdk = "34"
 
 [libraries]
 # KotlinX

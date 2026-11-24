@@ -54,7 +54,7 @@ jobs:
           test -n "$GPG_SIGNING_PASSWORD"
       - uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-37.0'
+          packages: 'platform-tools platforms;android-37.0 platforms;android-24 platforms;android-34'
       - name: Prepare Linux native transport
         if: matrix.host == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
@@ -93,7 +93,8 @@ jobs:
           version="$(sed -nE 's/^version = "(.*)"$/\1/p' quietmetrix-sdk/build.gradle.kts)"
           python tools/release/prepare-sdk.py --local
           ./gradlew -p tools/release-consumers/jvm compileKotlin -PqmSdkVersion="$version"
-          ./gradlew -p tools/release-consumers/android assembleDebug -PqmSdkVersion="$version"
+          ./gradlew -p tools/release-consumers/android clean assembleDebug -PqmSdkVersion="$version"
+          ./gradlew -p tools/release-consumers/android clean assembleDebug -PqmSdkVersion="$version" -PqmWithCompose=true
           ./gradlew -p tools/release-consumers/wasm wasmJsBrowserDistribution -PqmSdkVersion="$version"
           swiftc -typecheck -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -target "$(uname -m)-apple-ios17.0-simulator" -F quietmetrix-sdk/build/XCFrameworks/release/QuietMetrix.xcframework/ios-arm64_x86_64-simulator -framework QuietMetrix samples/ios/QuietMetrixSample/App.swift samples/ios/QuietMetrixSample/ContentView.swift samples/ios/QuietMetrixSample/ExperimentElement.swift
           npm install --prefix "$RUNNER_TEMP/qm-browser" playwright@1.60.0

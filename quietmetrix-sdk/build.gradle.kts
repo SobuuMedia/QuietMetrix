@@ -13,7 +13,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.8.2"
+version = "0.8.3"
 
 kotlin {
     compilerOptions {
@@ -24,6 +24,9 @@ kotlin {
         namespace = "com.quietmetrix.analytics"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
+        aarMetadata {
+            minCompileSdk = libs.versions.android.core.minCompileSdk.get().toInt()
+        }
         withHostTest { isIncludeAndroidResources = true }
     }
 

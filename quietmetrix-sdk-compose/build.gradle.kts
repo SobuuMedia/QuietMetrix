@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.sobuumedia"
-version = "0.8.2"
+version = "0.8.3"
 
 kotlin {
     compilerOptions {
@@ -19,6 +19,9 @@ kotlin {
         namespace = "com.quietmetrix.analytics.compose"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
+        aarMetadata {
+            minCompileSdk = libs.versions.android.compose.minCompileSdk.get().toInt()
+        }
     }
     jvm()
     wasmJs { browser() }
@@ -34,9 +37,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":quietmetrix-sdk"))
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.ui)
+            // Public composable functions expose Runtime types; no UI/Foundation APIs are used.
+            api(compose.runtime)
         }
     }
 }
